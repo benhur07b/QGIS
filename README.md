@@ -83,11 +83,11 @@ QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo
 
 ### QGIS Server
 
-- Headless map server -- running on Linux, macOS, Windows, or in a docker container -- that shares the same code base as QGIS
+ Headless map server -- running on Linux, macOS, Windows, or in a docker container -- that shares the same code base as QGIS
 - Industry-standard protocols (WMS, WFS, WFS3/OGC API for Features and WCS) allow plug-n-play with any software stack
-* Works with any web server (Apache, nginx, etc) or standalone
-* All QGIS beautiful cartography is supported with best-in-class support for printing
-* Fully customizable with Python scripting support
+- Works with any web server (Apache, nginx, etc) or standalone
+- All QGIS beautiful cartography is supported with best-in-class support for printing
+- Fully customizable with Python scripting support
 
 
 ## Screenshots and captures
@@ -184,12 +184,12 @@ Travel isochrones
 
 ### QGIS Server
 
-QGIS Server response to a WMS resquest
+QGIS Server response to a WMS request
 
-![QGIS Server response to a WMS resquest](https://docs.qgis.org/3.16/en/_images/server_selection_parameter.png "QGIS Server response to a WMS resquest")
+![QGIS Server response to a WMS request](https://docs.qgis.org/3.16/en/_images/server_selection_parameter.png "QGIS Server response to a WMS request")
 
-QGIS Server response to a WFS Feature resquest
-![QGIS Server response to a WFS Feature resquest](https://docs.qgis.org/3.16/en/_images/server_wfs3_feature.png "QGIS Server response to a WFS Feature resquest")
+QGIS Server response to a WFS Feature request
+![QGIS Server response to a WFS Feature request](https://docs.qgis.org/3.16/en/_images/server_wfs3_feature.png "QGIS Server response to a WFS Feature request")
 
 ## Manuals and Documentation
 
