@@ -21,12 +21,9 @@ __author__ = 'Victor Olaya'
 __date__ = 'November 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsVectorLayer,
                        QgsProcessing,
+                       QgsProcessingException,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterExtent,
@@ -37,7 +34,6 @@ from processing.algs.gdal.GdalUtils import GdalUtils
 
 
 class ClipVectorByExtent(GdalAlgorithm):
-
     INPUT = 'INPUT'
     EXTENT = 'EXTENT'
     OPTIONS = 'OPTIONS'
@@ -71,29 +67,37 @@ class ClipVectorByExtent(GdalAlgorithm):
     def group(self):
         return self.tr('Vector geoprocessing')
 
+    def groupId(self):
+        return 'vectorgeoprocessing'
+
     def commandName(self):
         return 'ogr2ogr'
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback)
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback, executing)
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         extent = self.parameterAsExtent(parameters, self.EXTENT, context, source.sourceCrs())
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
 
         output, outputFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
 
-        arguments = []
-        arguments.append('-spat')
-        arguments.append(str(extent.xMinimum()))
-        arguments.append(str(extent.yMaximum()))
-        arguments.append(str(extent.xMaximum()))
-        arguments.append(str(extent.yMinimum()))
-        arguments.append('-clipsrc spat_extent')
+        arguments = [
+            '-spat',
+            str(extent.xMinimum()),
+            str(extent.yMaximum()),
+            str(extent.xMaximum()),
+            str(extent.yMinimum()),
+            '-clipsrc spat_extent',
 
-        arguments.append(output)
-        arguments.append(ogrLayer)
-        arguments.append(layerName)
+            output,
+            ogrLayer,
+            layerName
+        ]
 
         if options:
             arguments.append(options)
@@ -101,4 +105,4 @@ class ClipVectorByExtent(GdalAlgorithm):
         if outputFormat:
             arguments.append('-f {}'.format(outputFormat))
 
-        return ['ogr2ogr', GdalUtils.escapeAndJoin(arguments)]
+        return [self.commandName(), GdalUtils.escapeAndJoin(arguments)]

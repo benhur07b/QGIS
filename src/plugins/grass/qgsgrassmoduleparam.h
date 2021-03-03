@@ -25,7 +25,6 @@
 #include <QVBoxLayout>
 
 #include "qgis.h"
-#include "qgsfeature.h"
 #include "qgsfields.h"
 #include "qgscoordinatereferencesystem.h"
 
@@ -59,7 +58,7 @@ class QgsGrassModuleCheckBox : public QCheckBox
     /**
      * \brief Constructor
      */
-    QgsGrassModuleCheckBox( const QString &text, QWidget *parent = 0 );
+    QgsGrassModuleCheckBox( const QString &text, QWidget *parent = nullptr );
 
     void resizeEvent( QResizeEvent *event ) override;
 
@@ -111,14 +110,14 @@ class QgsGrassModuleParam
     //! Item's id
     QString id() { return mId; }
 
-    //! Check if otpion is ready
+    //! Check if option is ready
     //  Returns empty string or error message
     virtual QString ready() { return QString() ; }
 
     QStringList errors() { return mErrors; }
 
     /**
-     * Get gisprompt attribute
+     * Gets gisprompt attribute
      * @paream name gisprompt tag attribute name (age, element, prompt)
      */
     static QString getDescPrompt( QDomElement descDomElement, const QString &name );
@@ -128,7 +127,8 @@ class QgsGrassModuleParam
 
     /**
      * Find list of elements in GRASS module description by option type.
-     *  Option type is identified by gisprompt prompt. Only few types are supported */
+     *  Option type is identified by gisprompt prompt. Only few types are supported
+    */
     static QList<QDomNode> nodesByType( QDomElement descDomElement, STD_OPT optionType, const QString &age = QString() );
 
   protected:
@@ -186,7 +186,7 @@ class QgsGrassModuleGroupBoxItem : public QGroupBox, public QgsGrassModuleParam
      */
     QgsGrassModuleGroupBoxItem( QgsGrassModule *module, QString key,
                                 QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                                bool direct, QWidget *parent = 0 );
+                                bool direct, QWidget *parent = nullptr );
 
     void resizeEvent( QResizeEvent *event ) override;
 
@@ -208,7 +208,7 @@ class QgsGrassModuleMultiParam : public QgsGrassModuleGroupBoxItem
   public:
     QgsGrassModuleMultiParam( QgsGrassModule *module, QString key,
                               QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                              bool direct, QWidget *parent = 0 );
+                              bool direct, QWidget *parent = nullptr );
 
   public slots:
     virtual void addRow() {}
@@ -229,6 +229,9 @@ class QgsGrassModuleMultiParam : public QgsGrassModuleGroupBoxItem
 
     // Parameters layout
     QVBoxLayout *mButtonsLayout = nullptr;
+
+    QgsGrassModuleMultiParam( const QgsGrassModuleMultiParam & ) = delete;
+    QgsGrassModuleMultiParam &operator=( const QgsGrassModuleMultiParam & ) = delete;
 };
 
 /****************** QgsGrassModuleOption ************************/
@@ -250,7 +253,7 @@ class QgsGrassModuleOption : public QgsGrassModuleMultiParam
      */
     QgsGrassModuleOption( QgsGrassModule *module, QString key,
                           QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                          bool direct, QWidget *parent = 0 );
+                          bool direct, QWidget *parent = nullptr );
 
     //! Control option
     enum ControlType { NoControl, LineEdit, ComboBox, SpinBox, CheckBoxes };
@@ -262,7 +265,7 @@ class QgsGrassModuleOption : public QgsGrassModuleMultiParam
     enum OutputType { None, Vector, Raster };
 
     //! Returns list of options which will be passed to module
-    virtual QStringList options() override;
+    QStringList options() override;
 
     //! True if this option is output
     bool isOutput() { return mIsOutput; }
@@ -289,10 +292,10 @@ class QgsGrassModuleOption : public QgsGrassModuleMultiParam
 
   public slots:
     // Add new line edit for multiple options
-    virtual void addRow() override;
+    void addRow() override;
 
     // Remove one line edit for multiple options
-    virtual void removeRow() override;
+    void removeRow() override;
 
     // Browse output
     void browse( bool checked );
@@ -355,10 +358,10 @@ class QgsGrassModuleFlag : public QgsGrassModuleCheckBox, public QgsGrassModuleP
      */
     QgsGrassModuleFlag( QgsGrassModule *module, QString key,
                         QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                        bool direct, QWidget *parent = 0 );
+                        bool direct, QWidget *parent = nullptr );
 
     //! Returns list of options which will be passed to module
-    virtual QStringList options() override;
+    QStringList options() override;
 
 };
 
@@ -382,7 +385,7 @@ class QgsGrassModuleGdalInput : public QgsGrassModuleGroupBoxItem
      */
     QgsGrassModuleGdalInput( QgsGrassModule *module, QgsGrassModuleGdalInput::Type type, QString key,
                              QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                             bool direct, QWidget *parent = 0 );
+                             bool direct, QWidget *parent = nullptr );
 
     //! Reimplemented
     QStringList options() override;
@@ -443,7 +446,7 @@ class QgsGrassModuleField : public QgsGrassModuleOption
      */
     QgsGrassModuleField( QgsGrassModule *module, QString key,
                          QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                         bool direct, QWidget *parent = 0 );
+                         bool direct, QWidget *parent = nullptr );
 };
 
 /*********************** QgsGrassModuleVectorField **********************/
@@ -467,10 +470,10 @@ class QgsGrassModuleVectorField : public QgsGrassModuleMultiParam
                                QgsGrassModuleStandardOptions *options,
                                QString key,
                                QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
-                               bool direct, QWidget *parent = 0 );
+                               bool direct, QWidget *parent = nullptr );
 
     //! Returns list of options which will be passed to module
-    virtual QStringList options() override;
+    QStringList options() override;
 
     void setLayerInput( QgsGrassModuleInput *layerInput ) { mLayerInput = layerInput; }
     QgsGrassModuleInput *layerInput() const { return mLayerInput; }
@@ -480,10 +483,10 @@ class QgsGrassModuleVectorField : public QgsGrassModuleMultiParam
     void updateFields();
 
     // Add new combo for multiple options
-    virtual void addRow() override;
+    void addRow() override;
 
     // Remove one combo for multiple options
-    virtual void removeRow() override;
+    void removeRow() override;
 
   private:
     // Module options
@@ -495,7 +498,7 @@ class QgsGrassModuleVectorField : public QgsGrassModuleMultiParam
     //! Pointer to layer input
     QgsGrassModuleInput *mLayerInput = nullptr;
 
-    // ! Field type (integer,double,string,datetime)
+    //! Field type (integer,double,string,datetime)
     QString mType;
 
     //! List of ComboBoxes for QGIS layer fields
@@ -531,10 +534,10 @@ class QgsGrassModuleSelection : public QgsGrassModuleGroupBoxItem
                              QString key,
                              QDomElement &qdesc, QDomElement &gdesc,
                              QDomNode &gnode,
-                             bool direct, QWidget *parent = 0 );
+                             bool direct, QWidget *parent = nullptr );
 
     //! Returns list of options which will be passed to module
-    virtual QStringList options() override;
+    QStringList options() override;
 
   public slots:
     // selected input layer changed
@@ -542,7 +545,7 @@ class QgsGrassModuleSelection : public QgsGrassModuleGroupBoxItem
 
     void onModeChanged();
 
-    //! Set selection list to currently selected features
+    //! Sets selection list to currently selected features
     void onLayerSelectionChanged();
 
 
@@ -565,7 +568,7 @@ class QgsGrassModuleSelection : public QgsGrassModuleGroupBoxItem
     //! Currently connected layer
     QgsVectorLayer *mVectorLayer = nullptr;
 
-    // ! Field type (integer,double,string,datetime)
+    //! Field type (integer,double,string,datetime)
     QString mType;
 
     //! Line
@@ -573,6 +576,9 @@ class QgsGrassModuleSelection : public QgsGrassModuleGroupBoxItem
 
     // selection mode
     QComboBox *mModeComboBox = nullptr;
+
+    QgsGrassModuleSelection( const QgsGrassModuleSelection & ) = delete;
+    QgsGrassModuleSelection &operator = ( const QgsGrassModuleSelection & ) = delete;
 };
 
 /*********************** QgsGrassModuleFile **********************/
@@ -596,7 +602,7 @@ class QgsGrassModuleFile : public QgsGrassModuleGroupBoxItem
                         QString key,
                         QDomElement &qdesc, QDomElement &gdesc,
                         QDomNode &gnode,
-                        bool direct, QWidget *parent = 0 );
+                        bool direct, QWidget *parent = nullptr );
 
     //! File type
     enum Type { Old, New, Multiple, Directory };
@@ -610,10 +616,10 @@ class QgsGrassModuleFile : public QgsGrassModuleGroupBoxItem
     void browse();
 
   private:
-    // ! File type (New, Old)
+    //! File type (New, Old)
     int mType;
 
-    // ! Optionally split file to dir and file path
+    //! Optionally split file to dir and file path
     QString mFileOption;
 
     //! Line
@@ -624,6 +630,9 @@ class QgsGrassModuleFile : public QgsGrassModuleGroupBoxItem
 
     //! File filters
     QString mFilters;
+
+    QgsGrassModuleFile( const QgsGrassModuleFile & ) = delete;
+    QgsGrassModuleFile &operator = ( const QgsGrassModuleFile & ) = delete;
 };
 
 #endif // QGSGRASSMODULEPARAM_H

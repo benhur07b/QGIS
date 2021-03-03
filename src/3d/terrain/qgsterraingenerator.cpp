@@ -22,19 +22,19 @@
 QgsAABB QgsTerrainGenerator::rootChunkBbox( const Qgs3DMapSettings &map ) const
 {
   QgsRectangle te = extent();
-  QgsCoordinateTransform terrainToMapTransform( crs(), map.crs() );
+  QgsCoordinateTransform terrainToMapTransform( crs(), map.crs(), map.transformContext() );
   te = terrainToMapTransform.transformBoundingBox( te );
 
   float hMin, hMax;
   rootChunkHeightRange( hMin, hMax );
-  return QgsAABB( te.xMinimum() - map.originX(), hMin * map.terrainVerticalScale(), -te.yMaximum() + map.originY(),
-                  te.xMaximum() - map.originX(), hMax * map.terrainVerticalScale(), -te.yMinimum() + map.originY() );
+  return QgsAABB( te.xMinimum() - map.origin().x(), hMin * map.terrainVerticalScale(), -te.yMaximum() + map.origin().y(),
+                  te.xMaximum() - map.origin().x(), hMax * map.terrainVerticalScale(), -te.yMinimum() + map.origin().y() );
 }
 
 float QgsTerrainGenerator::rootChunkError( const Qgs3DMapSettings &map ) const
 {
   QgsRectangle te = extent();
-  QgsCoordinateTransform terrainToMapTransform( crs(), map.crs() );
+  QgsCoordinateTransform terrainToMapTransform( crs(), map.crs(), map.transformContext() );
   te = terrainToMapTransform.transformBoundingBox( te );
 
   // use texel size as the error
@@ -50,9 +50,9 @@ void QgsTerrainGenerator::rootChunkHeightRange( float &hMin, float &hMax ) const
 
 float QgsTerrainGenerator::heightAt( double x, double y, const Qgs3DMapSettings &map ) const
 {
-  Q_UNUSED( x );
-  Q_UNUSED( y );
-  Q_UNUSED( map );
+  Q_UNUSED( x )
+  Q_UNUSED( y )
+  Q_UNUSED( map )
   return 0.f;
 }
 
@@ -60,12 +60,19 @@ QString QgsTerrainGenerator::typeToString( QgsTerrainGenerator::Type type )
 {
   switch ( type )
   {
+    case QgsTerrainGenerator::Mesh:
+      return QStringLiteral( "mesh" );
     case QgsTerrainGenerator::Flat:
-      return "flat";
+      return QStringLiteral( "flat" );
     case QgsTerrainGenerator::Dem:
-      return "dem";
-    case QgsTerrainGenerator::QuantizedMesh:
-      return "quantized-mesh";
+      return QStringLiteral( "dem" );
+    case QgsTerrainGenerator::Online:
+      return QStringLiteral( "online" );
   }
   return QString();
+}
+
+bool QgsTerrainGenerator::isValid() const
+{
+  return mIsValid;
 }

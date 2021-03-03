@@ -18,12 +18,15 @@
 #include "qgsgeometryrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 
 QgsMapToolRegularPolygonCenterCorner::QgsMapToolRegularPolygonCenterCorner( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolAddRegularPolygon( parentTool, canvas, mode )
 {
+  mToolName = tr( "Add regular polygon from center and a corner" );
 }
 
 QgsMapToolRegularPolygonCenterCorner::~QgsMapToolRegularPolygonCenterCorner()
@@ -33,40 +36,48 @@ QgsMapToolRegularPolygonCenterCorner::~QgsMapToolRegularPolygonCenterCorner()
 
 void QgsMapToolRegularPolygonCenterCorner::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
 
   if ( e->button() == Qt::LeftButton )
   {
-    mPoints.append( mapPoint );
+    if ( mPoints.empty() )
+      mPoints.append( point );
 
-    if ( !mPoints.isEmpty() )
+    if ( !mTempRubberBand )
     {
-      if ( !mTempRubberBand )
-      {
-        mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
-        mTempRubberBand->show();
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
+      mTempRubberBand->show();
 
-        createNumberSidesSpinBox();
-      }
+      createNumberSidesSpinBox();
     }
   }
   else if ( e->button() == Qt::RightButton )
   {
-    deactivate();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    mPoints.append( point );
+
+    release( e );
   }
 }
 
 void QgsMapToolRegularPolygonCenterCorner::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   if ( mTempRubberBand )
   {
     QgsRegularPolygon::ConstructionOption option = QgsRegularPolygon::InscribedCircle;
-    mRegularPolygon = QgsRegularPolygon( mPoints.at( 0 ), mapPoint, mNumberSidesSpinBox->value(), option );
+    mRegularPolygon = QgsRegularPolygon( mPoints.at( 0 ), point, mNumberSidesSpinBox->value(), option );
     mTempRubberBand->setGeometry( mRegularPolygon.toPolygon() );
   }
 }

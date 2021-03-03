@@ -22,14 +22,18 @@
 
 #include "qgis_core.h"
 #include "qgsfields.h"
+#include "qgsreadwritecontext.h"
+#include "qgsrelationcontext.h"
 
-#include "qgis.h"
+#include "qgis_sip.h"
 
-class QgsVectorLayer;
 class QgsFeatureIterator;
 class QgsFeature;
 class QgsFeatureRequest;
 class QgsAttributes;
+class QgsVectorLayer;
+class QgsRelationPrivate;
+class QgsPolymorphicRelation;
 
 /**
  * \ingroup core
@@ -44,26 +48,38 @@ class CORE_EXPORT QgsRelation
     Q_PROPERTY( QgsVectorLayer *referencedLayer READ referencedLayer )
     Q_PROPERTY( QString name READ name WRITE setName )
     Q_PROPERTY( bool isValid READ isValid )
-
+    Q_PROPERTY( QString polymorphicRelationId READ polymorphicRelationId WRITE setPolymorphicRelationId )
+    Q_PROPERTY( QgsPolymorphicRelation polymorphicRelation READ polymorphicRelation )
 
   public:
 
     /**
-     * enum for the relation strength
-     * Association, Composition
+     * Enum holding the relations type
      */
+    enum RelationType
+    {
+      Normal, //!< A normal relation
+      Generated, //!< A generated relation is a child of a polymorphic relation
+    };
+    Q_ENUM( RelationType )
+
+    /**
+    * enum for the relation strength
+    * Association, Composition
+    */
     enum RelationStrength
     {
       Association, //!< Loose relation, related elements are not part of the parent and a parent copy will not copy any children.
       Composition  //!< Fix relation, related elements are part of the parent and a parent copy will copy any children or delete of parent will delete children
-
     };
+    Q_ENUM( RelationStrength )
 
 #ifndef SIP_RUN
 
     /**
      * \ingroup core
-     * Defines a relation between matching fields of the two involved tables of a relation.
+     * \brief Defines a relation between matching fields of the two involved tables of a relation.
+     *
      * Often, a relation is only defined by just one FieldPair with the name of the foreign key
      * column of the referencing (child) table as first element and the name of the primary key column
      * of the referenced (parent) table as the second element.
@@ -73,15 +89,15 @@ class CORE_EXPORT QgsRelation
     {
       public:
         //! Default constructor: NULL strings
-        FieldPair() {}
+        FieldPair() = default;
 
         //! Constructor which takes two fields
         FieldPair( const QString &referencingField, const QString &referencedField )
           : QPair< QString, QString >( referencingField, referencedField ) {}
 
-        //! Get the name of the referencing (child) field
+        //! Gets the name of the referencing (child) field
         QString referencingField() const { return first; }
-        //! Get the name of the referenced (parent) field
+        //! Gets the name of the referenced (parent) field
         QString referencedField() const { return second; }
 
         bool operator==( const FieldPair &other ) const { return first == other.first && second == other.second; }
@@ -91,16 +107,38 @@ class CORE_EXPORT QgsRelation
     /**
      * Default constructor. Creates an invalid relation.
      */
-    QgsRelation() = default;
+    QgsRelation();
+    ~QgsRelation();
+
+    /**
+     * Constructor with context. Creates an invalid relation.
+     */
+    QgsRelation( const QgsRelationContext &context );
+
+    /**
+     * Copies a relation.
+     * This makes a shallow copy, relations are implicitly shared and only duplicated when the copy is
+     * changed.
+     */
+    QgsRelation( const QgsRelation &other );
+
+    /**
+     * Copies a relation.
+     * This makes a shallow copy, relations are implicitly shared and only duplicated when the copy is
+     * changed.
+     */
+    QgsRelation &operator=( const QgsRelation &other );
 
     /**
      * Creates a relation from an XML structure. Used for reading .qgs projects.
      *
      * \param node The dom node containing the relation information
+     * \param context to pass project translator
+     * \param relationContext a relation context
      *
      * \returns A relation
      */
-    static QgsRelation createFromXml( const QDomNode &node );
+    static QgsRelation createFromXml( const QDomNode &node, QgsReadWriteContext &context, const QgsRelationContext &relationContext = QgsRelationContext() );
 
     /**
      * Writes a relation to an XML structure. Used for saving .qgs projects
@@ -124,7 +162,7 @@ class CORE_EXPORT QgsRelation
      * Set a strength for this relation
      * \since QGIS 3.0
      */
-    void setStrength( const RelationStrength &strength );
+    void setStrength( RelationStrength strength );
 
     /**
      * Set the referencing (child) layer id. This layer will be searched in the registry.
@@ -137,7 +175,7 @@ class CORE_EXPORT QgsRelation
     void setReferencedLayer( const QString &id );
 
     /**
-     * Add a field pairs which is part of this relation
+     * Add a field pair which is part of this relation
      * The first element of each pair are the field names of the foreign key.
      * The second element of each pair are the field names of the matching primary key.
      *
@@ -147,7 +185,7 @@ class CORE_EXPORT QgsRelation
     void addFieldPair( const QString &referencingField, const QString &referencedField );
 
     /**
-     * Add a field pairs which is part of this relation
+     * Add a field pair which is part of this relation
      * The first element of each pair are the field names of the foreign key.
      * The second element of each pair are the field names of the matching primary key.
      *
@@ -185,9 +223,9 @@ class CORE_EXPORT QgsRelation
      * which have a foreign key pointing to the provided feature.
      * \param feature A feature from the referenced (parent) layer
      * \returns expression filter string for all the referencing features
-     * \since QGIS 2.16
      * \see getRelatedFeatures()
      * \see getRelatedFeaturesRequest()
+     * \since QGIS 2.16
      */
     QString getRelatedFeaturesFilter( const QgsFeature &feature ) const;
 
@@ -198,7 +236,6 @@ class CORE_EXPORT QgsRelation
      * \param attributes An attribute vector containing the foreign key
      *
      * \returns A request the referenced feature
-     * \note not available in Python bindings
      */
     QgsFeatureRequest getReferencedFeatureRequest( const QgsAttributes &attributes ) const;
 
@@ -296,7 +333,7 @@ class CORE_EXPORT QgsRelation
     % MethodCode
     const QList< QgsRelation::FieldPair > &pairs = sipCpp->fieldPairs();
     sipRes = new QMap< QString, QString >();
-    Q_FOREACH ( const QgsRelation::FieldPair &pair, pairs )
+    for ( const QgsRelation::FieldPair &pair : pairs )
     {
       sipRes->insert( pair.first, pair.second );
     }
@@ -321,8 +358,9 @@ class CORE_EXPORT QgsRelation
 
     /**
      * Returns the validity of this relation. Don't use the information if it's not valid.
+     * A relation is considered valid if both referenced and referencig layers are valid.
      *
-     * \returns true if the relation is valid
+     * \returns TRUE if the relation is valid
      */
     bool isValid() const;
 
@@ -330,56 +368,62 @@ class CORE_EXPORT QgsRelation
      * Compares the two QgsRelation, ignoring the name and the ID.
      *
      * \param other The other relation
-     * \returns true if they are similar
+     * \returns TRUE if they are similar
      * \since QGIS 3.0
      */
     bool hasEqualDefinition( const QgsRelation &other ) const;
 
     /**
-     * Get the referenced field counterpart given a referencing field.
+     * Gets the referenced field counterpart given a referencing field.
      *
      * \since QGIS 3.0
      */
     Q_INVOKABLE QString resolveReferencedField( const QString &referencingField ) const;
 
     /**
-     * Get the referencing field counterpart given a referenced field.
+     * Gets the referencing field counterpart given a referenced field.
      *
      * \since QGIS 3.0
      */
     Q_INVOKABLE QString resolveReferencingField( const QString &referencedField ) const;
 
-  private:
-
     /**
      * Updates the validity status of this relation.
      * Will be called internally whenever a member is changed.
+     *
+     * \since QGIS 3.6
      */
     void updateRelationStatus();
 
-    //! Unique Id
-    QString mRelationId;
-    //! Human redable name
-    QString mRelationName;
-    //! The child layer
-    QString mReferencingLayerId;
-    //! The child layer
-    QgsVectorLayer *mReferencingLayer = nullptr;
-    //! The parent layer id
-    QString mReferencedLayerId;
-    //! The parent layer
-    QgsVectorLayer *mReferencedLayer = nullptr;
-
-    RelationStrength mRelationStrength;
+    /**
+     * Sets the parent polymorphic relation id.
+     * \since QGIS 3.18
+     */
+    void setPolymorphicRelationId( const QString &polymorphicRelationId );
 
     /**
-     * A list of fields which define the relation.
-     *  In most cases there will be only one value, but multiple values
-     *  are supported for composited foreign keys.
-     *  The first field is on the referencing layer, the second on the referenced */
-    QList< FieldPair > mFieldPairs;
+     * Returns the parent polymorphic relation id. If the relation is a normal relation, a null string is returned.
+     * \since QGIS 3.18
+     */
+    QString polymorphicRelationId() const;
 
-    bool mValid = false;
+    /**
+     * Returns the parent polymorphic relation. If the relation is a normal relation, an invalid polymorphic relation is returned.
+     * \since QGIS 3.18
+     */
+    QgsPolymorphicRelation polymorphicRelation() const;
+
+    /**
+     * Returns the type of the relation
+     * \since QGIS 3.18
+     */
+    RelationType type() const;
+
+  private:
+
+    mutable QExplicitlySharedDataPointer<QgsRelationPrivate> d;
+
+    QgsRelationContext mContext;
 };
 
 // Register QgsRelation for usage with QVariant

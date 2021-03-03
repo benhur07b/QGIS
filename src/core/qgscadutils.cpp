@@ -18,6 +18,7 @@
 
 #include "qgslogger.h"
 #include "qgssnappingutils.h"
+#include "qgsgeometryutils.h"
 
 // tolerances for soft constraints (last values, and common angles)
 // for angles, both tolerance in pixels and degrees are used for better performance
@@ -33,57 +34,6 @@ struct EdgesOnlyFilter : public QgsPointLocator::MatchFilter
 /// @endcond
 
 
-// TODO: move to geometry utils (if not already there)
-static bool lineCircleIntersection( const QgsPointXY &center, const double radius, const QgsPointXY &edgePt0, const QgsPointXY &edgePt1, QgsPointXY &intersection )
-{
-  // formula taken from http://mathworld.wolfram.com/Circle-LineIntersection.html
-
-  const double x1 = edgePt0.x() - center.x();
-  const double y1 = edgePt0.y() - center.y();
-  const double x2 = edgePt1.x() - center.x();
-  const double y2 = edgePt1.y() - center.y();
-  const double dx = x2 - x1;
-  const double dy = y2 - y1;
-
-  const double dr = std::sqrt( std::pow( dx, 2 ) + std::pow( dy, 2 ) );
-  const double d = x1 * y2 - x2 * y1;
-
-  const double disc = std::pow( radius, 2 ) * std::pow( dr, 2 ) - std::pow( d, 2 );
-
-  if ( disc < 0 )
-  {
-    //no intersection or tangent
-    return false;
-  }
-  else
-  {
-    // two solutions
-    const int sgnDy = dy < 0 ? -1 : 1;
-
-    const double ax = center.x() + ( d * dy + sgnDy * dx * std::sqrt( std::pow( radius, 2 ) * std::pow( dr, 2 ) - std::pow( d, 2 ) ) ) / ( std::pow( dr, 2 ) );
-    const double ay = center.y() + ( -d * dx + std::fabs( dy ) * std::sqrt( std::pow( radius, 2 ) * std::pow( dr, 2 ) - std::pow( d, 2 ) ) ) / ( std::pow( dr, 2 ) );
-    const QgsPointXY p1( ax, ay );
-
-    const double bx = center.x() + ( d * dy - sgnDy * dx * std::sqrt( std::pow( radius, 2 ) * std::pow( dr, 2 ) - std::pow( d, 2 ) ) ) / ( std::pow( dr, 2 ) );
-    const double by = center.y() + ( -d * dx - std::fabs( dy ) * std::sqrt( std::pow( radius, 2 ) * std::pow( dr, 2 ) - std::pow( d, 2 ) ) ) / ( std::pow( dr, 2 ) );
-    const QgsPointXY p2( bx, by );
-
-    // snap to nearest intersection
-
-    if ( intersection.sqrDist( p1 ) < intersection.sqrDist( p2 ) )
-    {
-      intersection.set( p1.x(), p1.y() );
-    }
-    else
-    {
-      intersection.set( p2.x(), p2.y() );
-    }
-    return true;
-  }
-}
-
-
-
 QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &originalMapPoint, const QgsCadUtils::AlignMapPointContext &ctx )
 {
   QgsCadUtils::AlignMapPointOutput res;
@@ -91,17 +41,20 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   res.softLockCommonAngle = -1;
 
   // try to snap to anything
-  QgsPointLocator::Match snapMatch = ctx.snappingUtils->snapToMap( originalMapPoint );
+  QgsPointLocator::Match snapMatch = ctx.snappingUtils->snapToMap( originalMapPoint, nullptr, true );
+  res.snapMatch = snapMatch;
   QgsPointXY point = snapMatch.isValid() ? snapMatch.point() : originalMapPoint;
-
-  // try to snap explicitly to a segment - useful for some constraints
   QgsPointXY edgePt0, edgePt1;
-  EdgesOnlyFilter edgesOnlyFilter;
-  QgsPointLocator::Match edgeMatch = ctx.snappingUtils->snapToMap( originalMapPoint, &edgesOnlyFilter );
-  if ( edgeMatch.hasEdge() )
-    edgeMatch.edgePoints( edgePt0, edgePt1 );
-
-  res.edgeMatch = edgeMatch;
+  if ( snapMatch.hasEdge() )
+  {
+    snapMatch.edgePoints( edgePt0, edgePt1 );
+    // note : res.edgeMatch should be removed, as we can just check snapMatch.hasEdge()
+    res.edgeMatch = snapMatch;
+  }
+  else
+  {
+    res.edgeMatch = QgsPointLocator::Match();
+  }
 
   QgsPointXY previousPt, penultimatePt;
   if ( ctx.cadPointList.count() >= 2 )
@@ -121,9 +74,9 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
     {
       point.setX( previousPt.x() + ctx.xConstraint.value );
     }
-    if ( edgeMatch.hasEdge() && !ctx.yConstraint.locked )
+    if ( snapMatch.hasEdge() && !ctx.yConstraint.locked )
     {
-      // intersect with snapped segment line at X ccordinate
+      // intersect with snapped segment line at X coordinate
       const double dx = edgePt1.x() - edgePt0.x();
       if ( dx == 0 )
       {
@@ -149,9 +102,9 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
     {
       point.setY( previousPt.y() + ctx.yConstraint.value );
     }
-    if ( edgeMatch.hasEdge() && !ctx.xConstraint.locked )
+    if ( snapMatch.hasEdge() && !ctx.xConstraint.locked )
     {
-      // intersect with snapped segment line at Y ccordinate
+      // intersect with snapped segment line at Y coordinate
       const double dy = edgePt1.y() - edgePt0.y();
       if ( dy == 0 )
       {
@@ -202,7 +155,7 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
   // 1. "hard" lock defined by the user
   // 2. "soft" lock from common angle (e.g. 45 degrees)
   bool angleLocked = false, angleRelative = false;
-  int angleValueDeg = 0;
+  double angleValueDeg = 0;
   if ( ctx.angleConstraint.locked )
   {
     angleLocked = true;
@@ -274,7 +227,7 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
       point.setY( previousPt.y() + sina * v );
     }
 
-    if ( edgeMatch.hasEdge() && !ctx.distanceConstraint.locked )
+    if ( snapMatch.hasEdge() && !ctx.distanceConstraint.locked )
     {
       // magnetize to the intersection of the snapped segment and the lockedAngle
 
@@ -312,13 +265,13 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
       {
         QgsPointXY verticalPt0( ctx.xConstraint.value, point.y() );
         QgsPointXY verticalPt1( ctx.xConstraint.value, point.y() + 1 );
-        res.valid &= lineCircleIntersection( previousPt, ctx.distanceConstraint.value, verticalPt0, verticalPt1, point );
+        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, verticalPt0, verticalPt1, point );
       }
       if ( ctx.yConstraint.locked )
       {
         QgsPointXY horizontalPt0( point.x(), ctx.yConstraint.value );
         QgsPointXY horizontalPt1( point.x() + 1, ctx.yConstraint.value );
-        res.valid &= lineCircleIntersection( previousPt, ctx.distanceConstraint.value, horizontalPt0, horizontalPt1, point );
+        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, horizontalPt0, horizontalPt1, point );
       }
     }
     else
@@ -337,21 +290,21 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
                    previousPt.y() + ( point.y() - previousPt.y() ) * vP );
       }
 
-      if ( edgeMatch.hasEdge() && !ctx.angleConstraint.locked )
+      if ( snapMatch.hasEdge() && !ctx.angleConstraint.locked )
       {
         // we will magnietize to the intersection of that segment and the lockedDistance !
-        res.valid &= lineCircleIntersection( previousPt, ctx.distanceConstraint.value, edgePt0, edgePt1, point );
+        res.valid &= QgsGeometryUtils::lineCircleIntersection( previousPt, ctx.distanceConstraint.value, edgePt0, edgePt1, point );
       }
     }
   }
 
   // *****************************
   // ---- calculate CAD values
-  QgsDebugMsgLevel( QString( "point:             %1 %2" ).arg( point.x() ).arg( point.y() ), 4 );
-  QgsDebugMsgLevel( QString( "previous point:    %1 %2" ).arg( previousPt.x() ).arg( previousPt.y() ), 4 );
-  QgsDebugMsgLevel( QString( "penultimate point: %1 %2" ).arg( penultimatePt.x() ).arg( penultimatePt.y() ), 4 );
-  //QgsDebugMsg( QString( "dx: %1 dy: %2" ).arg( point.x() - previousPt.x() ).arg( point.y() - previousPt.y() ) );
-  //QgsDebugMsg( QString( "ddx: %1 ddy: %2" ).arg( previousPt.x() - penultimatePt.x() ).arg( previousPt.y() - penultimatePt.y() ) );
+  QgsDebugMsgLevel( QStringLiteral( "point:             %1 %2" ).arg( point.x() ).arg( point.y() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "previous point:    %1 %2" ).arg( previousPt.x() ).arg( previousPt.y() ), 4 );
+  QgsDebugMsgLevel( QStringLiteral( "penultimate point: %1 %2" ).arg( penultimatePt.x() ).arg( penultimatePt.y() ), 4 );
+  //QgsDebugMsg( QStringLiteral( "dx: %1 dy: %2" ).arg( point.x() - previousPt.x() ).arg( point.y() - previousPt.y() ) );
+  //QgsDebugMsg( QStringLiteral( "ddx: %1 ddy: %2" ).arg( previousPt.x() - penultimatePt.x() ).arg( previousPt.y() - penultimatePt.y() ) );
 
   res.finalMapPoint = point;
 
@@ -360,9 +313,9 @@ QgsCadUtils::AlignMapPointOutput QgsCadUtils::alignMapPoint( const QgsPointXY &o
 
 void QgsCadUtils::AlignMapPointContext::dump() const
 {
-  QgsDebugMsg( "Constraints (locked / relative / value" );
-  QgsDebugMsg( QString( "Angle:    %1 %2 %3" ).arg( angleConstraint.locked ).arg( angleConstraint.relative ).arg( angleConstraint.value ) );
-  QgsDebugMsg( QString( "Distance: %1 %2 %3" ).arg( distanceConstraint.locked ).arg( distanceConstraint.relative ).arg( distanceConstraint.value ) );
-  QgsDebugMsg( QString( "X:        %1 %2 %3" ).arg( xConstraint.locked ).arg( xConstraint.relative ).arg( xConstraint.value ) );
-  QgsDebugMsg( QString( "Y:        %1 %2 %3" ).arg( yConstraint.locked ).arg( yConstraint.relative ).arg( yConstraint.value ) );
+  QgsDebugMsg( QStringLiteral( "Constraints (locked / relative / value" ) );
+  QgsDebugMsg( QStringLiteral( "Angle:    %1 %2 %3" ).arg( angleConstraint.locked ).arg( angleConstraint.relative ).arg( angleConstraint.value ) );
+  QgsDebugMsg( QStringLiteral( "Distance: %1 %2 %3" ).arg( distanceConstraint.locked ).arg( distanceConstraint.relative ).arg( distanceConstraint.value ) );
+  QgsDebugMsg( QStringLiteral( "X:        %1 %2 %3" ).arg( xConstraint.locked ).arg( xConstraint.relative ).arg( xConstraint.value ) );
+  QgsDebugMsg( QStringLiteral( "Y:        %1 %2 %3" ).arg( yConstraint.locked ).arg( yConstraint.relative ).arg( yConstraint.value ) );
 }

@@ -34,6 +34,7 @@ QgsConfigureShortcutsDialog::QgsConfigureShortcutsDialog( QWidget *parent, QgsSh
   , mManager( manager )
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
   connect( mLeFilter, &QgsFilterLineEdit::textChanged, this, &QgsConfigureShortcutsDialog::mLeFilter_textChanged );
 
   if ( !mManager )
@@ -50,25 +51,6 @@ QgsConfigureShortcutsDialog::QgsConfigureShortcutsDialog( QWidget *parent, QgsSh
            this, &QgsConfigureShortcutsDialog::actionChanged );
 
   populateActions();
-
-  restoreState();
-}
-
-QgsConfigureShortcutsDialog::~QgsConfigureShortcutsDialog()
-{
-  saveState();
-}
-
-void QgsConfigureShortcutsDialog::saveState()
-{
-  QgsSettings settings;
-  settings.setValue( QStringLiteral( "Windows/ShortcutsDialog/geometry" ), saveGeometry() );
-}
-
-void QgsConfigureShortcutsDialog::restoreState()
-{
-  QgsSettings settings;
-  restoreGeometry( settings.value( QStringLiteral( "Windows/ShortcutsDialog/geometry" ) ).toByteArray() );
 }
 
 void QgsConfigureShortcutsDialog::populateActions()
@@ -77,7 +59,8 @@ void QgsConfigureShortcutsDialog::populateActions()
 
   QList<QTreeWidgetItem *> items;
   items.reserve( objects.count() );
-  Q_FOREACH ( QObject *obj, objects )
+  const auto constObjects = objects;
+  for ( QObject *obj : constObjects )
   {
     QString actionText;
     QString sequence;
@@ -87,16 +70,21 @@ void QgsConfigureShortcutsDialog::populateActions()
     {
       actionText = action->text();
       actionText.remove( '&' ); // remove the accelerator
-      sequence = action->shortcut().toString();
+      sequence = action->shortcut().toString( QKeySequence::NativeText );
       icon = action->icon();
     }
     else if ( QShortcut *shortcut = qobject_cast< QShortcut * >( obj ) )
     {
       actionText = shortcut->whatsThis();
-      sequence = shortcut->key().toString();
+      sequence = shortcut->key().toString( QKeySequence::NativeText );
       icon = shortcut->property( "Icon" ).value<QIcon>();
     }
     else
+    {
+      continue;
+    }
+
+    if ( actionText.isEmpty() )
     {
       continue;
     }
@@ -105,7 +93,7 @@ void QgsConfigureShortcutsDialog::populateActions()
     lst << actionText << sequence;
     QTreeWidgetItem *item = new QTreeWidgetItem( lst );
     item->setIcon( 0, icon );
-    item->setData( 0, Qt::UserRole, qVariantFromValue( obj ) );
+    item->setData( 0, Qt::UserRole, QVariant::fromValue( obj ) );
     items.append( item );
   }
 
@@ -120,7 +108,7 @@ void QgsConfigureShortcutsDialog::populateActions()
 
 void QgsConfigureShortcutsDialog::saveShortcuts()
 {
-  QString fileName = QFileDialog::getSaveFileName( this, tr( "Save shortcuts" ), QDir::homePath(),
+  QString fileName = QFileDialog::getSaveFileName( this, tr( "Save Shortcuts" ), QDir::homePath(),
                      tr( "XML file" ) + " (*.xml);;" + tr( "All files" ) + " (*)" );
 
   if ( fileName.isEmpty() )
@@ -135,7 +123,7 @@ void QgsConfigureShortcutsDialog::saveShortcuts()
   QFile file( fileName );
   if ( !file.open( QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate ) )
   {
-    QMessageBox::warning( this, tr( "Saving shortcuts" ),
+    QMessageBox::warning( this, tr( "Saving Shortcuts" ),
                           tr( "Cannot write file %1:\n%2." )
                           .arg( fileName,
                                 file.errorString() ) );
@@ -173,7 +161,7 @@ void QgsConfigureShortcutsDialog::saveShortcuts()
 
 void QgsConfigureShortcutsDialog::loadShortcuts()
 {
-  QString fileName = QFileDialog::getOpenFileName( this, tr( "Load shortcuts" ), QDir::homePath(),
+  QString fileName = QFileDialog::getOpenFileName( this, tr( "Load Shortcuts" ), QDir::homePath(),
                      tr( "XML file" ) + " (*.xml);;" + tr( "All files" ) + " (*)" );
 
   if ( fileName.isEmpty() )
@@ -184,7 +172,7 @@ void QgsConfigureShortcutsDialog::loadShortcuts()
   QFile file( fileName );
   if ( !file.open( QIODevice::ReadOnly | QIODevice::Text ) )
   {
-    QMessageBox::warning( this, tr( "Loading shortcuts" ),
+    QMessageBox::warning( this, tr( "Loading Shortcuts" ),
                           tr( "Cannot read file %1:\n%2." )
                           .arg( fileName,
                                 file.errorString() ) );
@@ -198,7 +186,7 @@ void QgsConfigureShortcutsDialog::loadShortcuts()
 
   if ( !doc.setContent( &file, true, &errorStr, &errorLine, &errorColumn ) )
   {
-    QMessageBox::information( this, tr( "Loading shortcuts" ),
+    QMessageBox::information( this, tr( "Loading Shortcuts" ),
                               tr( "Parse error at line %1, column %2:\n%3" )
                               .arg( errorLine )
                               .arg( errorColumn )
@@ -209,7 +197,7 @@ void QgsConfigureShortcutsDialog::loadShortcuts()
   QDomElement root = doc.documentElement();
   if ( root.tagName() != QLatin1String( "qgsshortcuts" ) )
   {
-    QMessageBox::information( this, tr( "Loading shortcuts" ),
+    QMessageBox::information( this, tr( "Loading Shortcuts" ),
                               tr( "The file is not an shortcuts exchange file." ) );
     return;
   }
@@ -224,12 +212,12 @@ void QgsConfigureShortcutsDialog::loadShortcuts()
   }
   else // use QGIS locale
   {
-    currentLocale = QLocale::system().name();
+    currentLocale = QLocale().name();
   }
 
   if ( root.attribute( QStringLiteral( "locale" ) ) != currentLocale )
   {
-    QMessageBox::information( this, tr( "Loading shortcuts" ),
+    QMessageBox::information( this, tr( "Loading Shortcuts" ),
                               tr( "The file contains shortcuts created with different locale, so you can't use it." ) );
     return;
   }
@@ -281,8 +269,8 @@ QShortcut *QgsConfigureShortcutsDialog::currentShortcut()
 
 void QgsConfigureShortcutsDialog::actionChanged( QTreeWidgetItem *current, QTreeWidgetItem *previous )
 {
-  Q_UNUSED( current );
-  Q_UNUSED( previous );
+  Q_UNUSED( current )
+  Q_UNUSED( previous )
   // cancel previous shortcut setting (if any)
   setGettingShortcut( false );
 
@@ -409,7 +397,7 @@ void QgsConfigureShortcutsDialog::updateShortcutText()
 {
   // update text of the button so that user can see what has typed already
   QKeySequence s( mModifiers + mKey );
-  btnChangeShortcut->setText( tr( "Input: " ) + s.toString() );
+  btnChangeShortcut->setText( tr( "Input: " ) + s.toString( QKeySequence::NativeText ) );
 }
 
 void QgsConfigureShortcutsDialog::setGettingShortcut( bool getting )
@@ -452,7 +440,7 @@ void QgsConfigureShortcutsDialog::setCurrentActionShortcut( const QKeySequence &
       otherText = otherShortcut->whatsThis();
     }
 
-    int res = QMessageBox::question( this, tr( "Shortcut conflict" ),
+    int res = QMessageBox::question( this, tr( "Change Shortcut" ),
                                      tr( "This shortcut is already assigned to action %1. Reassign?" ).arg( otherText ),
                                      QMessageBox::Yes | QMessageBox::No );
 
@@ -467,10 +455,10 @@ void QgsConfigureShortcutsDialog::setCurrentActionShortcut( const QKeySequence &
   }
 
   // update manager
-  mManager->setObjectKeySequence( object, s.toString() );
+  mManager->setObjectKeySequence( object, s.toString( QKeySequence::NativeText ) );
 
   // update gui
-  treeActions->currentItem()->setText( 1, s.toString() );
+  treeActions->currentItem()->setText( 1, s.toString( QKeySequence::NativeText ) );
 
   actionChanged( treeActions->currentItem(), nullptr );
 }

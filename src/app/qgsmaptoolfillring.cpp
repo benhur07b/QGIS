@@ -22,13 +22,15 @@
 #include "qgsattributedialog.h"
 #include "qgisapp.h"
 #include "qgsvectorlayerutils.h"
+#include "qgsmapmouseevent.h"
+#include "qgspolygon.h"
 
-#include <QMouseEvent>
 #include <limits>
 
 QgsMapToolFillRing::QgsMapToolFillRing( QgsMapCanvas *canvas )
   : QgsMapToolCapture( canvas, QgisApp::instance()->cadDockWidget(), QgsMapToolCapture::CapturePolygon )
 {
+  mToolName = tr( "Fill ring" );
 }
 
 void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
@@ -65,7 +67,7 @@ void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
     else if ( error == 2 )
     {
       // problem with coordinate transformation
-      emit messageEmitted( tr( "Cannot transform the point to the layers coordinate system" ), QgsMessageBar::WARNING );
+      emit messageEmitted( tr( "Cannot transform the point to the layers coordinate system" ), Qgis::Warning );
       return;
     }
 
@@ -88,30 +90,32 @@ void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 
     vlayer->beginEditCommand( tr( "Ring added and filled" ) );
 
-    QList< QgsPointXY > pointList = points();
+    QgsPointSequence pointList = pointsZM();
 
-    int addRingReturnCode = vlayer->addRing( pointList, &fid );
-    if ( addRingReturnCode != 0 )
+    QgsGeometry::OperationResult addRingReturnCode = vlayer->addRing( pointList, &fid );
+
+    // AP: this is all dead code:
+    //todo: open message box to communicate errors
+    if ( addRingReturnCode != QgsGeometry::OperationResult::Success )
     {
       QString errorMessage;
-      //todo: open message box to communicate errors
-      if ( addRingReturnCode == 1 )
+      if ( addRingReturnCode == QgsGeometry::OperationResult::InvalidInputGeometryType )
       {
         errorMessage = tr( "a problem with geometry type occurred" );
       }
-      else if ( addRingReturnCode == 2 )
+      else if ( addRingReturnCode == QgsGeometry::OperationResult::AddRingNotClosed )
       {
         errorMessage = tr( "the inserted Ring is not closed" );
       }
-      else if ( addRingReturnCode == 3 )
+      else if ( addRingReturnCode ==  QgsGeometry::OperationResult::AddRingNotValid )
       {
         errorMessage = tr( "the inserted Ring is not a valid geometry" );
       }
-      else if ( addRingReturnCode == 4 )
+      else if ( addRingReturnCode == QgsGeometry::OperationResult::AddRingCrossesExistingRings )
       {
         errorMessage = tr( "the inserted Ring crosses existing rings" );
       }
-      else if ( addRingReturnCode == 5 )
+      else if ( addRingReturnCode == QgsGeometry::OperationResult::AddRingNotInExistingFeature )
       {
         errorMessage = tr( "the inserted Ring is not contained in a feature" );
       }
@@ -119,13 +123,16 @@ void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       {
         errorMessage = tr( "an unknown error occurred" );
       }
-      emit messageEmitted( tr( "could not add ring since %1." ).arg( errorMessage ), QgsMessageBar::CRITICAL );
+      emit messageEmitted( tr( "could not add ring since %1." ).arg( errorMessage ), Qgis::Critical );
       vlayer->destroyEditCommand();
 
       return;
     }
 
-    g = QgsGeometry::fromPolygonXY( QgsPolygonXY() << pointList.toVector() );
+    QgsLineString ext( pointList );
+    std::unique_ptr< QgsPolygon > polygon = std::make_unique< QgsPolygon >( );
+    polygon->setExteriorRing( ext.clone() );
+    g = QgsGeometry( std::move( polygon ) );
   }
   else
   {
@@ -135,7 +142,7 @@ void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 
     if ( fid == -1 )
     {
-      emit messageEmitted( tr( "No ring found to fill." ), QgsMessageBar::CRITICAL );
+      emit messageEmitted( tr( "No ring found to fill." ), Qgis::Critical );
       vlayer->destroyEditCommand();
       return;
     }
@@ -158,8 +165,12 @@ void QgsMapToolFillRing::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
     }
     else
     {
-      QgsAttributeDialog *dialog = new QgsAttributeDialog( vlayer, &ft, false, nullptr, true );
-      dialog->setMode( QgsAttributeForm::AddFeatureMode );
+      QgsAttributeEditorContext context;
+      // don't set cadDockwidget in context because we don't want to be able to create geometries from this dialog
+      // there is one modified and one created feature, so it's a mess of we start to digitize a relation feature geometry
+      context.setVectorLayerTools( QgisApp::instance()->vectorLayerTools() );
+      QgsAttributeDialog *dialog = new QgsAttributeDialog( vlayer, &ft, false, nullptr, true, context );
+      dialog->setMode( QgsAttributeEditorContext::AddFeatureMode );
       res = dialog->exec(); // will also add the feature
     }
 
@@ -196,11 +207,11 @@ QgsGeometry QgsMapToolFillRing::ringUnderPoint( const QgsPointXY &p, QgsFeatureI
   while ( fit.nextFeature( f ) )
   {
     QgsGeometry g = f.geometry();
-    if ( g.isNull() )
+    if ( g.isNull() || QgsWkbTypes::geometryType( g.wkbType() ) != QgsWkbTypes::PolygonGeometry )
       continue;
 
     QgsMultiPolygonXY pol;
-    if ( g.wkbType() == QgsWkbTypes::Polygon ||  g.wkbType()  == QgsWkbTypes::Polygon25D )
+    if ( !QgsWkbTypes::isMultiType( g.wkbType() ) )
     {
       pol = QgsMultiPolygonXY() << g.asPolygon();
     }

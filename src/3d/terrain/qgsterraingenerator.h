@@ -30,17 +30,25 @@ class QDomElement;
 class QDomDocument;
 class QgsProject;
 
+#define SIP_NO_FILE
+
 
 /**
  * \ingroup 3d
- * Base class for generators of terrain. All terrain generators are tile based
+ * \brief Base class for generators of terrain.
+ *
+ * All terrain generators are tile based
  * to support hierarchical level of detail. Tiling scheme of a generator is defined
  * by the generator itself. Terrain generators are asked to produce new terrain tiles
  * whenever that is deemed necessary by the terrain controller (that caches generated tiles).
+ *
+ * \note Not available in Python bindings
+ *
  * \since QGIS 3.0
  */
-class _3D_EXPORT QgsTerrainGenerator : public QgsChunkLoaderFactory
+class _3D_EXPORT QgsTerrainGenerator : public QgsQuadtreeChunkLoaderFactory
 {
+    Q_OBJECT
   public:
 
     //! Enumeration of the available terrain generators
@@ -48,7 +56,8 @@ class _3D_EXPORT QgsTerrainGenerator : public QgsChunkLoaderFactory
     {
       Flat,           //!< The whole terrain is flat area
       Dem,            //!< Terrain is built from raster layer with digital elevation model
-      QuantizedMesh,  //!< Terrain is built from downloaded tiles in quantized mesh format
+      Online,         //!< Terrain is built from downloaded tiles with digital elevation model
+      Mesh            //!< Terrain is built from mesh layer with z value on vertices
     };
 
     //! Sets terrain entity for the generator (does not transfer ownership)
@@ -62,6 +71,9 @@ class _3D_EXPORT QgsTerrainGenerator : public QgsChunkLoaderFactory
 
     //! extent of the terrain in terrain's CRS
     virtual QgsRectangle extent() const = 0;
+
+    //! sets the extent of the terrain in terrain's CRS
+    virtual void setExtent( const QgsRectangle &extent ) { Q_UNUSED( extent ) }
 
     //! Returns bounding box of the root chunk
     virtual QgsAABB rootChunkBbox( const Qgs3DMapSettings &map ) const;
@@ -82,7 +94,7 @@ class _3D_EXPORT QgsTerrainGenerator : public QgsChunkLoaderFactory
     virtual void readXml( const QDomElement &elem ) = 0;
 
     //! After read of XML, resolve references to any layers that have been read as layer IDs
-    virtual void resolveReferences( const QgsProject &project ) { Q_UNUSED( project ); }
+    virtual void resolveReferences( const QgsProject &project ) { Q_UNUSED( project ) }
 
     //! Converts terrain generator type enumeration into a string
     static QString typeToString( Type type );
@@ -93,9 +105,21 @@ class _3D_EXPORT QgsTerrainGenerator : public QgsChunkLoaderFactory
     //! Returns CRS of the terrain
     QgsCoordinateReferenceSystem crs() const { return mTerrainTilingScheme.crs(); }
 
+    //! Returns whether the terrain generator is valid
+    bool isValid() const;
+
+  signals:
+
+    //! Emitted when the terrain extent has changed
+    void extentChanged();
+
   protected:
+
     QgsTilingScheme mTerrainTilingScheme;   //!< Tiling scheme of the terrain
     QgsTerrainEntity *mTerrain = nullptr;
+
+    bool mIsValid = true;
+
 };
 
 

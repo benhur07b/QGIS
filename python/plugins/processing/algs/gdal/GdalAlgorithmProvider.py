@@ -21,15 +21,14 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
+
+from osgeo import gdal
 
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.core import (QgsApplication,
-                       QgsProcessingProvider)
+                       QgsProcessingProvider,
+                       QgsRuntimeProfiler)
 from processing.core.ProcessingConfig import ProcessingConfig, Setting
 from .GdalUtils import GdalUtils
 
@@ -39,12 +38,14 @@ from .buildvrt import buildvrt
 from .ClipRasterByExtent import ClipRasterByExtent
 from .ClipRasterByMask import ClipRasterByMask
 from .ColorRelief import ColorRelief
-from .contour import contour
+from .contour import contour, contour_polygon
+from .Datasources2Vrt import Datasources2Vrt
 from .fillnodata import fillnodata
 from .gdalinfo import gdalinfo
 from .gdal2tiles import gdal2tiles
 from .gdal2xyz import gdal2xyz
 from .gdaladdo import gdaladdo
+from .gdalcalc import gdalcalc
 from .gdaltindex import gdaltindex
 from .GridAverage import GridAverage
 from .GridDataMetrics import GridDataMetrics
@@ -58,6 +59,8 @@ from .nearblack import nearblack
 from .pct2rgb import pct2rgb
 from .polygonize import polygonize
 from .proximity import proximity
+from .rasterize import rasterize
+from .rearrange_bands import rearrange_bands
 from .retile import retile
 from .rgb2pct import rgb2pct
 from .roughness import roughness
@@ -67,11 +70,12 @@ from .translate import translate
 from .tpi import tpi
 from .tri import tri
 from .warp import warp
+from .pansharp import pansharp
+from .rasterize_over_fixed_value import rasterize_over_fixed_value
+from .viewshed import viewshed
 
-# from .rasterize import rasterize
-# from .extractprojection import ExtractProjection
-# from .gdalcalc import gdalcalc
-# from .rasterize_over import rasterize_over
+from .extractprojection import ExtractProjection
+from .rasterize_over import rasterize_over
 
 from .Buffer import Buffer
 from .ClipVectorByExtent import ClipVectorByExtent
@@ -82,10 +86,10 @@ from .OffsetCurve import OffsetCurve
 from .ogr2ogr import ogr2ogr
 from .ogrinfo import ogrinfo
 from .OgrToPostGis import OgrToPostGis
+from .ogr2ogrtopostgislist import Ogr2OgrToPostGisList
 from .OneSideBuffer import OneSideBuffer
 from .PointsAlongLines import PointsAlongLines
 
-# from .ogr2ogrtopostgislist import Ogr2OgrToPostGisList
 # from .ogr2ogrtabletopostgislist import Ogr2OgrTableToPostGisList
 
 pluginPath = os.path.normpath(os.path.join(
@@ -97,23 +101,19 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
     def __init__(self):
         super().__init__()
         self.algs = []
+        QgsApplication.processingRegistry().addAlgorithmAlias('qgis:buildvirtualvector', 'gdal:buildvirtualvector')
 
     def load(self):
-        ProcessingConfig.settingIcons[self.name()] = self.icon()
-        ProcessingConfig.addSetting(Setting(self.name(), 'ACTIVATE_GDAL',
-                                            self.tr('Activate'), True))
-        ProcessingConfig.addSetting(Setting(
-            self.name(),
-            GdalUtils.GDAL_HELP_PATH,
-            self.tr('Location of GDAL docs'),
-            GdalUtils.gdalHelpPath()))
-        ProcessingConfig.readSettings()
-        self.refreshAlgorithms()
+        with QgsRuntimeProfiler.profile('GDAL Provider'):
+            ProcessingConfig.settingIcons[self.name()] = self.icon()
+            ProcessingConfig.addSetting(Setting(self.name(), 'ACTIVATE_GDAL',
+                                                self.tr('Activate'), True))
+            ProcessingConfig.readSettings()
+            self.refreshAlgorithms()
         return True
 
     def unload(self):
         ProcessingConfig.removeSetting('ACTIVATE_GDAL')
-        ProcessingConfig.removeSetting(GdalUtils.GDAL_HELP_PATH)
 
     def isActive(self):
         return ProcessingConfig.getSetting('ACTIVATE_GDAL')
@@ -131,6 +131,9 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
     def id(self):
         return 'gdal'
 
+    def helpId(self):
+        return 'gdal'
+
     def icon(self):
         return QgsApplication.getThemeIcon("/providerGdal.svg")
 
@@ -146,11 +149,14 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
             ClipRasterByMask(),
             ColorRelief(),
             contour(),
+            contour_polygon(),
+            Datasources2Vrt(),
             fillnodata(),
             gdalinfo(),
             gdal2tiles(),
             gdal2xyz(),
             gdaladdo(),
+            gdalcalc(),
             gdaltindex(),
             GridAverage(),
             GridDataMetrics(),
@@ -164,6 +170,8 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
             pct2rgb(),
             polygonize(),
             proximity(),
+            rasterize(),
+            rearrange_bands(),
             retile(),
             rgb2pct(),
             roughness(),
@@ -173,10 +181,11 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
             tpi(),
             tri(),
             warp(),
+            pansharp(),
             # rasterize(),
-            # ExtractProjection(),
-            # gdalcalc(),
-            # rasterize_over(),
+            ExtractProjection(),
+            rasterize_over(),
+            rasterize_over_fixed_value(),
             # ----- OGR tools -----
             Buffer(),
             ClipVectorByExtent(),
@@ -187,16 +196,26 @@ class GdalAlgorithmProvider(QgsProcessingProvider):
             ogr2ogr(),
             ogrinfo(),
             OgrToPostGis(),
+            Ogr2OgrToPostGisList(),
             OneSideBuffer(),
             PointsAlongLines(),
-            # Ogr2OgrToPostGisList(),
             # Ogr2OgrTableToPostGisList(),
         ]
+
+        if int(gdal.VersionInfo()) > 3010000:
+            self.algs.append(viewshed())
+
         for a in self.algs:
             self.addAlgorithm(a)
 
     def supportedOutputRasterLayerExtensions(self):
-        return GdalUtils.getSupportedRasterExtensions()
+        return GdalUtils.getSupportedOutputRasterExtensions()
+
+    def supportsNonFileBasedOutput(self):
+        """
+        GDAL Provider doesn't support non file based outputs
+        """
+        return False
 
     def tr(self, string, context=''):
         if context == '':

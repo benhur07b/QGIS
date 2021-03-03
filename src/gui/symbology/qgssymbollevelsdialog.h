@@ -30,7 +30,7 @@
 /**
  * \class QgsSymbolLevelsWidget
  * \ingroup gui
- * A widget which allows the user to modify the rendering order of symbol layers.
+ * \brief A widget which allows the user to modify the rendering order of symbol layers.
  * \see QgsSymbolLevelsDialog
  * \since QGIS 3.0
  */
@@ -39,7 +39,7 @@ class GUI_EXPORT QgsSymbolLevelsWidget : public QgsPanelWidget, private Ui::QgsS
     Q_OBJECT
   public:
     //! Constructor for QgsSymbolLevelsWidget
-    QgsSymbolLevelsWidget( QgsFeatureRenderer *renderer, bool usingSymbolLevels, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsSymbolLevelsWidget( QgsFeatureRenderer *renderer, bool usingSymbolLevels, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     //! Returns whether the level ordering is enabled
     bool usingLevels() const;
@@ -69,9 +69,9 @@ class GUI_EXPORT QgsSymbolLevelsWidget : public QgsPanelWidget, private Ui::QgsS
     int mMaxLayers;
 
     QgsFeatureRenderer *mRenderer = nullptr;
-    QgsLegendSymbolList mList;
+    QgsLegendSymbolList mLegendSymbols;
 
-    //! whether symbol layers always should be used (default false)
+    //! whether symbol layers always should be used (default FALSE)
     bool mForceOrderingEnabled;
 
   private:
@@ -84,7 +84,7 @@ class GUI_EXPORT QgsSymbolLevelsWidget : public QgsPanelWidget, private Ui::QgsS
 /**
  * \class QgsSymbolLevelsDialog
  * \ingroup gui
- * A dialog which allows the user to modify the rendering order of symbol layers.
+ * \brief A dialog which allows the user to modify the rendering order of symbol layers.
  * \see QgsSymbolLevelsWidget
 */
 class GUI_EXPORT QgsSymbolLevelsDialog : public QDialog
@@ -93,7 +93,7 @@ class GUI_EXPORT QgsSymbolLevelsDialog : public QDialog
   public:
 
     //! Constructor for QgsSymbolLevelsDialog.
-    QgsSymbolLevelsDialog( QgsFeatureRenderer *renderer, bool usingSymbolLevels, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsSymbolLevelsDialog( QgsFeatureRenderer *renderer, bool usingSymbolLevels, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     // used by rule-based renderer (to hide checkbox to enable/disable ordering)
     void setForceOrderingEnabled( bool enabled );
@@ -102,6 +102,9 @@ class GUI_EXPORT QgsSymbolLevelsDialog : public QDialog
 
     QgsSymbolLevelsWidget *mWidget = nullptr;
 
+  private slots:
+
+    void showHelp();
 };
 
 #ifndef SIP_RUN

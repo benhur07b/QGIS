@@ -19,19 +19,38 @@
 #include "qgsattributeeditorcontext.h"
 #include "qgsproject.h"
 #include "qgsrelationmanager.h"
-
+#include "qgsabstractrelationeditorwidget.h"
+#include "qgsrelationwidgetregistry.h"
+#include "qgsgui.h"
 #include <QWidget>
 
 QgsRelationWidgetWrapper::QgsRelationWidgetWrapper( QgsVectorLayer *vl, const QgsRelation &relation, QWidget *editor, QWidget *parent )
+  : QgsRelationWidgetWrapper( QStringLiteral( "relation_editor" ), vl, relation, editor, parent )
+{
+}
+
+QgsRelationWidgetWrapper::QgsRelationWidgetWrapper( const QString &relationEditorName, QgsVectorLayer *vl, const QgsRelation &relation, QWidget *editor, QWidget *parent )
   : QgsWidgetWrapper( vl, editor, parent )
   , mRelation( relation )
-
+  , mRelationEditorId( relationEditorName )
 {
 }
 
 QWidget *QgsRelationWidgetWrapper::createWidget( QWidget *parent )
 {
-  return new QgsRelationEditorWidget( parent );
+  QgsAttributeForm *form = qobject_cast<QgsAttributeForm *>( parent );
+  if ( form )
+    connect( form, &QgsAttributeForm::widgetValueChanged, this, &QgsRelationWidgetWrapper::widgetValueChanged );
+
+  QWidget *widget = QgsGui::instance()->relationWidgetRegistry()->create( mRelationEditorId, widgetConfig(), parent );
+
+  if ( !widget )
+  {
+    QgsLogger::warning( QStringLiteral( "Failed to create relation widget \"%1\", fallback to \"basic\" relation widget" ).arg( mRelationEditorId ) );
+    widget = QgsGui::instance()->relationWidgetRegistry()->create( QStringLiteral( "relation_editor" ), widgetConfig(), parent );
+  }
+
+  return widget;
 }
 
 void QgsRelationWidgetWrapper::setFeature( const QgsFeature &feature )
@@ -46,23 +65,84 @@ void QgsRelationWidgetWrapper::setVisible( bool visible )
     mWidget->setVisible( visible );
 }
 
+void QgsRelationWidgetWrapper::aboutToSave()
+{
+  if ( !mRelation.isValid() || !widget() || !widget()->isVisible() || mRelation.referencingLayer() ==  mRelation.referencedLayer() )
+    return;
+
+  // If the layer is already saved before, return
+  const QgsAttributeEditorContext *ctx = &context();
+  do
+  {
+    if ( ctx->relation().isValid() && ( ctx->relation().referencedLayer() == mRelation.referencingLayer()
+                                        || ( mNmRelation.isValid() && ctx->relation().referencedLayer() == mNmRelation.referencedLayer() ) )
+       )
+    {
+      return;
+    }
+    ctx = ctx->parentContext();
+  }
+  while ( ctx );
+
+  // Calling isModified() will emit a beforeModifiedCheck()
+  // signal that will make the embedded form to send any
+  // outstanding widget changes to the edit buffer
+  mRelation.referencingLayer()->isModified();
+
+  if ( mNmRelation.isValid() )
+    mNmRelation.referencedLayer()->isModified();
+}
+
+QgsRelation QgsRelationWidgetWrapper::relation() const
+{
+  return mRelation;
+}
+
+void QgsRelationWidgetWrapper::widgetValueChanged( const QString &attribute, const QVariant &newValue, bool attributeChanged )
+{
+  if ( mWidget && attributeChanged )
+  {
+    QgsFeature feature { mWidget->feature() };
+    if ( feature.attribute( attribute ) != newValue )
+    {
+      feature.setAttribute( attribute, newValue );
+      QgsAttributeEditorContext newContext { mWidget->editorContext() };
+      newContext.setParentFormFeature( feature );
+      mWidget->setEditorContext( newContext );
+      mWidget->setFeature( feature, false );
+      mWidget->parentFormValueChanged( attribute, newValue );
+    }
+  }
+}
+
 bool QgsRelationWidgetWrapper::showUnlinkButton() const
 {
-  return mWidget->showUnlinkButton();
+  Q_NOWARN_DEPRECATED_PUSH
+  return visibleButtons().testFlag( QgsAttributeEditorRelation::Button::Unlink );
+  Q_NOWARN_DEPRECATED_POP
 }
 
 void QgsRelationWidgetWrapper::setShowUnlinkButton( bool showUnlinkButton )
 {
-  if ( mWidget )
-    mWidget->setShowUnlinkButton( showUnlinkButton );
+  Q_NOWARN_DEPRECATED_PUSH
+  setVisibleButtons( visibleButtons().setFlag( QgsAttributeEditorRelation::Unlink, showUnlinkButton ) );
+  Q_NOWARN_DEPRECATED_POP
+}
+
+void QgsRelationWidgetWrapper::setShowSaveChildEditsButton( bool showSaveChildEditsButton )
+{
+  Q_NOWARN_DEPRECATED_PUSH
+  setVisibleButtons( visibleButtons().setFlag( QgsAttributeEditorRelation::SaveChildEdits, showSaveChildEditsButton ) );
+  Q_NOWARN_DEPRECATED_POP
 }
 
 bool QgsRelationWidgetWrapper::showLabel() const
 {
   if ( mWidget )
+  {
     return mWidget->showLabel();
-  else
-    return false;
+  }
+  return false;
 }
 
 void QgsRelationWidgetWrapper::setShowLabel( bool showLabel )
@@ -73,32 +153,41 @@ void QgsRelationWidgetWrapper::setShowLabel( bool showLabel )
 
 void QgsRelationWidgetWrapper::initWidget( QWidget *editor )
 {
-  QgsRelationEditorWidget *w = dynamic_cast<QgsRelationEditorWidget *>( editor );
+  QgsAbstractRelationEditorWidget *w = qobject_cast<QgsAbstractRelationEditorWidget *>( editor );
 
   // if the editor cannot be cast to relation editor, insert a new one
   if ( !w )
   {
-    w = new QgsRelationEditorWidget( editor );
-    w->setSizePolicy( QSizePolicy::Expanding, QSizePolicy::Expanding );
-    if ( ! editor->layout() )
-    {
-      editor->setLayout( new QGridLayout() );
-    }
+    w = QgsGui::instance()->relationWidgetRegistry()->create( mRelationEditorId, widgetConfig(), editor );
     editor->layout()->addWidget( w );
   }
 
   QgsAttributeEditorContext myContext( QgsAttributeEditorContext( context(), mRelation, QgsAttributeEditorContext::Multiple, QgsAttributeEditorContext::Embed ) );
 
-  w->setEditorContext( myContext );
+  // read the legacy config of force-suppress-popup to support settings made on autoconfigurated forms
+  // it will be overwritten on specific widget configuration
+  if ( config( QStringLiteral( "force-suppress-popup" ), false ).toBool() )
+  {
+    const_cast<QgsVectorLayerTools *>( myContext.vectorLayerTools() )->setForceSuppressFormPopup( true );
+  }
 
-  QgsRelation nmrel = QgsProject::instance()->relationManager()->relation( config( QStringLiteral( "nm-rel" ) ).toString() );
+  /* TODO: this seems to have no effect
+  if ( config( QStringLiteral( "hide-save-child-edits" ), false ).toBool() )
+  {
+    w->setShowSaveChildEditsButton( false );
+  }
+  */
+
+  // read the legacy config of nm-rel to support settings made on autoconfigurated forms
+  // it will be overwritten on specific widget configuration
+  mNmRelation = QgsProject::instance()->relationManager()->relation( config( QStringLiteral( "nm-rel" ) ).toString() );
 
   // If this widget is already embedded by the same relation, reduce functionality
   const QgsAttributeEditorContext *ctx = &context();
   do
   {
     if ( ( ctx->relation().name() == mRelation.name() && ctx->formMode() == QgsAttributeEditorContext::Embed )
-         || ( nmrel.isValid() && ctx->relation().name() == nmrel.name() ) )
+         || ( mNmRelation.isValid() && ctx->relation().name() == mNmRelation.name() ) )
     {
       w->setVisible( false );
       break;
@@ -107,8 +196,8 @@ void QgsRelationWidgetWrapper::initWidget( QWidget *editor )
   }
   while ( ctx );
 
-
-  w->setRelations( mRelation, nmrel );
+  w->setEditorContext( myContext );
+  w->setRelations( mRelation, mNmRelation );
 
   mWidget = w;
 }
@@ -120,11 +209,115 @@ bool QgsRelationWidgetWrapper::valid() const
 
 bool QgsRelationWidgetWrapper::showLinkButton() const
 {
-  return mWidget->showLinkButton();
+  Q_NOWARN_DEPRECATED_PUSH
+  return visibleButtons().testFlag( QgsAttributeEditorRelation::Button::Link );
+  Q_NOWARN_DEPRECATED_POP
 }
 
 void QgsRelationWidgetWrapper::setShowLinkButton( bool showLinkButton )
 {
+  Q_NOWARN_DEPRECATED_PUSH
+  setVisibleButtons( visibleButtons().setFlag( QgsAttributeEditorRelation::Link, showLinkButton ) );
+  Q_NOWARN_DEPRECATED_POP
+}
+
+bool QgsRelationWidgetWrapper::showSaveChildEditsButton() const
+{
+  Q_NOWARN_DEPRECATED_PUSH
+  return visibleButtons().testFlag( QgsAttributeEditorRelation::Button::SaveChildEdits );
+  Q_NOWARN_DEPRECATED_POP
+}
+
+void QgsRelationWidgetWrapper::setVisibleButtons( const QgsAttributeEditorRelation::Buttons &buttons )
+{
+  if ( ! mWidget )
+    return;
+  QVariantMap config = mWidget->config();
+  config.insert( "buttons", qgsFlagValueToKeys( buttons ) );
+
+  mWidget->setConfig( config );
+}
+
+QgsAttributeEditorRelation::Buttons QgsRelationWidgetWrapper::visibleButtons() const
+{
+  return qgsFlagKeysToValue( mWidget->config().value( QStringLiteral( "buttons" ) ).toString(), QgsAttributeEditorRelation::AllButtons );
+}
+
+void QgsRelationWidgetWrapper::setForceSuppressFormPopup( bool forceSuppressFormPopup )
+{
   if ( mWidget )
-    mWidget->setShowLinkButton( showLinkButton );
+  {
+    mWidget->setForceSuppressFormPopup( forceSuppressFormPopup );
+    //it's set to true if one widget is configured like this but the setting is done generally (influencing all widgets).
+    if ( forceSuppressFormPopup )
+    {
+      const_cast<QgsVectorLayerTools *>( mWidget->editorContext().vectorLayerTools() )->setForceSuppressFormPopup( true );
+    }
+  }
+}
+
+bool QgsRelationWidgetWrapper::forceSuppressFormPopup() const
+{
+  if ( mWidget )
+    return mWidget->forceSuppressFormPopup();
+
+  return false;
+}
+
+void QgsRelationWidgetWrapper::setNmRelationId( const QVariant &nmRelationId )
+{
+  if ( mWidget )
+  {
+    mWidget->setNmRelationId( nmRelationId );
+
+    mNmRelation = QgsProject::instance()->relationManager()->relation( nmRelationId.toString() );
+
+    // If this widget is already embedded by the same relation, reduce functionality
+    const QgsAttributeEditorContext *ctx = &context();
+    do
+    {
+      if ( ( ctx->relation().name() == mRelation.name() && ctx->formMode() == QgsAttributeEditorContext::Embed )
+           || ( mNmRelation.isValid() && ctx->relation().name() == mNmRelation.name() ) )
+      {
+        mWidget->setVisible( false );
+        break;
+      }
+      ctx = ctx->parentContext();
+    }
+    while ( ctx );
+
+    mWidget->setRelations( mRelation, mNmRelation );
+  }
+}
+
+QVariant QgsRelationWidgetWrapper::nmRelationId() const
+{
+  if ( mWidget )
+    return mWidget->nmRelationId();
+  return QVariant();
+}
+
+
+void QgsRelationWidgetWrapper::setLabel( const QString &label )
+{
+  if ( mWidget )
+    mWidget->setLabel( label );
+}
+
+QString QgsRelationWidgetWrapper::label() const
+{
+  if ( mWidget )
+    return mWidget->label();
+  return QString();
+}
+
+void QgsRelationWidgetWrapper::setWidgetConfig( const QVariantMap &config )
+{
+  if ( mWidget )
+    mWidget->setConfig( config );
+}
+
+QVariantMap QgsRelationWidgetWrapper::widgetConfig() const
+{
+  return mWidget ? mWidget->config() : QVariantMap();
 }

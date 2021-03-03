@@ -20,7 +20,7 @@
 
 #include <QToolButton>
 #include "qgis_gui.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include <QPointer>
 class QDoubleSpinBox;
@@ -28,7 +28,7 @@ class QDoubleSpinBox;
 /**
  * \ingroup gui
  * \class QgsRatioLockButton
- * A cross platform button subclass used to represent a locked / unlocked ratio state.
+ * \brief A cross platform button subclass used to represent a locked / unlocked ratio state.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsRatioLockButton : public QToolButton
@@ -49,11 +49,11 @@ class GUI_EXPORT QgsRatioLockButton : public QToolButton
      * \param locked locked state
      * \see locked
      */
-    void setLocked( const bool locked );
+    void setLocked( bool locked );
 
     /**
      * Returns whether the button state is locked.
-     * \returns true if the button state is locked.
+     * \returns TRUE if the button state is locked.
      * \see setLocked
      */
     bool locked() const { return mLocked; }
@@ -82,12 +82,18 @@ class GUI_EXPORT QgsRatioLockButton : public QToolButton
      */
     void setHeightSpinBox( QDoubleSpinBox *widget );
 
+    /**
+     * Resets the current width/height ratio, taking the width and height
+     * from the current values of the width and height spin boxes.
+     */
+    void resetRatio();
+
   signals:
 
     /**
      * Emitted whenever the lock state changes.
      */
-    void lockChanged( const bool locked );
+    void lockChanged( bool locked );
 
   protected:
 

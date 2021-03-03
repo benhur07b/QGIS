@@ -25,6 +25,7 @@
 #include "qgspointdisplacementrendererwidget.h"
 #include "qgspointclusterrendererwidget.h"
 #include "qgsinvertedpolygonrendererwidget.h"
+#include "qgsmergedfeaturerendererwidget.h"
 #include "qgsheatmaprendererwidget.h"
 #include "qgs25drendererwidget.h"
 #include "qgsnullsymbolrendererwidget.h"
@@ -53,13 +54,10 @@ static bool _initRenderer( const QString &name, QgsRendererWidgetFunc f, const Q
 
   if ( !iconName.isEmpty() )
   {
-    QString iconPath = QgsApplication::defaultThemePath() + iconName;
-    QPixmap pix;
-    if ( pix.load( iconPath ) )
-      m->setIcon( pix );
+    m->setIcon( QgsApplication::getThemeIcon( iconName ) );
   }
 
-  QgsDebugMsg( "Set for " + name );
+  QgsDebugMsgLevel( "Set for " + name, 2 );
   return true;
 }
 
@@ -76,6 +74,7 @@ static void _initRendererWidgetFunctions()
   _initRenderer( QStringLiteral( "pointDisplacement" ), QgsPointDisplacementRendererWidget::create, QStringLiteral( "rendererPointDisplacementSymbol.svg" ) );
   _initRenderer( QStringLiteral( "pointCluster" ), QgsPointClusterRendererWidget::create, QStringLiteral( "rendererPointClusterSymbol.svg" ) );
   _initRenderer( QStringLiteral( "invertedPolygonRenderer" ), QgsInvertedPolygonRendererWidget::create, QStringLiteral( "rendererInvertedSymbol.svg" ) );
+  _initRenderer( QStringLiteral( "mergedFeatureRenderer" ), QgsMergedFeatureRendererWidget::create, QStringLiteral( "rendererMergedFeatures.svg" ) );
   _initRenderer( QStringLiteral( "heatmapRenderer" ), QgsHeatmapRendererWidget::create, QStringLiteral( "rendererHeatmapSymbol.svg" ) );
   _initRenderer( QStringLiteral( "25dRenderer" ), Qgs25DRendererWidget::create, QStringLiteral( "renderer25dSymbol.svg" ) );
   _initRenderer( QStringLiteral( "nullSymbol" ), QgsNullSymbolRendererWidget::create, QStringLiteral( "rendererNullSymbol.svg" ) );
@@ -89,6 +88,7 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
   mLayerRenderingGroupBox->setSettingGroup( QStringLiteral( "layerRenderingGroupBox" ) );
 
   // can be embedded in vector layer properties
@@ -103,7 +103,8 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
   QgsRendererRegistry *reg = QgsApplication::rendererRegistry();
   QStringList renderers = reg->renderersList( mLayer );
-  Q_FOREACH ( const QString &name, renderers )
+  const auto constRenderers = renderers;
+  for ( const QString &name : constRenderers )
   {
     QgsRendererAbstractMetadata *m = reg->rendererMetadata( name );
     cboRenderers->addItem( m->icon(), m->visibleName(), name );
@@ -134,7 +135,7 @@ QgsRendererPropertiesDialog::QgsRendererPropertiesDialog( QgsVectorLayer *layer,
 
 void QgsRendererPropertiesDialog::connectValueChanged( const QList<QWidget *> &widgets, const char *slot )
 {
-  Q_FOREACH ( QWidget *widget, widgets )
+  for ( QWidget *widget : widgets )
   {
     if ( QgsPropertyOverrideButton *w = qobject_cast<QgsPropertyOverrideButton *>( widget ) )
     {
@@ -196,6 +197,16 @@ void QgsRendererPropertiesDialog::setMapCanvas( QgsMapCanvas *canvas )
   }
 }
 
+void QgsRendererPropertiesDialog::setContext( const QgsSymbolWidgetContext &context )
+{
+  mMapCanvas = context.mapCanvas();
+  mMessageBar = context.messageBar();
+  if ( mActiveWidget )
+  {
+    mActiveWidget->setContext( context );
+  }
+}
+
 void QgsRendererPropertiesDialog::setDockMode( bool dockMode )
 {
   mDockMode = dockMode;
@@ -209,7 +220,7 @@ void QgsRendererPropertiesDialog::rendererChanged()
 {
   if ( cboRenderers->currentIndex() == -1 )
   {
-    QgsDebugMsg( "No current item -- this should never happen!" );
+    QgsDebugMsg( QStringLiteral( "No current item -- this should never happen!" ) );
     return;
   }
 
@@ -249,10 +260,11 @@ void QgsRendererPropertiesDialog::rendererChanged()
     stackedWidget->setCurrentWidget( mActiveWidget );
     if ( mActiveWidget->renderer() )
     {
-      if ( mMapCanvas )
+      if ( mMapCanvas || mMessageBar )
       {
         QgsSymbolWidgetContext context;
         context.setMapCanvas( mMapCanvas );
+        context.setMessageBar( mMessageBar );
         mActiveWidget->setContext( context );
       }
       changeOrderBy( mActiveWidget->renderer()->orderBy(), mActiveWidget->renderer()->orderByEnabled() );
@@ -305,15 +317,12 @@ void QgsRendererPropertiesDialog::onOK()
 
 void QgsRendererPropertiesDialog::openPanel( QgsPanelWidget *panel )
 {
-  QgsDebugMsg( "Open panel!!!" );
   if ( mDockMode )
   {
-    QgsDebugMsg( "DOCK MODE" );
     emit showPanel( panel );
   }
   else
   {
-    QgsDebugMsg( "DIALOG MODE" );
     // Show the dialog version if no one is connected
     QDialog *dlg = new QDialog();
     QString key = QStringLiteral( "/UI/paneldialog/%1" ).arg( panel->panelTitle() );

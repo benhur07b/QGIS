@@ -25,8 +25,8 @@
 #include <QTextStream>
 #include <QStack>
 
-#include "qgsfeature.h"
 #include "qgsrectangle.h"
+#include "qgsfeatureid.h"
 
 // workaround for MSVC compiler which already has defined macro max
 // that interferes with calling std::numeric_limits<int>::max
@@ -40,10 +40,10 @@
  * This is the parent class for all GPS data classes (except tracksegment).
     It contains the variables that all GPS objects can have.
 */
-class QgsGPSObject
+class QgsGpsObject
 {
   public:
-    virtual ~QgsGPSObject() = default;
+    virtual ~QgsGpsObject() = default;
     QString xmlify( const QString &str );
     virtual void writeXml( QTextStream &stream );
     QString name, cmt, desc, src, url, urlname;
@@ -54,11 +54,11 @@ class QgsGPSObject
  * This is the parent class for all GPS point classes. It contains common data
     members and common initialization code for all point classes.
 */
-class QgsGPSPoint : public QgsGPSObject
+class QgsGpsPoint : public QgsGpsObject
 {
   public:
-    QgsGPSPoint();
-    virtual void writeXml( QTextStream &stream ) override;
+    QgsGpsPoint();
+    void writeXml( QTextStream &stream ) override;
     double lat = 0., lon = 0., ele;
     QString sym;
 };
@@ -68,26 +68,26 @@ class QgsGPSPoint : public QgsGPSObject
  * This is the parent class for all GPS object types that can have a nonempty
     bounding box (Route, Track). It contains common data members for all
     those classes. */
-class QgsGPSExtended : public QgsGPSObject
+class QgsGpsExtended : public QgsGpsObject
 {
   public:
-    QgsGPSExtended();
-    virtual void writeXml( QTextStream &stream ) override;
+    QgsGpsExtended();
+    void writeXml( QTextStream &stream ) override;
     double xMin, xMax, yMin, yMax;
     int number;
 };
 
 
 // they both have the same data members in GPX, so...
-typedef QgsGPSPoint QgsRoutepoint;
-typedef QgsGPSPoint QgsTrackpoint;
+typedef QgsGpsPoint QgsRoutepoint;
+typedef QgsGpsPoint QgsTrackpoint;
 
 
 //! This is the waypoint class. It is a GPSPoint with an ID.
-class QgsWaypoint : public QgsGPSPoint
+class QgsWaypoint : public QgsGpsPoint
 {
   public:
-    virtual void writeXml( QTextStream &stream ) override;
+    void writeXml( QTextStream &stream ) override;
     QgsFeatureId id;
 };
 
@@ -95,10 +95,10 @@ class QgsWaypoint : public QgsGPSPoint
 /**
  * This class represents a GPS route.
  */
-class QgsRoute : public QgsGPSExtended
+class QgsRoute : public QgsGpsExtended
 {
   public:
-    virtual void writeXml( QTextStream &stream ) override;
+    void writeXml( QTextStream &stream ) override;
     QVector<QgsRoutepoint> points;
     QgsFeatureId id;
 };
@@ -119,10 +119,10 @@ class QgsTrackSegment
  * This class represents a GPS tracklog. It consists of 0 or more track
     segments.
 */
-class QgsTrack : public QgsGPSExtended
+class QgsTrack : public QgsGpsExtended
 {
   public:
-    virtual void writeXml( QTextStream &stream ) override;
+    void writeXml( QTextStream &stream ) override;
     QVector<QgsTrackSegment> segments;
     QgsFeatureId id;
 };
@@ -131,7 +131,7 @@ class QgsTrack : public QgsGPSExtended
 /**
  * This class represents a set of GPS data, for example a GPS layer in QGIS.
  */
-class QgsGPSData
+class QgsGpsData
 {
   public:
 
@@ -146,7 +146,7 @@ class QgsGPSData
     /**
      * This constructor initializes the extent to a nonsense value. Don't try
         to use a GPSData object in QGIS without parsing a datafile into it. */
-    QgsGPSData();
+    QgsGpsData();
 
     /**
      * This function returns a pointer to a dynamically allocated QgsRectangle
@@ -229,20 +229,20 @@ class QgsGPSData
 
     /**
      * This function returns a pointer to the GPSData object associated with
-        the file @c file name. If the file does not exist or can't be parsed,
+        the file \c file name. If the file does not exist or can't be parsed,
         NULL will be returned. If the file is already used by another layer,
         a pointer to the same GPSData object will be returned. And if the file
         is not used by any other layer, and can be parsed, a new GPSData object
         will be created and a pointer to it will be returned. If you use this
-        function you should also call releaseData() with the same @c file name
+        function you should also call releaseData() with the same \c file name
         when you're done with the GPSData pointer, otherwise the data will stay
         in memory forever and you will get an ugly memory leak. */
-    static QgsGPSData *getData( const QString &fileName );
+    static QgsGpsData *getData( const QString &fileName );
 
     /**
      * Call this function when you're done with a GPSData pointer that you
         got earlier using getData(). Do NOT call this function if you haven't
-        called getData() earlier with the same @c file name, that can cause data
+        called getData() earlier with the same \c file name, that can cause data
         that is still in use to be deleted. */
     static void releaseData( const QString &fileName );
 
@@ -260,7 +260,7 @@ class QgsGPSData
     double xMin, xMax, yMin, yMax;
 
     //! This is used internally to store GPS data objects (one per file).
-    typedef QMap<QString, QPair<QgsGPSData *, unsigned> > DataMap;
+    typedef QMap<QString, QPair<QgsGpsData *, unsigned> > DataMap;
 
     /**
      * This is the static container that maps file names to GPSData objects and
@@ -275,7 +275,7 @@ class QgsGPSData
 class QgsGPXHandler
 {
   public:
-    explicit QgsGPXHandler( QgsGPSData &data )
+    explicit QgsGPXHandler( QgsGpsData &data )
       : mData( data )
     { }
 
@@ -329,14 +329,14 @@ class QgsGPXHandler
     //! This is used to keep track of what kind of data we are parsing.
     QStack<ParseMode> parseModes;
 
-    QgsGPSData &mData;
+    QgsGpsData &mData;
     QgsWaypoint mWpt;
     QgsRoute mRte;
     QgsTrack mTrk;
     QgsRoutepoint mRtept;
     QgsTrackSegment mTrkseg;
     QgsTrackpoint mTrkpt;
-    QgsGPSObject *mObj = nullptr;
+    QgsGpsObject *mObj = nullptr;
     QString *mString = nullptr;
     double *mDouble = nullptr;
     int *mInt = nullptr;

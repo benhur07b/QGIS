@@ -134,6 +134,9 @@
            </item>
            <item>
             <widget class="QPushButton" name="mAddColorToSchemeButton">
+             <property name="toolTip">
+              <string>Add current color</string>
+             </property>
              <property name="text">
               <string/>
              </property>
@@ -145,6 +148,9 @@
            </item>
            <item>
             <widget class="QPushButton" name="mRemoveColorsFromSchemeButton">
+             <property name="toolTip">
+              <string>Remove selected color</string>
+             </property>
              <property name="text">
               <string/>
              </property>
@@ -180,7 +186,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QSpinBox" name="mSpinBoxRadius">
+            <widget class="QgsSpinBox" name="mSpinBoxRadius">
              <property name="suffix">
               <string> px</string>
              </property>
@@ -492,6 +498,9 @@
             <width>28</width>
             <height>16777215</height>
            </size>
+          </property>
+          <property name="toolTip">
+           <string>Add color to swatch</string>
           </property>
           <property name="text">
            <string/>
@@ -869,7 +878,7 @@
   </layout>
   <action name="mActionImportColors">
    <property name="text">
-    <string>Import Colors...</string>
+    <string>Import Colors…</string>
    </property>
    <property name="toolTip">
     <string>Import colors from file</string>
@@ -877,7 +886,7 @@
   </action>
   <action name="mActionExportColors">
    <property name="text">
-    <string>Export Colors...</string>
+    <string>Export Colors…</string>
    </property>
    <property name="toolTip">
     <string>Export colors to file</string>
@@ -893,7 +902,7 @@
   </action>
   <action name="mActionImportPalette">
    <property name="text">
-    <string>Import Palette...</string>
+    <string>Import Palette…</string>
    </property>
    <property name="toolTip">
     <string>Import palette from file</string>
@@ -909,7 +918,7 @@
   </action>
   <action name="mActionNewPalette">
    <property name="text">
-    <string>New Palette...</string>
+    <string>New Palette…</string>
    </property>
    <property name="toolTip">
     <string>Create a new palette</string>
@@ -933,6 +942,11 @@
   </action>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>QgsSpinBox</class>
+   <extends>QSpinBox</extends>
+   <header>qgsspinbox.h</header>
+  </customwidget>
   <customwidget>
    <class>QgsColorButton</class>
    <extends>QToolButton</extends>

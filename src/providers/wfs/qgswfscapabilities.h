@@ -20,13 +20,14 @@
 
 #include "qgsrectangle.h"
 #include "qgswfsrequest.h"
+#include "qgsdataprovider.h"
 
 //! Manages the GetCapabilities request
 class QgsWfsCapabilities : public QgsWfsRequest
 {
     Q_OBJECT
   public:
-    explicit QgsWfsCapabilities( const QString &uri );
+    explicit QgsWfsCapabilities( const QString &uri, const QgsDataProvider::ProviderOptions &options = QgsDataProvider::ProviderOptions() );
 
     //! start network connection to get capabilities
     bool requestCapabilities( bool synchronous, bool forceRefresh );
@@ -38,6 +39,7 @@ class QgsWfsCapabilities : public QgsWfsRequest
       FeatureType() = default;
 
       QString name;
+      QString nameSpace; // for some Deegree servers that requires a NAMESPACES parameter for GetFeature
       QString title;
       QString abstract;
       QList<QString> crslist; // first is default
@@ -65,7 +67,7 @@ class QgsWfsCapabilities : public QgsWfsRequest
     {
       //! name
       QString name;
-      //! return type, or empty if unknown
+      //! Returns type, or empty if unknown
       QString returnType;
       //! minimum number of argument (or -1 if unknown)
       int minArgs = -1;
@@ -97,6 +99,8 @@ class QgsWfsCapabilities : public QgsWfsRequest
       QList<Function> functionList;
       bool useEPSGColumnFormat; // whether to use EPSG:XXXX srsname
       QList< QString > outputFormats;
+      QgsStringMap operationGetEndpoints;
+      QgsStringMap operationPostEndpoints;
 
       QSet< QString > setAllTypenames;
       QMap< QString, QString> mapUnprefixedTypenameToPrefixedTypename;
@@ -104,10 +108,23 @@ class QgsWfsCapabilities : public QgsWfsRequest
 
       void clear();
       QString addPrefixIfNeeded( const QString &name ) const;
+      QString getNamespaceForTypename( const QString &name ) const;
+      QString getNamespaceParameterValue( const QString &WFSVersion, const QString &typeName ) const;
     };
 
-    //! return parsed capabilities - requestCapabilities() must be called before
+    //! Application level error
+    enum class ApplicationLevelError
+    {
+      NoError,
+      XmlError,
+      VersionNotSupported,
+    };
+
+    //! Returns parsed capabilities - requestCapabilities() must be called before
     const Capabilities &capabilities() const { return mCaps; }
+
+    //! Returns application level error
+    ApplicationLevelError applicationLevelError() const { return mAppLevelError; }
 
   signals:
     //! emitted when the capabilities have been fully parsed, or an error occurred */
@@ -117,11 +134,15 @@ class QgsWfsCapabilities : public QgsWfsRequest
     void capabilitiesReplyFinished();
 
   protected:
-    virtual QString errorMessageWithReason( const QString &reason ) override;
-    virtual int defaultExpirationInSec() override;
+    QString errorMessageWithReason( const QString &reason ) override;
+    int defaultExpirationInSec() override;
 
   private:
     Capabilities mCaps;
+
+    QgsDataProvider::ProviderOptions mOptions;
+
+    ApplicationLevelError mAppLevelError = ApplicationLevelError::NoError;
 
     //! Takes <Operations> element and updates the capabilities
     void parseSupportedOperations( const QDomElement &operationsElem,

@@ -31,9 +31,11 @@ class QgsTerrainTextureImage;
 
 #include <Qt3DCore/QEntity>
 
+#include "qgschunknode_p.h"
+
 /**
  * \ingroup 3d
- * Base class for 3D entities representing one tile of terrain.
+ * \brief Base class for 3D entities representing one tile of terrain.
  * It contains pointer to tile's texture image.
  *
  * \since QGIS 3.0
@@ -43,10 +45,14 @@ class QgsTerrainTileEntity : public Qt3DCore::QEntity
     Q_OBJECT
   public:
     //! Constructs the entity, optionally with a parent that will own it
-    QgsTerrainTileEntity( Qt3DCore::QNode *parent = nullptr )
+    QgsTerrainTileEntity( QgsChunkNodeId tileId, Qt3DCore::QNode *parent = nullptr )
       : Qt3DCore::QEntity( parent )
+      , mTileId( tileId )
     {
     }
+
+    //! Returns coordinates of the tile
+    QgsChunkNodeId tileId() const { return mTileId; }
 
     /**
      * Assigns texture image. Should be called when the class is being initialized.
@@ -57,6 +63,7 @@ class QgsTerrainTileEntity : public Qt3DCore::QEntity
     QgsTerrainTextureImage *textureImage() { return mTextureImage; }
 
   private:
+    QgsChunkNodeId mTileId;
     QgsTerrainTextureImage *mTextureImage = nullptr;
 };
 

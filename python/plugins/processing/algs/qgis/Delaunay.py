@@ -16,22 +16,18 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import next
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtCore import QVariant
 
-from qgis.core import (QgsField,
+from qgis.core import (QgsApplication,
+                       QgsField,
                        QgsFeatureRequest,
                        QgsFeatureSink,
                        QgsFeature,
@@ -52,15 +48,20 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class Delaunay(QgisAlgorithm):
-
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'delaunay.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmDelaunay.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmDelaunay.svg")
 
     def group(self):
         return self.tr('Vector geometry')
+
+    def groupId(self):
+        return 'vectorgeometry'
 
     def __init__(self):
         super().__init__()
@@ -77,6 +78,8 @@ class Delaunay(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
         fields = QgsFields()
         fields.append(QgsField('POINTA', QVariant.Double, '', 24, 15))
@@ -85,6 +88,8 @@ class Delaunay(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, QgsWkbTypes.Polygon, source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         pts = []
         ptDict = {}
@@ -116,7 +121,7 @@ class Delaunay(QgisAlgorithm):
                 self.tr('Input file should contain at least 3 points. Choose '
                         'another file and try again.'))
 
-        uniqueSet = set(item for item in pts)
+        uniqueSet = set(pts)
         ids = [pts.index(item) for item in uniqueSet]
         sl = voronoi.SiteList([voronoi.Site(*i) for i in uniqueSet])
         c.triangulate = True
@@ -133,8 +138,7 @@ class Delaunay(QgisAlgorithm):
             indices.append(indices[0])
             polygon = []
             attrs = []
-            step = 0
-            for index in indices:
+            for step, index in enumerate(indices):
                 fid, n = ptDict[ids[index]]
                 request = QgsFeatureRequest().setFilterFid(fid)
                 inFeat = next(source.getFeatures(request))
@@ -146,7 +150,6 @@ class Delaunay(QgisAlgorithm):
                 polygon.append(point)
                 if step <= 3:
                     attrs.append(ids[index])
-                step += 1
             feat.setAttributes(attrs)
             geometry = QgsGeometry().fromPolygonXY([polygon])
             feat.setGeometry(geometry)

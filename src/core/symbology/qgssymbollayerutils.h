@@ -29,6 +29,7 @@
 #include "qgis.h"
 #include "qgsmapunitscale.h"
 #include "qgscolorramp.h"
+#include "qgsarrowsymbollayer.h"
 
 class QgsExpression;
 class QgsPathResolver;
@@ -53,6 +54,14 @@ class QSize;
 class CORE_EXPORT QgsSymbolLayerUtils
 {
   public:
+
+    //! Editing vertex markers
+    enum VertexMarkerType
+    {
+      SemiTransparentCircle,
+      Cross,
+      NoMarker
+    };
 
     static QString encodeColor( const QColor &color );
     static QColor decodeColor( const QString &str );
@@ -88,6 +97,18 @@ class CORE_EXPORT QgsSymbolLayerUtils
     static Qt::BrushStyle decodeSldBrushStyle( const QString &str );
 
     /**
+     * Decodes a \a value representing an arrow head type.
+     * \since QGIS 3.2
+     */
+    static QgsArrowSymbolLayer::HeadType decodeArrowHeadType( const QVariant &value, bool *ok SIP_OUT = nullptr );
+
+    /**
+     * Decodes a \a value representing an arrow type.
+     * \since QGIS 3.2
+     */
+    static QgsArrowSymbolLayer::ArrowType decodeArrowType( const QVariant &value, bool *ok SIP_OUT = nullptr );
+
+    /**
      * Encodes a QPointF to a string.
      * \see decodePoint()
      * \see encodeSize()
@@ -100,6 +121,20 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \see decodeSize()
      */
     static QPointF decodePoint( const QString &string );
+
+    /**
+     * Converts a \a value to a point.
+     *
+     * \param value value to convert
+     * \param ok if specified, will be set to TRUE if value was successfully converted
+     *
+     * \returns converted point
+     *
+     * \see decodePoint()
+     * \see toSize()
+     * \since QGIS 3.10
+     */
+    static QPointF toPoint( const QVariant &value, bool *ok SIP_OUT = nullptr );
 
     /**
      * Encodes a QSizeF to a string.
@@ -116,6 +151,20 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \since QGIS 3.0
      */
     static QSizeF decodeSize( const QString &string );
+
+    /**
+     * Converts a \a value to a size.
+     *
+     * \param value value to convert
+     * \param ok if specified, will be set to TRUE if value was successfully converted
+     *
+     * \returns converted size
+     *
+     * \see decodeSize()
+     * \see toPoint()
+     * \since QGIS 3.10
+     */
+    static QSizeF toSize( const QVariant &value, bool *ok SIP_OUT = nullptr );
 
     static QString encodeMapUnitScale( const QgsMapUnitScale &mapUnitScale );
     static QgsMapUnitScale decodeMapUnitScale( const QString &str );
@@ -142,7 +191,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \returns matching render unit
      * \see encodeSldUom()
      */
-    static QgsUnitTypes::RenderUnit decodeSldUom( const QString &str, double *scaleFactor );
+    static QgsUnitTypes::RenderUnit decodeSldUom( const QString &str, double *scaleFactor = nullptr );
 
     /**
      * Returns the size scaled in pixels according to the uom attribute.
@@ -163,9 +212,10 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \param symbol symbol
      * \param size target pixmap size
      * \param padding space between icon edge and symbol
+     * \param shape optional legend patch shape to use for rendering the preview icon
      * \see symbolPreviewPixmap()
      */
-    static QIcon symbolPreviewIcon( QgsSymbol *symbol, QSize size, int padding = 0 );
+    static QIcon symbolPreviewIcon( const QgsSymbol *symbol, QSize size, int padding = 0, QgsLegendPatchShape *shape = nullptr );
 
     /**
      * Returns a pixmap preview for a color ramp.
@@ -173,10 +223,18 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \param size target pixmap size
      * \param padding space between icon edge and symbol
      * \param customContext render context to use when rendering symbol
+     * \param selected set to TRUE to render the symbol in a selected state
+     * \param expressionContext optional custom expression context
+     * \param shape optional legend patch shape to use for rendering the preview icon
      * \note Parameter customContext added in QGIS 2.6
+     * \note Parameter selected added in QGIS 3.10
+     * \note Parameter expressionContext added in QGIS 3.10
+     * \note Parameter shape added in QGIS 3.14
      * \see symbolPreviewIcon()
      */
-    static QPixmap symbolPreviewPixmap( QgsSymbol *symbol, QSize size, int padding = 0, QgsRenderContext *customContext = nullptr );
+    static QPixmap symbolPreviewPixmap( const QgsSymbol *symbol, QSize size, int padding = 0, QgsRenderContext *customContext = nullptr, bool selected = false,
+                                        const QgsExpressionContext *expressionContext = nullptr,
+                                        const QgsLegendPatchShape *shape = nullptr );
 
     /**
      * Draws a symbol layer preview to a QPicture
@@ -185,10 +243,10 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \param size target size of preview picture
      * \param scale map unit scale for preview
      * \returns QPicture containing symbol layer preview
-     * \since QGIS 2.9
      * \see symbolLayerPreviewIcon()
+     * \since QGIS 2.9
      */
-    static QPicture symbolLayerPreviewPicture( QgsSymbolLayer *layer, QgsUnitTypes::RenderUnit units, QSize size, const QgsMapUnitScale &scale = QgsMapUnitScale() );
+    static QPicture symbolLayerPreviewPicture( const QgsSymbolLayer *layer, QgsUnitTypes::RenderUnit units, QSize size, const QgsMapUnitScale &scale = QgsMapUnitScale() );
 
     /**
      * Draws a symbol layer preview to an icon.
@@ -199,7 +257,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \returns icon containing symbol layer preview
      * \see symbolLayerPreviewPicture()
      */
-    static QIcon symbolLayerPreviewIcon( QgsSymbolLayer *layer, QgsUnitTypes::RenderUnit u, QSize size, const QgsMapUnitScale &scale = QgsMapUnitScale() );
+    static QIcon symbolLayerPreviewIcon( const QgsSymbolLayer *layer, QgsUnitTypes::RenderUnit u, QSize size, const QgsMapUnitScale &scale = QgsMapUnitScale() );
 
     /**
      * Returns an icon preview for a color ramp.
@@ -215,11 +273,23 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \param ramp color ramp
      * \param size target pixmap size
      * \param padding space between icon edge and color ramp
+     * \param direction direction to render pixmap (since QGIS 3.18)
+     * \param flipDirection set to TRUE to flip the direction of the ramp. For horizontal \a directions, ramps will be
+     * rendered left to right by default. For vertical \a directions, ramps will be rendered top to bottom by default. Setting
+     * this flag to TRUE will reverse these default directions.
+     * \param drawTransparentBackground set to FALSE to disable the checkerboard effect drawn below transparent colors in the ramp
      * \see colorRampPreviewIcon()
      */
-    static QPixmap colorRampPreviewPixmap( QgsColorRamp *ramp, QSize size, int padding = 0 );
+    static QPixmap colorRampPreviewPixmap( QgsColorRamp *ramp, QSize size, int padding = 0, Qt::Orientation direction = Qt::Horizontal,
+                                           bool flipDirection = false, bool drawTransparentBackground = true );
 
     static void drawStippledBackground( QPainter *painter, QRect rect );
+
+    /**
+     * Draws a vertex symbol at (painter) coordinates x, y. (Useful to assist vertex editing.)
+     * \since QGIS 3.4.5
+     */
+    static void drawVertexMarker( double x, double y, QPainter &p, QgsSymbolLayerUtils::VertexMarkerType type, int markerSize );
 
     //! Returns the maximum estimated bleed for the symbol
     static double estimateMaxSymbolBleed( QgsSymbol *symbol, const QgsRenderContext &context );
@@ -260,7 +330,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
     //! Reads and returns symbol layer from XML. Caller is responsible for deleting the returned object
     static QgsSymbolLayer *loadSymbolLayer( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
     //! Writes a symbol definition to XML
-    static QDomElement saveSymbol( const QString &symbolName, QgsSymbol *symbol, QDomDocument &doc, const QgsReadWriteContext &context );
+    static QDomElement saveSymbol( const QString &symbolName, const QgsSymbol *symbol, QDomDocument &doc, const QgsReadWriteContext &context );
 
     /**
      * Returns a string representing the symbol. Can be used to test for equality
@@ -338,7 +408,8 @@ class CORE_EXPORT QgsSymbolLayerUtils
 
     /**
      * Create ogr feature style string for brush
-     \param fillColr fill color*/
+     * \param fillColr fill color
+    */
     static QString ogrFeatureStyleBrush( const QColor &fillColr );
 
     static void createRotationElement( QDomDocument &doc, QDomElement &element, const QString &rotationFunc );
@@ -369,7 +440,6 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \param doc The document owning the element
      * \param element The element parent
      * \param function The expression to be encoded
-     * \returns
      */
     static bool createExpressionElement( QDomDocument &doc, QDomElement &element, const QString &function );
     static bool createFunctionElement( QDomDocument &doc, QDomElement &element, const QString &function );
@@ -381,8 +451,10 @@ class CORE_EXPORT QgsSymbolLayerUtils
     static QDomElement createVendorOptionElement( QDomDocument &doc, const QString &name, const QString &value );
     static QgsStringMap getVendorOptionList( QDomElement &element );
 
-    static QgsStringMap parseProperties( QDomElement &element );
-    static void saveProperties( QgsStringMap props, QDomDocument &doc, QDomElement &element );
+    //! Parses the properties from XML and returns a map
+    static QVariantMap parseProperties( const QDomElement &element );
+    //! Saves the map of properties to XML
+    static void saveProperties( QVariantMap props, QDomDocument &doc, QDomElement &element );
 
     //! Reads a collection of symbols from XML and returns them in a map. Caller is responsible for deleting returned symbols.
     static QgsSymbolMap loadSymbols( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
@@ -398,7 +470,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * \see symbolFromMimeData()
      * \since QGIS 3.0
      */
-    static QMimeData *symbolToMimeData( QgsSymbol *symbol ) SIP_FACTORY;
+    static QMimeData *symbolToMimeData( const QgsSymbol *symbol ) SIP_FACTORY;
 
     /**
      * Attempts to parse \a mime data as a symbol. A new symbol instance will be returned
@@ -471,13 +543,12 @@ class CORE_EXPORT QgsSymbolLayerUtils
     /**
      * Attempts to parse mime data as a color
      * \param data mime data to parse
-     * \param hasAlpha will be set to true if mime data was interpreted as a color containing
+     * \param hasAlpha will be set to TRUE if mime data was interpreted as a color containing
      * an explicit alpha value
-     * \returns valid color if mimedata could be interpreted as a color, otherwise an
-     * invalid color
+     * \returns valid color if mimedata could be interpreted as a color, otherwise an invalid color
      * \since QGIS 2.5
      */
-    static QColor colorFromMimeData( const QMimeData *data, bool &hasAlpha );
+    static QColor colorFromMimeData( const QMimeData *data, bool &hasAlpha SIP_OUT );
 
     /**
      * Attempts to parse mime data as a list of named colors
@@ -490,18 +561,18 @@ class CORE_EXPORT QgsSymbolLayerUtils
     /**
      * Creates mime data from a list of named colors
      * \param colorList list of named colors
-     * \param allFormats set to true to include additional mime formats, include text/plain and application/x-color
+     * \param allFormats set to TRUE to include additional mime formats, include text/plain and application/x-color
      * \returns mime data containing encoded colors
      * \since QGIS 2.5
      */
-    static QMimeData *colorListToMimeData( const QgsNamedColorList &colorList, const bool allFormats = true ) SIP_FACTORY;
+    static QMimeData *colorListToMimeData( const QgsNamedColorList &colorList, bool allFormats = true ) SIP_FACTORY;
 
     /**
      * Exports colors to a gpl GIMP palette file
      * \param file destination file
      * \param paletteName name of palette, which is stored in gpl file
      * \param colors colors to export
-     * \returns true if export was successful
+     * \returns TRUE if export was successful
      * \see importColorsFromGpl
      */
     static bool saveColorsToGpl( QFile &file, const QString &paletteName, const QgsNamedColorList &colors );
@@ -509,7 +580,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
     /**
      * Imports colors from a gpl GIMP palette file
      * \param file source gpl file
-     * \param ok will be true if file was successfully read
+     * \param ok will be TRUE if file was successfully read
      * \param name will be set to palette name from gpl file, if present
      * \returns list of imported colors
      * \see saveColorsToGpl
@@ -520,7 +591,7 @@ class CORE_EXPORT QgsSymbolLayerUtils
      * Attempts to parse a string as a color using a variety of common formats, including hex
      * codes, rgb and rgba strings.
      * \param colorStr string representing the color
-     * \param strictEval set to true for stricter color parsing rules
+     * \param strictEval set to TRUE for stricter color parsing rules
      * \returns parsed color
      * \since QGIS 2.3
      */
@@ -528,10 +599,10 @@ class CORE_EXPORT QgsSymbolLayerUtils
 
     /**
      * Attempts to parse a string as a color using a variety of common formats, including hex
-     * codes, rgb and rgba strings.
+     * codes, rgb and rgba, hsl and hsla strings.
      * \param colorStr string representing the color
-     * \param containsAlpha if colorStr contains an explicit alpha value then containsAlpha will be set to true
-     * \param strictEval set to true for stricter color parsing rules
+     * \param containsAlpha if colorStr contains an explicit alpha value then containsAlpha will be set to TRUE
+     * \param strictEval set to TRUE for stricter color parsing rules
      * \returns parsed color
      * \since QGIS 2.3
      */
@@ -556,42 +627,78 @@ class CORE_EXPORT QgsSymbolLayerUtils
     //! Returns a point on the line from startPoint to directionPoint that is a certain distance away from the starting point
     static QPointF pointOnLineWithDistance( QPointF startPoint, QPointF directionPoint, double distance );
 
-    //! Return a list of all available svg files
+    //! Returns a list of all available svg files
     static QStringList listSvgFiles();
 
-    //! Return a list of svg files at the specified directory
+    //! Returns a list of svg files at the specified directory
     static QStringList listSvgFilesAt( const QString &directory );
 
     /**
-     * Get SVG symbol's path from its name.
-     *  If the name is not absolute path the file is searched in SVG paths specified
-     *  in settings svg/searchPathsForSVG.
+     * Determines an SVG symbol's path from its \a name.
+     * If \a name is not an absolute path the file is scanned for in the SVG paths specified
+     * in settings svg/searchPathsForSVG.
+     * \see svgSymbolPathToName()
      */
-    static QString svgSymbolNameToPath( QString name, const QgsPathResolver &pathResolver );
+    static QString svgSymbolNameToPath( const QString &name, const QgsPathResolver &pathResolver );
 
-    //! Get SVG symbols's name from its path
-    static QString svgSymbolPathToName( QString path, const QgsPathResolver &pathResolver );
+    /**
+     * Determines an SVG symbol's name from its \a path.
+     * \see svgSymbolNameToPath()
+     */
+    static QString svgSymbolPathToName( const QString &path, const QgsPathResolver &pathResolver );
 
     //! Calculate the centroid point of a QPolygonF
     static QPointF polygonCentroid( const QPolygonF &points );
 
-    //! Calculate a point within of a QPolygonF
-    static QPointF polygonPointOnSurface( const QPolygonF &points );
+    //! Calculate a point on the surface of a QPolygonF
+    static QPointF polygonPointOnSurface( const QPolygonF &points, const QVector<QPolygonF> *rings = nullptr );
 
     //! Calculate whether a point is within of a QPolygonF
     static bool pointInPolygon( const QPolygonF &points, QPointF point );
 
     /**
-     * Return a new valid expression instance for given field or expression string.
+     * Returns the substring of a \a polyline which starts at \a startOffset from the beginning of the line
+     * and ends at \a endOffset from the start of the line.
+     *
+     * If \a startOffset is less than 0, then the start point will be calculated by subtracting that distance
+     * from the end of the line. Similarly, if \a endOffset is less than zero then the end point will be subtracted
+     * from the end of the line.
+     *
+     * May return an empty linestring if the substring is zero length.
+     *
+     * \since QGIS 3.16
+     */
+    static QPolygonF polylineSubstring( const QPolygonF &polyline, double startOffset, double endOffset );
+
+    /**
+     * Returns TRUE if the angle formed by the line \a p1 - \a p2 - \a p3 forms a "sharp" corner.
+     *
+     * Sharp corners form an angle which exceeds a 45 degree threshold.
+     *
+     * \since QGIS 3.16
+     */
+    static bool isSharpCorner( QPointF p1, QPointF p2, QPointF p3 );
+
+    /**
+     * Appends a polyline \a line to an existing \a target polyline.
+     *
+     * Any duplicate points at the start \a line which match the end point from \a target will be skipped.
+     *
+     * \since QGIS 3.16
+     */
+    static void appendPolyline( QPolygonF &target, const QPolygonF &line );
+
+    /**
+     * Returns a new valid expression instance for given field or expression string.
      * If the input is not a valid expression, it is assumed that it is a field name and gets properly quoted.
-     * If the string is empty, returns null pointer.
+     * If the string is empty, returns NULLPTR.
      * This is useful when accepting input which could be either a non-quoted field name or expression.
      * \since QGIS 2.2
      */
     static QgsExpression *fieldOrExpressionToExpression( const QString &fieldOrExpression ) SIP_FACTORY;
 
     /**
-     * Return a field name if the whole expression is just a name of the field .
+     * Returns a field name if the whole expression is just a name of the field .
      *  Returns full expression string if the expression is more complex than just one field.
      *  Using just expression->expression() method may return quoted field name, but that is not
      *  wanted for saving (due to backward compatibility) or display in GUI.
@@ -612,33 +719,33 @@ class CORE_EXPORT QgsSymbolLayerUtils
      *  returns the value un-modified
      * \since QGIS 3.0
      */
-    static double rescaleUom( double size, QgsUnitTypes::RenderUnit unit, const QgsStringMap &props );
+    static double rescaleUom( double size, QgsUnitTypes::RenderUnit unit, const QVariantMap &props );
 
     /**
      * Rescales the given point based on the uomScale found in the props, if any is found, otherwise
      *  returns a copy of the original point
      * \since QGIS 3.0
      */
-    static QPointF rescaleUom( QPointF point, QgsUnitTypes::RenderUnit unit, const QgsStringMap &props ) SIP_PYNAME( rescalePointUom );
+    static QPointF rescaleUom( QPointF point, QgsUnitTypes::RenderUnit unit, const QVariantMap &props ) SIP_PYNAME( rescalePointUom );
 
     /**
      * Rescales the given array based on the uomScale found in the props, if any is found, otherwise
      *  returns a copy of the original point
      * \since QGIS 3.0
      */
-    static QVector<qreal> rescaleUom( const QVector<qreal> &array, QgsUnitTypes::RenderUnit unit, const QgsStringMap &props ) SIP_PYNAME( rescaleArrayUom );
+    static QVector<qreal> rescaleUom( const QVector<qreal> &array, QgsUnitTypes::RenderUnit unit, const QVariantMap &props ) SIP_PYNAME( rescaleArrayUom );
 
     /**
      * Checks if the properties contain scaleMinDenom and scaleMaxDenom, if available, they are added into the SE Rule element
      * \since QGIS 3.0
      */
-    static void applyScaleDependency( QDomDocument &doc, QDomElement &ruleElem, QgsStringMap &props );
+    static void applyScaleDependency( QDomDocument &doc, QDomElement &ruleElem, QVariantMap &props );
 
     /**
       * Merges the local scale limits, if any, with the ones already in the map, if any
       * \since QGIS 3.0
       */
-    static void mergeScaleDependencies( int mScaleMinDenom, int mScaleMaxDenom, QgsStringMap &props );
+    static void mergeScaleDependencies( double mScaleMinDenom, double mScaleMaxDenom, QVariantMap &props );
 
     /**
      * Encodes a reference to a parametric SVG into SLD, as a succession of parametric SVG using URL parameters,
@@ -656,6 +763,29 @@ class CORE_EXPORT QgsSymbolLayerUtils
      */
     static QString getSvgParametricPath( const QString &basePath, const QColor &fillColor, const QColor &strokeColor, double strokeWidth );
 
+    /**
+     * Converts a set of symbol layer id to a set of pointers to actual symbol layers carried by the feature renderer.
+     * \since QGIS 3.12
+     */
+    static QSet<const QgsSymbolLayer *> toSymbolLayerPointers( QgsFeatureRenderer *renderer, const QSet<QgsSymbolLayerId> &symbolLayerIds );
+
+    /**
+     * \brief Creates a new symbol with size restricted to min/max size if original size is out of min/max range
+     * \param s the original symbol
+     * \param minSize the minimum size in mm
+     * \param maxSize the maximum size in mm
+     * \param context the render context
+     * \param width expected width, can be changed by the function
+     * \param height expected height, can be changed by this function
+     * \return 0 if size is within minSize/maxSize range. New symbol if size was out of min/max range. Caller takes ownership
+     */
+    static QgsSymbol *restrictedSizeSymbol( const QgsSymbol *s, double minSize, double maxSize, QgsRenderContext *context, double &width, double &height );
+
+    /**
+     * Evaluates a map of properties using the given \a context and returns a variant map with evaluated expressions from the properties.
+     * \since QGIS 3.18
+     */
+    static QgsStringMap evaluatePropertiesMap( const QMap<QString, QgsProperty> &propertiesMap, const QgsExpressionContext &context );
 };
 
 class QPolygonF;

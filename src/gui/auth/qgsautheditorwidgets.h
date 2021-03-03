@@ -18,14 +18,14 @@
 #define QGSAUTHEDITORWIDGETS_H
 
 #include <QWidget>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "ui_qgsautheditorwidgets.h"
 #include "ui_qgsauthmethodplugins.h"
 #include "qgis_gui.h"
 
 /**
  * \ingroup gui
- * Dialog for viewing available authentication method plugins
+ * \brief Dialog for viewing available authentication method plugins
  */
 class GUI_EXPORT QgsAuthMethodPlugins : public QDialog, private Ui::QgsAuthMethodPlugins
 {
@@ -37,7 +37,7 @@ class GUI_EXPORT QgsAuthMethodPlugins : public QDialog, private Ui::QgsAuthMetho
      * Construct a dialog for viewing available authentication method plugins
      * \param parent Parent widget
      */
-    explicit QgsAuthMethodPlugins( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsAuthMethodPlugins( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
   private slots:
     void populateTable();
@@ -52,7 +52,7 @@ class GUI_EXPORT QgsAuthMethodPlugins : public QDialog, private Ui::QgsAuthMetho
 
 /**
  * \ingroup gui
- * Wrapper widget for available authentication editors
+ * \brief Wrapper widget for available authentication editors
  */
 class GUI_EXPORT QgsAuthEditorWidgets : public QWidget, private Ui::QgsAuthEditors
 {
@@ -64,7 +64,7 @@ class GUI_EXPORT QgsAuthEditorWidgets : public QWidget, private Ui::QgsAuthEdito
      * Construct a widget to contain various authentication editors
      * \param parent Parent widget
      */
-    explicit QgsAuthEditorWidgets( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsAuthEditorWidgets( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
   private slots:
     void btnCertManager_clicked();
@@ -107,7 +107,6 @@ class GUI_EXPORT QgsAuthEditorWidgets : public QWidget, private Ui::QgsAuthEdito
     void setupUtilitiesMenu();
 
     QgsMessageBar *messageBar();
-    int messageTimeout();
 
     QMenu *mAuthUtilitiesMenu = nullptr;
     QAction *mActionSetMasterPassword = nullptr;

@@ -23,6 +23,11 @@
 void QgsTransformAlgorithm::initParameters( const QVariantMap & )
 {
   addParameter( new QgsProcessingParameterCrs( QStringLiteral( "TARGET_CRS" ), QObject::tr( "Target CRS" ), QStringLiteral( "EPSG:4326" ) ) );
+
+  std::unique_ptr< QgsProcessingParameterCoordinateOperation > crsOpParam = std::make_unique< QgsProcessingParameterCoordinateOperation >( QStringLiteral( "OPERATION" ), QObject::tr( "Coordinate operation" ),
+      QVariant(), QStringLiteral( "INPUT" ), QStringLiteral( "TARGET_CRS" ), QVariant(), QVariant(), true );
+  crsOpParam->setFlags( crsOpParam->flags() | QgsProcessingParameterDefinition::FlagAdvanced );
+  addParameter( crsOpParam.release() );
 }
 
 QgsCoordinateReferenceSystem QgsTransformAlgorithm::outputCrs( const QgsCoordinateReferenceSystem & ) const
@@ -33,6 +38,11 @@ QgsCoordinateReferenceSystem QgsTransformAlgorithm::outputCrs( const QgsCoordina
 QString QgsTransformAlgorithm::outputName() const
 {
   return QObject::tr( "Reprojected" );
+}
+
+QgsProcessingFeatureSource::Flag QgsTransformAlgorithm::sourceFlags() const
+{
+  return QgsProcessingFeatureSource::FlagSkipGeometryValidityChecks;
 }
 
 QString QgsTransformAlgorithm::name() const
@@ -47,12 +57,17 @@ QString QgsTransformAlgorithm::displayName() const
 
 QStringList QgsTransformAlgorithm::tags() const
 {
-  return QObject::tr( "transform,reproject,crs,srs,warp" ).split( ',' );
+  return QObject::tr( "transform,reprojection,crs,srs,warp" ).split( ',' );
 }
 
 QString QgsTransformAlgorithm::group() const
 {
   return QObject::tr( "Vector general" );
+}
+
+QString QgsTransformAlgorithm::groupId() const
+{
+  return QStringLiteral( "vectorgeneral" );
 }
 
 QString QgsTransformAlgorithm::shortHelpString() const
@@ -69,32 +84,56 @@ QgsTransformAlgorithm *QgsTransformAlgorithm::createInstance() const
 
 bool QgsTransformAlgorithm::prepareAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback * )
 {
+  prepareSource( parameters, context );
   mDestCrs = parameterAsCrs( parameters, QStringLiteral( "TARGET_CRS" ), context );
+  mTransformContext = context.transformContext();
+  mCoordOp = parameterAsString( parameters, QStringLiteral( "OPERATION" ), context );
   return true;
 }
 
-QgsFeature QgsTransformAlgorithm::processFeature( const QgsFeature &f, QgsProcessingFeedback * )
+QgsFeatureList QgsTransformAlgorithm::processFeature( const QgsFeature &f, QgsProcessingContext &, QgsProcessingFeedback *feedback )
 {
   QgsFeature feature = f;
   if ( !mCreatedTransform )
   {
     mCreatedTransform = true;
-    mTransform = QgsCoordinateTransform( sourceCrs(), mDestCrs );
+    if ( !mCoordOp.isEmpty() )
+      mTransformContext.addCoordinateOperation( sourceCrs(), mDestCrs, mCoordOp, false );
+    mTransform = QgsCoordinateTransform( sourceCrs(), mDestCrs, mTransformContext );
+
+    mTransform.disableFallbackOperationHandler( true );
   }
 
   if ( feature.hasGeometry() )
   {
     QgsGeometry g = feature.geometry();
-    if ( g.transform( mTransform ) == 0 )
+    try
     {
-      feature.setGeometry( g );
+      if ( g.transform( mTransform ) == 0 )
+      {
+        feature.setGeometry( g );
+      }
+      else
+      {
+        feature.clearGeometry();
+      }
+
+      if ( !mWarnedAboutFallbackTransform && mTransform.fallbackOperationOccurred() )
+      {
+        feedback->reportError( QObject::tr( "An alternative, ballpark-only transform was used when transforming coordinates for one or more features. "
+                                            "(Possibly an incorrect choice of operation was made for transformations between these reference systems - check "
+                                            "that the selected operation is valid for the full extent of the input layer.)" ) );
+        mWarnedAboutFallbackTransform = true; // only warn once to avoid flooding the log
+      }
     }
-    else
+    catch ( QgsCsException & )
     {
+      if ( feedback )
+        feedback->reportError( QObject::tr( "Encountered a transform error when reprojecting feature with id %1." ).arg( f.id() ) );
       feature.clearGeometry();
     }
   }
-  return feature;
+  return QgsFeatureList() << feature;
 }
 
 ///@endcond

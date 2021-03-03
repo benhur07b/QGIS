@@ -31,7 +31,7 @@ class QPainter;
 
 /**
  * \ingroup gui
- * A class for marking vertices of features using e.g. circles or 'x'.
+ * \brief A class for marking vertices of features using e.g. circles or 'x'.
  */
 class GUI_EXPORT QgsVertexMarker : public QgsMapCanvasItem
 {
@@ -55,11 +55,26 @@ class GUI_EXPORT QgsVertexMarker : public QgsMapCanvasItem
       ICON_BOX,
       ICON_CIRCLE,
       ICON_DOUBLE_TRIANGLE,    //!< Added in QGIS 3.0
+      ICON_TRIANGLE,  //!< Added in QGIS 3.12
+      ICON_RHOMBUS,  //!< Added in QGIS 3.12
     };
 
     QgsVertexMarker( QgsMapCanvas *mapCanvas SIP_TRANSFERTHIS );
 
+    /**
+     * Sets the center \a point of the marker, in map coordinates.
+     *
+     * \see center()
+     */
     void setCenter( const QgsPointXY &point );
+
+    /**
+     * Returns the center point of the marker, in map coordinates.
+     *
+     * \see setCenter()
+     * \since QGIS 3.18
+     */
+    QgsPointXY center() const { return mCenter; }
 
     void setIconType( int iconType );
 
@@ -83,18 +98,18 @@ class GUI_EXPORT QgsVertexMarker : public QgsMapCanvasItem
     /**
      * Sets the fill \a color for the marker. This setting only
      * applies to some icon types.
-     * \since QGIS 3.0
      * \see fillColor()
      * \see setColor()
+     * \since QGIS 3.0
      */
     void setFillColor( const QColor &color );
 
     /**
      * Returns the fill \a color for the marker. This setting only
      * applies to some icon types.
-     * \since QGIS 3.0
      * \see setFillColor()
      * \see color()
+     * \since QGIS 3.0
      */
     QColor fillColor() const { return mFillColor; }
 
@@ -104,7 +119,7 @@ class GUI_EXPORT QgsVertexMarker : public QgsMapCanvasItem
 
     QRectF boundingRect() const override;
 
-    virtual void updatePosition() override;
+    void updatePosition() override;
 
   private:
 

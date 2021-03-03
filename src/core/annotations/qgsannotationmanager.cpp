@@ -17,6 +17,8 @@
 #include "qgsproject.h"
 #include "qgsannotation.h"
 #include "qgsannotationregistry.h"
+#include "qgsapplication.h"
+#include "qgsstyleentityvisitor.h"
 
 QgsAnnotationManager::QgsAnnotationManager( QgsProject *project )
   : QObject( project )
@@ -91,32 +93,36 @@ bool QgsAnnotationManager::readXml( const QDomElement &element, const QgsReadWri
 
   QDomElement annotationsElem = element.firstChildElement( QStringLiteral( "Annotations" ) );
 
-  QDomNodeList annotationNodes = annotationsElem.elementsByTagName( QStringLiteral( "Annotation" ) );
-  for ( int i = 0; i < annotationNodes.size(); ++i )
+  QDomElement annotationElement = annotationsElem.firstChildElement( QStringLiteral( "Annotation" ) );
+  while ( ! annotationElement .isNull() )
   {
-    createAnnotationFromXml( annotationNodes.at( i ).toElement(), context );
+    createAnnotationFromXml( annotationElement, context );
+    annotationElement = annotationElement.nextSiblingElement( QStringLiteral( "Annotation" ) );
   }
 
   // restore old (pre 3.0) project annotations
-  QDomNodeList oldItemList = element.elementsByTagName( QStringLiteral( "TextAnnotationItem" ) );
-  for ( int i = 0; i < oldItemList.size(); ++i )
+  if ( annotationElement.isNull() )
   {
-    createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
-  }
-  oldItemList = element.elementsByTagName( QStringLiteral( "FormAnnotationItem" ) );
-  for ( int i = 0; i < oldItemList.size(); ++i )
-  {
-    createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
-  }
-  oldItemList = element.elementsByTagName( QStringLiteral( "HtmlAnnotationItem" ) );
-  for ( int i = 0; i < oldItemList.size(); ++i )
-  {
-    createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
-  }
-  oldItemList = element.elementsByTagName( QStringLiteral( "SVGAnnotationItem" ) );
-  for ( int i = 0; i < oldItemList.size(); ++i )
-  {
-    createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
+    QDomNodeList oldItemList = element.elementsByTagName( QStringLiteral( "TextAnnotationItem" ) );
+    for ( int i = 0; i < oldItemList.size(); ++i )
+    {
+      createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
+    }
+    oldItemList = element.elementsByTagName( QStringLiteral( "FormAnnotationItem" ) );
+    for ( int i = 0; i < oldItemList.size(); ++i )
+    {
+      createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
+    }
+    oldItemList = element.elementsByTagName( QStringLiteral( "HtmlAnnotationItem" ) );
+    for ( int i = 0; i < oldItemList.size(); ++i )
+    {
+      createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
+    }
+    oldItemList = element.elementsByTagName( QStringLiteral( "SVGAnnotationItem" ) );
+    for ( int i = 0; i < oldItemList.size(); ++i )
+    {
+      createAnnotationFromXml( oldItemList.at( i ).toElement(), context );
+    }
   }
 
   return result;
@@ -140,6 +146,27 @@ QDomElement QgsAnnotationManager::writeXml( QDomDocument &doc, const QgsReadWrit
     annotation->writeXml( annotationsElem, doc, context );
   }
   return annotationsElem;
+}
+
+bool QgsAnnotationManager::accept( QgsStyleEntityVisitorInterface *visitor ) const
+{
+  if ( mAnnotations.empty() )
+    return true;
+
+  // NOTE: if visitEnter returns false it means "don't visit any annotations", not "abort all further visitations"
+  if ( !visitor->visitEnter( QgsStyleEntityVisitorInterface::Node( QgsStyleEntityVisitorInterface::NodeType::Annotations, QStringLiteral( "annotations" ), tr( "Annotations" ) ) ) )
+    return true;
+
+  for ( QgsAnnotation *a : mAnnotations )
+  {
+    if ( !a->accept( visitor ) )
+      return false;
+  }
+
+  if ( !visitor->visitExit( QgsStyleEntityVisitorInterface::Node( QgsStyleEntityVisitorInterface::NodeType::Annotations, QStringLiteral( "annotations" ), tr( "Annotations" ) ) ) )
+    return false;
+
+  return true;
 }
 
 void QgsAnnotationManager::createAnnotationFromXml( const QDomElement &element, const QgsReadWriteContext &context )

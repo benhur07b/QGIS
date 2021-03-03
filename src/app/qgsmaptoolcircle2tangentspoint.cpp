@@ -24,14 +24,18 @@
 #include "qgsstatusbar.h"
 #include "qgslinestring.h"
 #include "qgsmultipolygon.h"
-#include "qgsspinbox.h"
+#include "qgsdoublespinbox.h"
+#include "qgsgeometryutils.h"
 #include <memory>
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgsmessagebar.h"
+#include "qgssnapindicator.h"
 
 QgsMapToolCircle2TangentsPoint::QgsMapToolCircle2TangentsPoint( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolAddCircle( parentTool, canvas, mode )
 {
+  mToolName = tr( "Add circle from 2 tangents and a point" );
 }
 
 QgsMapToolCircle2TangentsPoint::~QgsMapToolCircle2TangentsPoint()
@@ -43,6 +47,16 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasReleaseEvent( QgsMapMouseEvent *e 
 {
 
   QgsPoint mapPoint( e->mapPoint() );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
+
   EdgesOnlyFilter filter;
   QgsPointLocator::Match match = mCanvas->snappingUtils()->snapToMap( mapPoint, &filter );
 
@@ -61,13 +75,16 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasReleaseEvent( QgsMapMouseEvent *e 
     }
     if ( mPoints.size() == 4 )
     {
-      QgsPointXY ptInter = intersect( QgsPointXY( mPoints.at( 0 ) ), QgsPointXY( mPoints.at( 1 ) ),
-                                      QgsPointXY( mPoints.at( 2 ) ), QgsPointXY( mPoints.at( 3 ) ) );
-      if ( ptInter == QgsPointXY() )
+      bool isIntersect = false;
+      QgsPoint ptInter;
+      QgsGeometryUtils::segmentIntersection( mPoints.at( 0 ), mPoints.at( 1 ),
+                                             mPoints.at( 2 ), mPoints.at( 3 ), ptInter, isIntersect );
+      if ( !isIntersect )
       {
         QgisApp::instance()->messageBar()->pushMessage( tr( "Error" ), tr( "Segments are parallels" ),
-            QgsMessageBar::CRITICAL, QgisApp::instance()->messageTimeout() );
+            Qgis::Critical );
         deactivate();
+        activate();
       }
       else
         createRadiusSpinBox();
@@ -85,19 +102,18 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasReleaseEvent( QgsMapMouseEvent *e 
     qDeleteAll( mRubberBands );
     mRubberBands.clear();
 
-    deactivate();
     deleteRadiusSpinBox();
     mCenters.clear();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    release( e );
   }
 }
 
 void QgsMapToolCircle2TangentsPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
   QgsPoint mapPoint( e->mapPoint() );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   EdgesOnlyFilter filter;
   QgsPointLocator::Match match = mCanvas->snappingUtils()->snapToMap( mapPoint, &filter );
 
@@ -105,10 +121,7 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
   {
     if ( !mTempRubberBand )
     {
-      mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
-      mTempRubberBand->setFillColor( QColor( 0, 0, 255 ) );
-      mTempRubberBand->setStrokeColor( QColor( 0, 0, 255 ) );
-      mTempRubberBand->setStrokeWidth( 2 );
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
       mTempRubberBand->show();
     }
     else
@@ -128,7 +141,7 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
     }
   }
 
-  if ( mPoints.size() == 4 )
+  if ( mPoints.size() == 4 && !mCenters.isEmpty() )
   {
     QgsPoint center = QgsPoint( mCenters.at( 0 ) );
     const double currentDist = mapPoint.distanceSquared( center );
@@ -142,64 +155,6 @@ void QgsMapToolCircle2TangentsPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
     mCircle = QgsCircle( center, mRadius );
     mTempRubberBand->setGeometry( mCircle.toCircularString( true ) );
   }
-}
-
-QgsPointXY QgsMapToolCircle2TangentsPoint::intersect( QgsPointXY seg1_pt1, QgsPointXY seg1_pt2, QgsPointXY seg2_pt1, QgsPointXY seg2_pt2 )
-{
-  /*
-   * Public domain function by Darel Rex Finley, 2006
-   * http://alienryderflex.com/intersect/
-   */
-  QgsPointXY ptInter;
-
-  double Ax = seg1_pt1.x();
-  double Ay = seg1_pt1.y();
-  double Bx = seg1_pt2.x();
-  double By = seg1_pt2.y();
-
-  double Cx = seg2_pt1.x();
-  double Cy = seg2_pt1.y();
-  double Dx = seg2_pt2.x();
-  double Dy = seg2_pt2.y();
-
-  if ( ( ( Ax == Bx ) && ( Ay == By ) ) || ( ( Cx == Dx ) && ( Cy == Dy ) ) )
-    return ptInter;
-
-  // (1) Translate the system so that point A is on the origin.
-  Bx -= Ax;
-  By -= Ay;
-  Cx -= Ax;
-  Cy -= Ay;
-  Dx -= Ax;
-  Dy -= Ay;
-
-  // Discover the length of segment A-B
-  double distAB = sqrt( Bx * Bx + By * By );
-
-  // (2) Rotate the system so that point B is on the positive X axis.
-  double theCos = Bx / distAB;
-  double theSin = By / distAB;
-  double newX = Cx * theCos + Cy * theSin;
-  Cy = Cy * theCos - Cx * theSin;
-  Cx = newX;
-  newX = Dx * theCos + Dy * theSin;
-  Dy = Dy * theCos - Dx * theSin;
-  Dx = newX;
-
-  // Fail if the lines are parallel.
-  if ( Cy == Dy )
-    return ptInter;
-
-  // (3) Discover the position of the intersection point along line A-B.
-  double ABpos = Dx + ( Cx - Dx ) * Dy / ( Dy - Cy );
-
-  // (4) Apply the discovered position to line A-B
-  // in the original coordinate system.
-  ptInter.setX( Ax + ABpos * theCos );
-  ptInter.setY( Ay + ABpos * theSin );
-
-  // Success
-  return ptInter;
 }
 
 void QgsMapToolCircle2TangentsPoint::getPossibleCenter( )
@@ -226,34 +181,35 @@ void QgsMapToolCircle2TangentsPoint::getPossibleCenter( )
     QgsGeometry line2m = line2.offsetCurve( - mRadius, 8, QgsGeometry::JoinStyleBevel, 5 );
     QgsGeometry line2p = line2.offsetCurve( + mRadius, 8, QgsGeometry::JoinStyleBevel, 5 );
 
-    QgsPointXY p1 = intersect( line1m.asPolyline().at( 0 ), line1m.asPolyline().at( 1 ),
-                               line2m.asPolyline().at( 0 ), line2m.asPolyline().at( 1 ) );
-    QgsPointXY p2 = intersect( line1m.asPolyline().at( 0 ), line1m.asPolyline().at( 1 ),
-                               line2p.asPolyline().at( 0 ), line2p.asPolyline().at( 1 ) );
-    QgsPointXY p3 = intersect( line1p.asPolyline().at( 0 ), line1p.asPolyline().at( 1 ),
-                               line2m.asPolyline().at( 0 ), line2m.asPolyline().at( 1 ) );
-    QgsPointXY p4 = intersect( line1p.asPolyline().at( 0 ), line1p.asPolyline().at( 1 ),
-                               line2p.asPolyline().at( 0 ), line2p.asPolyline().at( 1 ) );
-
-    mCenters.append( p1 );
-    mCenters.append( p2 );
-    mCenters.append( p3 );
-    mCenters.append( p4 );
-
+    bool isIntersect = false;
+    QgsPoint inter;
+    QgsGeometryUtils::segmentIntersection( QgsPoint( line1m.asPolyline().at( 0 ) ), QgsPoint( line1m.asPolyline().at( 1 ) ),
+                                           QgsPoint( line2m.asPolyline().at( 0 ) ), QgsPoint( line2m.asPolyline().at( 1 ) ), inter, isIntersect );
+    mCenters.append( QgsPoint( inter ) );
+    QgsGeometryUtils::segmentIntersection( QgsPoint( line1m.asPolyline().at( 0 ) ), QgsPoint( line1m.asPolyline().at( 1 ) ),
+                                           QgsPoint( line2p.asPolyline().at( 0 ) ), QgsPoint( line2p.asPolyline().at( 1 ) ), inter, isIntersect );
+    mCenters.append( QgsPoint( inter ) );
+    QgsGeometryUtils::segmentIntersection( QgsPoint( line1p.asPolyline().at( 0 ) ), QgsPoint( line1p.asPolyline().at( 1 ) ),
+                                           QgsPoint( line2m.asPolyline().at( 0 ) ), QgsPoint( line2m.asPolyline().at( 1 ) ), inter, isIntersect );
+    mCenters.append( QgsPoint( inter ) );
+    QgsGeometryUtils::segmentIntersection( QgsPoint( line1p.asPolyline().at( 0 ) ), QgsPoint( line1p.asPolyline().at( 1 ) ),
+                                           QgsPoint( line2p.asPolyline().at( 0 ) ), QgsPoint( line2p.asPolyline().at( 1 ) ), inter, isIntersect );
+    mCenters.append( QgsPoint( inter ) );
   }
 }
 
 void QgsMapToolCircle2TangentsPoint::createRadiusSpinBox()
 {
   deleteRadiusSpinBox();
-  mRadiusSpinBox = new QgsSpinBox();
+  mRadiusSpinBox = new QgsDoubleSpinBox();
   mRadiusSpinBox->setMaximum( 99999999 );
   mRadiusSpinBox->setMinimum( 0 );
+  mRadiusSpinBox->setDecimals( 2 );
   mRadiusSpinBox->setPrefix( tr( "Radius of the circle: " ) );
   mRadiusSpinBox->setValue( mRadius );
   QgisApp::instance()->addUserInputWidget( mRadiusSpinBox );
   mRadiusSpinBox->setFocus( Qt::TabFocusReason );
-  QObject::connect( mRadiusSpinBox, SIGNAL( valueChanged( int ) ), this, SLOT( radiusSpinBoxChanged( int ) ) );
+  QObject::connect( mRadiusSpinBox, qgis::overload< double >::of( &QDoubleSpinBox::valueChanged ), this, &QgsMapToolCircle2TangentsPoint::radiusSpinBoxChanged );
 }
 
 void QgsMapToolCircle2TangentsPoint::deleteRadiusSpinBox()
@@ -265,7 +221,7 @@ void QgsMapToolCircle2TangentsPoint::deleteRadiusSpinBox()
   }
 }
 
-void QgsMapToolCircle2TangentsPoint::radiusSpinBoxChanged( int radius )
+void QgsMapToolCircle2TangentsPoint::radiusSpinBoxChanged( double radius )
 {
   mRadius = radius;
   getPossibleCenter( );

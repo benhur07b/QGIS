@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """QGIS Unit tests for QgsServerProject.
 
+ctest -R PyQgsServerProjectUtils -V
+
 .. note:: This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -10,8 +12,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Paul Blottiere'
 __date__ = '26/12/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import os
 

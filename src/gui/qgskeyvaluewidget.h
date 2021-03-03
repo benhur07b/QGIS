@@ -17,7 +17,7 @@
 #define QGSKEYVALUEWIDGET_H
 
 #include "qgstablewidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QAbstractTableModel>
 #include <QMap>
 #include "qgis_gui.h"
@@ -28,16 +28,16 @@
 
 /**
  * \ingroup gui
- * Table model to edit a QVariantMap.
- * \since QGIS 3.0
+ * \brief Table model to edit a QVariantMap.
  * \note not available in Python bindings
+ * \since QGIS 3.0
  */
 class GUI_EXPORT QgsKeyValueModel : public QAbstractTableModel
 {
     Q_OBJECT
   public:
 
-    explicit QgsKeyValueModel( QObject *parent = 0 );
+    explicit QgsKeyValueModel( QObject *parent = nullptr );
     void setMap( const QVariantMap &map );
     QVariantMap map() const;
 
@@ -60,7 +60,7 @@ class GUI_EXPORT QgsKeyValueModel : public QAbstractTableModel
 
 /**
  * \ingroup gui
- * Widget allowing to edit a QVariantMap, using a table.
+ * \brief Widget allowing to edit a QVariantMap, using a table.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsKeyValueWidget: public QgsTableWidgetBase
@@ -72,7 +72,7 @@ class GUI_EXPORT QgsKeyValueWidget: public QgsTableWidgetBase
     /**
      * Constructor.
      */
-    explicit QgsKeyValueWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsKeyValueWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Set the initial value of the widget.
@@ -80,7 +80,7 @@ class GUI_EXPORT QgsKeyValueWidget: public QgsTableWidgetBase
     void setMap( const QVariantMap &map );
 
     /**
-     * Get the edit value.
+     * Gets the edit value.
      * \returns the QVariantMap
      */
     QVariantMap map() const { return mModel.map(); }

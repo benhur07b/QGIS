@@ -18,6 +18,8 @@ email                : hugo dot mercier at oslandia dot com
 #include "qgsvirtuallayersqlitehelper.h"
 #include "qgsvirtuallayerblob.h"
 
+#include "sqlite3.h"
+
 #include <QRegExp>
 #include <QtDebug>
 
@@ -40,7 +42,12 @@ namespace QgsVirtualLayerQueryParser
     {
       char *errMsg = nullptr;
       int r = sqlite3_exec( db.get(), query.toUtf8().constData(), nullptr, nullptr, &errMsg );
-      QString err = QString::fromUtf8( errMsg );
+      QString err;
+      if ( r != SQLITE_OK )
+      {
+        err = QString::fromUtf8( errMsg );
+        sqlite3_free( errMsg );
+      }
       if ( r && err.startsWith( noSuchError ) )
       {
         QString tableName = err.mid( noSuchError.size() );
@@ -48,7 +55,7 @@ namespace QgsVirtualLayerQueryParser
 
         // create a dummy table to skip this error
         QString createStr = QStringLiteral( "CREATE TABLE \"%1\" (id int)" ).arg( tableName.replace( QLatin1String( "\"" ), QLatin1String( "\"\"" ) ) );
-        ( void )sqlite3_exec( db.get(), createStr.toUtf8().constData(), nullptr, NULL, NULL );
+        ( void )sqlite3_exec( db.get(), createStr.toUtf8().constData(), nullptr, nullptr, nullptr );
       }
       else
       {
@@ -75,7 +82,7 @@ namespace QgsVirtualLayerQueryParser
       ColumnDef def;
       def.setName( column );
       if ( type == QLatin1String( "int" ) )
-        def.setScalarType( QVariant::Int );
+        def.setScalarType( QVariant::LongLong );
       else if ( type == QLatin1String( "real" ) )
         def.setScalarType( QVariant::Double );
       else if ( type == QLatin1String( "text" ) )
@@ -104,7 +111,7 @@ namespace QgsVirtualLayerQueryParser
     // the type declared by one of the virtual tables
     // or null
     if ( columnType == QLatin1String( "int" ) )
-      d.setScalarType( QVariant::Int );
+      d.setScalarType( QVariant::LongLong );
     else if ( columnType == QLatin1String( "real" ) )
       d.setScalarType( QVariant::Double );
     else if ( columnType == QLatin1String( "text" ) )
@@ -205,7 +212,6 @@ namespace QgsVirtualLayerQueryParser
           qs += QLatin1String( ", " );
       }
       qs += QLatin1String( " FROM _tview LIMIT 1" );
-      qWarning() << qs;
 
       Sqlite::Query q( db, qs );
       if ( q.step() == SQLITE_ROW )
@@ -217,7 +223,7 @@ namespace QgsVirtualLayerQueryParser
           switch ( type )
           {
             case SQLITE_INTEGER:
-              tableDef[colIdx].setScalarType( QVariant::Int );
+              tableDef[colIdx].setScalarType( QVariant::LongLong );
               break;
             case SQLITE_FLOAT:
               tableDef[colIdx].setScalarType( QVariant::Double );

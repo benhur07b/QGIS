@@ -23,12 +23,12 @@ class QgsFileDownloader;
 
 /**
  * \ingroup gui
- * QgsFileDownloaderDialog is a QProgressDialog subclass which
+ * \brief QgsFileDownloaderDialog is a QProgressDialog subclass which
  * handles file downloads and user feedback.
  *
  * Internally, it uses QgsFileDownloader to handle the download,
  * while showing progress via a progress dialog and supporting
- * cancelation.
+ * cancellation.
  *
  * \note Until QGIS 3.0 this functionality was available via QgsFileDownloader.
  *
@@ -66,6 +66,7 @@ class GUI_EXPORT QgsFileDownloaderDialog : public QProgressDialog
 
   private:
 
+    QString mOutputFileName;
     QgsFileDownloader *mDownloader = nullptr;
 
 };

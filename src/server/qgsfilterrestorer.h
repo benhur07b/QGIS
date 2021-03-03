@@ -29,21 +29,29 @@ class QgsMapLayer;
 class QgsAccessControl;
 
 /**
- * RAII class to restore layer filters on destruction
+ * \ingroup server
+ * \brief RAII class to restore layer filters on destruction
+ * \since QGIS 3.0
  */
 class SERVER_EXPORT QgsOWSServerFilterRestorer
 {
   public:
 
-    QgsOWSServerFilterRestorer( const QgsAccessControl *accessControl )
-      : mAccessControl( accessControl )
-    {}
+    /**
+     * Default constructor for QgsOWSServerFilterRestorer.
+     */
+    QgsOWSServerFilterRestorer() = default;
 
     //! Destructor. When object is destroyed all original layer filters will be restored.
     ~QgsOWSServerFilterRestorer()
     {
       restoreLayerFilters( mOriginalLayerFilters );
     }
+
+    //! QgsOWSServerFilterRestorer cannot be copied
+    QgsOWSServerFilterRestorer( const QgsOWSServerFilterRestorer &rh ) = delete;
+    //! QgsOWSServerFilterRestorer cannot be copied
+    QgsOWSServerFilterRestorer &operator=( const QgsOWSServerFilterRestorer &rh ) = delete;
 
     void restoreLayerFilters( const QHash<QgsMapLayer *, QString> &filterMap );
 
@@ -67,11 +75,8 @@ class SERVER_EXPORT QgsOWSServerFilterRestorer
     static void applyAccessControlLayerFilters( const QgsAccessControl *accessControl, QgsMapLayer *mapLayer );
 
   private:
-    const QgsAccessControl *mAccessControl = nullptr;
     QHash<QgsMapLayer *, QString> mOriginalLayerFilters;
 
-    QgsOWSServerFilterRestorer( const QgsOWSServerFilterRestorer &rh );
-    QgsOWSServerFilterRestorer &operator=( const QgsOWSServerFilterRestorer &rh );
 };
 
 #endif // QGSFILTERRESTORER_H

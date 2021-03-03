@@ -97,7 +97,7 @@ void QgsAuthServersEditor::setupSslConfigsTree()
   mRootSslConfigItem = new QTreeWidgetItem(
     treeServerConfigs,
     QStringList( tr( "SSL Server Configurations" ) ),
-    ( int )QgsAuthServersEditor::Section );
+    static_cast<int>( QgsAuthServersEditor::Section ) );
   setItemBold_( mRootSslConfigItem );
   mRootSslConfigItem->setFlags( Qt::ItemIsEnabled );
   mRootSslConfigItem->setExpanded( true );
@@ -106,7 +106,8 @@ void QgsAuthServersEditor::setupSslConfigsTree()
 
 static void removeChildren_( QTreeWidgetItem *item )
 {
-  Q_FOREACH ( QTreeWidgetItem *child, item->takeChildren() )
+  const auto constTakeChildren = item->takeChildren();
+  for ( QTreeWidgetItem *child : constTakeChildren )
   {
     delete child;
   }
@@ -161,7 +162,7 @@ void QgsAuthServersEditor::appendSslConfigsToGroup( const QList<QgsAuthConfigSsl
   {
     QTreeWidgetItem *grpitem( new QTreeWidgetItem( parent,
                               QStringList() << it.key(),
-                              ( int )QgsAuthServersEditor::OrgName ) );
+                              static_cast<int>( QgsAuthServersEditor::OrgName ) ) );
     grpitem->setFirstColumnSpanned( true );
     grpitem->setFlags( Qt::ItemIsEnabled );
     grpitem->setExpanded( true );
@@ -194,7 +195,8 @@ void QgsAuthServersEditor::appendSslConfigsToItem( const QList<QgsAuthConfigSslS
   QBrush redb( QgsAuthGuiUtils::redColor() );
 
   // Columns: Common Name, Host, Expiry Date
-  Q_FOREACH ( const QgsAuthConfigSslServer &config, configs )
+  const auto constConfigs = configs;
+  for ( const QgsAuthConfigSslServer &config : constConfigs )
   {
     QSslCertificate cert( config.sslCertificate() );
     QString id( QgsAuthCertUtils::shaHexForCert( cert ) );
@@ -204,7 +206,7 @@ void QgsAuthServersEditor::appendSslConfigsToItem( const QList<QgsAuthConfigSslS
     coltxts << QString( config.sslHostPort() );
     coltxts << cert.expiryDate().toString();
 
-    QTreeWidgetItem *item( new QTreeWidgetItem( parent, coltxts, ( int )conftype ) );
+    QTreeWidgetItem *item( new QTreeWidgetItem( parent, coltxts, static_cast<int>( conftype ) ) );
 
     item->setIcon( 0, QgsApplication::getThemeIcon( QStringLiteral( "/mIconCertificate.svg" ) ) );
     if ( !QgsAuthCertUtils::certIsViable( cert ) )
@@ -221,8 +223,8 @@ void QgsAuthServersEditor::appendSslConfigsToItem( const QList<QgsAuthConfigSslS
 
 void QgsAuthServersEditor::selectionChanged( const QItemSelection &selected, const QItemSelection &deselected )
 {
-  Q_UNUSED( selected );
-  Q_UNUSED( deselected );
+  Q_UNUSED( selected )
+  Q_UNUSED( deselected )
   checkSelection();
 }
 
@@ -249,7 +251,7 @@ void QgsAuthServersEditor::checkSelection()
 
 void QgsAuthServersEditor::handleDoubleClick( QTreeWidgetItem *item, int col )
 {
-  Q_UNUSED( col );
+  Q_UNUSED( col )
   bool isconfig = true;
 
   switch ( ( QgsAuthServersEditor::ConfigType )item->type() )
@@ -288,7 +290,7 @@ void QgsAuthServersEditor::btnRemoveServer_clicked()
 
   if ( !item )
   {
-    QgsDebugMsg( "Current tree widget item not set" );
+    QgsDebugMsg( QStringLiteral( "Current tree widget item not set" ) );
     return;
   }
 
@@ -298,27 +300,27 @@ void QgsAuthServersEditor::btnRemoveServer_clicked()
   if ( digest.isEmpty() )
   {
     messageBar()->pushMessage( tr( "SSL custom config id missing" ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
   if ( hostport.isEmpty() )
   {
     messageBar()->pushMessage( tr( "SSL custom config host:port missing" ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
 
   if ( !QgsApplication::authManager()->existsSslCertCustomConfig( digest, hostport ) )
   {
-    QgsDebugMsg( QString( "SSL custom config does not exist in database for host:port, id %1:" )
+    QgsDebugMsg( QStringLiteral( "SSL custom config does not exist in database for host:port, id %1:" )
                  .arg( hostport, digest ) );
     return;
   }
 
   if ( QMessageBox::warning(
-         this, tr( "Remove SSL Custom Config" ),
+         this, tr( "Remove SSL Custom Configuration" ),
          tr( "Are you sure you want to remove the selected "
-             "SSL custom config from the database?\n\n"
+             "SSL custom configuration from the database?\n\n"
              "Operation can NOT be undone!" ),
          QMessageBox::Ok | QMessageBox::Cancel,
          QMessageBox::Cancel ) == QMessageBox::Cancel )
@@ -330,7 +332,7 @@ void QgsAuthServersEditor::btnRemoveServer_clicked()
   {
     messageBar()->pushMessage( tr( "ERROR removing SSL custom config from authentication database for host:port, id %1:" )
                                .arg( hostport, digest ),
-                               QgsMessageBar::CRITICAL );
+                               Qgis::Critical );
     return;
   }
 
@@ -344,7 +346,7 @@ void QgsAuthServersEditor::btnEditServer_clicked()
 
   if ( !item )
   {
-    QgsDebugMsg( "Current tree widget item not set" );
+    QgsDebugMsg( QStringLiteral( "Current tree widget item not set" ) );
     return;
   }
 
@@ -354,19 +356,19 @@ void QgsAuthServersEditor::btnEditServer_clicked()
   if ( digest.isEmpty() )
   {
     messageBar()->pushMessage( tr( "SSL custom config id missing." ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
   if ( hostport.isEmpty() )
   {
     messageBar()->pushMessage( tr( "SSL custom config host:port missing." ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
 
   if ( !QgsApplication::authManager()->existsSslCertCustomConfig( digest, hostport ) )
   {
-    QgsDebugMsg( "SSL custom config does not exist in database" );
+    QgsDebugMsg( QStringLiteral( "SSL custom config does not exist in database" ) );
     return;
   }
 
@@ -397,8 +399,8 @@ void QgsAuthServersEditor::btnGroupByOrg_toggled( bool checked )
 
 void QgsAuthServersEditor::authMessageOut( const QString &message, const QString &authtag, QgsAuthManager::MessageLevel level )
 {
-  int levelint = ( int )level;
-  messageBar()->pushMessage( authtag, message, ( QgsMessageBar::MessageLevel )levelint, 7 );
+  int levelint = static_cast<int>( level );
+  messageBar()->pushMessage( authtag, message, ( Qgis::MessageLevel )levelint, 7 );
 }
 
 void QgsAuthServersEditor::showEvent( QShowEvent *e )

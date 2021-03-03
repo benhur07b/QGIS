@@ -43,29 +43,11 @@
       </property>
       <addaction name="mActionZoomFullExtent"/>
       <addaction name="mActionZoomToSelected"/>
-      <addaction name="mActionZoomToLayer"/>
+      <addaction name="mActionZoomToLayers"/>
      </widget>
     </item>
     <item>
-     <widget class="QWidget" name="mMainWidget" native="true">
-      <layout class="QHBoxLayout" name="horizontalLayout">
-       <property name="spacing">
-        <number>0</number>
-       </property>
-       <property name="leftMargin">
-        <number>0</number>
-       </property>
-       <property name="topMargin">
-        <number>0</number>
-       </property>
-       <property name="rightMargin">
-        <number>0</number>
-       </property>
-       <property name="bottomMargin">
-        <number>0</number>
-       </property>
-      </layout>
-     </widget>
+     <widget class="QWidget" name="mMainWidget" native="true"/>
     </item>
    </layout>
   </widget>
@@ -105,6 +87,15 @@
    </property>
    <property name="text">
     <string>Zoom to &amp;Layer</string>
+   </property>
+  </action>
+  <action name="mActionZoomToLayers">
+   <property name="icon">
+    <iconset resource="../../images/images.qrc">
+     <normaloff>:/images/themes/default/mActionZoomToLayer.svg</normaloff>:/images/themes/default/mActionZoomToLayer.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Zoom to &amp;Layers</string>
    </property>
   </action>
   <action name="mActionZoomFullExtent">
@@ -161,6 +152,8 @@
   </customwidget>
  </customwidgets>
  <resources>
+  <include location="../../images/images.qrc"/>
+  <include location="../../images/images.qrc"/>
   <include location="../../images/images.qrc"/>
   <include location="../../images/images.qrc"/>
   <include location="../../images/images.qrc"/>

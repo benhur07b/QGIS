@@ -119,7 +119,7 @@ void QgsAuthAuthoritiesEditor::setupCaCertsTree()
   mDbCaSecItem = new QTreeWidgetItem(
     treeWidgetCAs,
     QStringList( QgsAuthCertUtils::getCaSourceName( QgsAuthCertUtils::InDatabase ) ),
-    ( int )QgsAuthAuthoritiesEditor::Section );
+    static_cast<int>( QgsAuthAuthoritiesEditor::Section ) );
   setItemBold_( mDbCaSecItem );
   mDbCaSecItem->setFlags( Qt::ItemIsEnabled );
   mDbCaSecItem->setExpanded( true );
@@ -128,7 +128,7 @@ void QgsAuthAuthoritiesEditor::setupCaCertsTree()
   mFileCaSecItem = new QTreeWidgetItem(
     treeWidgetCAs,
     QStringList( QgsAuthCertUtils::getCaSourceName( QgsAuthCertUtils::FromFile ) ),
-    ( int )QgsAuthAuthoritiesEditor::Section );
+    static_cast<int>( QgsAuthAuthoritiesEditor::Section ) );
   setItemBold_( mFileCaSecItem );
   mFileCaSecItem->setFlags( Qt::ItemIsEnabled );
   mFileCaSecItem->setExpanded( true );
@@ -137,7 +137,7 @@ void QgsAuthAuthoritiesEditor::setupCaCertsTree()
   mRootCaSecItem = new QTreeWidgetItem(
     treeWidgetCAs,
     QStringList( QgsAuthCertUtils::getCaSourceName( QgsAuthCertUtils::SystemRoot ) ),
-    ( int )QgsAuthAuthoritiesEditor::Section );
+    static_cast<int>( QgsAuthAuthoritiesEditor::Section ) );
   setItemBold_( mRootCaSecItem );
   mRootCaSecItem->setFlags( Qt::ItemIsEnabled );
   mRootCaSecItem->setExpanded( false );
@@ -160,7 +160,8 @@ void QgsAuthAuthoritiesEditor::refreshCaCertsView()
 
 static void removeChildren_( QTreeWidgetItem *item )
 {
-  Q_FOREACH ( QTreeWidgetItem *child, item->takeChildren() )
+  const auto constTakeChildren = item->takeChildren();
+  for ( QTreeWidgetItem *child : constTakeChildren )
   {
     delete child;
   }
@@ -233,7 +234,7 @@ void QgsAuthAuthoritiesEditor::appendCertsToGroup( const QList<QSslCertificate> 
   {
     QTreeWidgetItem *grpitem( new QTreeWidgetItem( parent,
                               QStringList() << it.key(),
-                              ( int )QgsAuthAuthoritiesEditor::OrgName ) );
+                              static_cast<int>( QgsAuthAuthoritiesEditor::OrgName ) ) );
     grpitem->setFirstColumnSpanned( true );
     grpitem->setFlags( Qt::ItemIsEnabled );
     grpitem->setExpanded( true );
@@ -270,7 +271,8 @@ void QgsAuthAuthoritiesEditor::appendCertsToItem( const QList<QSslCertificate> &
   QStringList untrustedids = mCertTrustCache.value( QgsAuthCertUtils::Untrusted );
 
   // Columns: Common Name, Serial #, Expiry Date
-  Q_FOREACH ( const QSslCertificate &cert, certs )
+  const auto constCerts = certs;
+  for ( const QSslCertificate &cert : constCerts )
   {
     QString id( QgsAuthCertUtils::shaHexForCert( cert ) );
 
@@ -285,16 +287,23 @@ void QgsAuthAuthoritiesEditor::appendCertsToItem( const QList<QSslCertificate> &
     {
       policy = QgsAuthCertUtils::getCertTrustName( QgsAuthCertUtils::Trusted );
     }
-    else if ( untrustedids.contains( id ) || !cert.isValid() )
+    else if ( untrustedids.contains( id )
+              || cert.isBlacklisted()
+              || cert.isNull()
+              || cert.expiryDate() <= QDateTime::currentDateTime()
+              || cert.effectiveDate() > QDateTime::currentDateTime() )
     {
       policy = QgsAuthCertUtils::getCertTrustName( QgsAuthCertUtils::Untrusted );
     }
     coltxts << policy;
 
-    QTreeWidgetItem *item( new QTreeWidgetItem( parent, coltxts, ( int )catype ) );
+    QTreeWidgetItem *item( new QTreeWidgetItem( parent, coltxts, static_cast<int>( catype ) ) );
 
     item->setIcon( 0, QgsApplication::getThemeIcon( QStringLiteral( "/mIconCertificate.svg" ) ) );
-    if ( !cert.isValid() )
+    if ( cert.isBlacklisted()
+         || cert.isNull()
+         || cert.expiryDate() <= QDateTime::currentDateTime()
+         || cert.effectiveDate() > QDateTime::currentDateTime() )
     {
       item->setForeground( 2, redb );
       item->setIcon( 0, QgsApplication::getThemeIcon( QStringLiteral( "/mIconCertificateUntrusted.svg" ) ) );
@@ -303,7 +312,10 @@ void QgsAuthAuthoritiesEditor::appendCertsToItem( const QList<QSslCertificate> &
     if ( trustedids.contains( id ) )
     {
       item->setForeground( 3, greenb );
-      if ( cert.isValid() )
+      if ( !cert.isBlacklisted()
+           && !cert.isNull()
+           && cert.expiryDate() > QDateTime::currentDateTime()
+           && cert.effectiveDate() <= QDateTime::currentDateTime() )
       {
         item->setIcon( 0, QgsApplication::getThemeIcon( QStringLiteral( "/mIconCertificateTrusted.svg" ) ) );
       }
@@ -357,7 +369,7 @@ void QgsAuthAuthoritiesEditor::showCertInfo( QTreeWidgetItem *item )
 
   if ( !cacertscache.contains( digest ) )
   {
-    QgsDebugMsg( "Certificate Authority not in CA certs cache" );
+    QgsDebugMsg( QStringLiteral( "Certificate Authority not in CA certs cache" ) );
     return;
   }
 
@@ -377,8 +389,8 @@ void QgsAuthAuthoritiesEditor::showCertInfo( QTreeWidgetItem *item )
 
 void QgsAuthAuthoritiesEditor::selectionChanged( const QItemSelection &selected, const QItemSelection &deselected )
 {
-  Q_UNUSED( selected );
-  Q_UNUSED( deselected );
+  Q_UNUSED( selected )
+  Q_UNUSED( deselected )
   checkSelection();
 }
 
@@ -413,7 +425,7 @@ void QgsAuthAuthoritiesEditor::checkSelection()
 
 void QgsAuthAuthoritiesEditor::handleDoubleClick( QTreeWidgetItem *item, int col )
 {
-  Q_UNUSED( col );
+  Q_UNUSED( col )
   bool iscert = true;
 
   switch ( ( QgsAuthAuthoritiesEditor::CaType )item->type() )
@@ -445,14 +457,15 @@ void QgsAuthAuthoritiesEditor::btnAddCa_clicked()
     if ( !QgsApplication::authManager()->storeCertAuthorities( certs ) )
     {
       messageBar()->pushMessage( tr( "ERROR storing CA(s) in authentication database" ),
-                                 QgsMessageBar::CRITICAL );
+                                 Qgis::Critical );
     }
 
     QgsApplication::authManager()->rebuildCaCertsCache();
 
     if ( dlg->certTrustPolicy() != QgsAuthCertUtils::DefaultTrust )
     {
-      Q_FOREACH ( const QSslCertificate &cert, certs )
+      const auto constCerts = certs;
+      for ( const QSslCertificate &cert : constCerts )
       {
         if ( !QgsApplication::authManager()->storeCertTrustPolicy( cert, dlg->certTrustPolicy() ) )
         {
@@ -478,7 +491,7 @@ void QgsAuthAuthoritiesEditor::btnRemoveCa_clicked()
 
   if ( !item )
   {
-    QgsDebugMsg( "Current tree widget item not set" );
+    QgsDebugMsg( QStringLiteral( "Current tree widget item not set" ) );
     return;
   }
 
@@ -487,7 +500,7 @@ void QgsAuthAuthoritiesEditor::btnRemoveCa_clicked()
   if ( digest.isEmpty() )
   {
     messageBar()->pushMessage( tr( "Certificate id missing" ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
 
@@ -496,7 +509,7 @@ void QgsAuthAuthoritiesEditor::btnRemoveCa_clicked()
 
   if ( !mappedcerts.contains( digest ) )
   {
-    QgsDebugMsg( "Certificate Authority not in mapped database CAs" );
+    QgsDebugMsg( QStringLiteral( "Certificate Authority not in mapped database CAs" ) );
     return;
   }
 
@@ -516,21 +529,21 @@ void QgsAuthAuthoritiesEditor::btnRemoveCa_clicked()
   if ( cert.isNull() )
   {
     messageBar()->pushMessage( tr( "Certificate could not be found in database for id %1:" ).arg( digest ),
-                               QgsMessageBar::WARNING );
+                               Qgis::Warning );
     return;
   }
 
   if ( !QgsApplication::authManager()->removeCertAuthority( cert ) )
   {
     messageBar()->pushMessage( tr( "ERROR removing CA from authentication database for id %1:" ).arg( digest ),
-                               QgsMessageBar::CRITICAL );
+                               Qgis::Critical );
     return;
   }
 
   if ( !QgsApplication::authManager()->removeCertTrustPolicy( cert ) )
   {
     messageBar()->pushMessage( tr( "ERROR removing cert trust policy from authentication database for id %1:" ).arg( digest ),
-                               QgsMessageBar::CRITICAL );
+                               Qgis::Critical );
     return;
   }
 
@@ -602,10 +615,10 @@ void QgsAuthAuthoritiesEditor::editDefaultTrustPolicy()
 
   for ( int i = 0; i < policies.size(); i++ )
   {
-    cmbpolicy->addItem( policies.at( i ).second, QVariant( ( int )policies.at( i ).first ) );
+    cmbpolicy->addItem( policies.at( i ).second, QVariant( static_cast<int>( policies.at( i ).first ) ) );
   }
 
-  int idx = cmbpolicy->findData( QVariant( ( int )mDefaultTrustPolicy ) );
+  int idx = cmbpolicy->findData( QVariant( static_cast<int>( mDefaultTrustPolicy ) ) );
   cmbpolicy->setCurrentIndex( idx == -1 ? 0 : idx );
   hlayout2->addWidget( cmbpolicy );
 
@@ -688,7 +701,8 @@ void QgsAuthAuthoritiesEditor::btnCaFile_clicked()
     if ( dlg->certTrustPolicy() != QgsAuthCertUtils::DefaultTrust )
     {
       QList<QSslCertificate> certs( QgsApplication::authManager()->extraFileCAs() );
-      Q_FOREACH ( const QSslCertificate &cert, certs )
+      const auto constCerts = certs;
+      for ( const QSslCertificate &cert : constCerts )
       {
         if ( !QgsApplication::authManager()->storeCertTrustPolicy( cert, dlg->certTrustPolicy() ) )
         {
@@ -738,7 +752,7 @@ void QgsAuthAuthoritiesEditor::btnCaFileClear_clicked()
       if ( !QgsApplication::authManager()->removeCertTrustPolicies( certs ) )
       {
         messageBar()->pushMessage( tr( "ERROR removing cert(s) trust policy from authentication database." ),
-                                   QgsMessageBar::CRITICAL );
+                                   Qgis::Critical );
         return;
       }
       QgsApplication::authManager()->rebuildCertTrustCache();
@@ -763,8 +777,8 @@ void QgsAuthAuthoritiesEditor::showTrustedCertificateAuthorities()
 
 void QgsAuthAuthoritiesEditor::authMessageOut( const QString &message, const QString &authtag, QgsAuthManager::MessageLevel level )
 {
-  int levelint = ( int )level;
-  messageBar()->pushMessage( authtag, message, ( QgsMessageBar::MessageLevel )levelint, 7 );
+  int levelint = static_cast<int>( level );
+  messageBar()->pushMessage( authtag, message, ( Qgis::MessageLevel )levelint, 7 );
 }
 
 void QgsAuthAuthoritiesEditor::showEvent( QShowEvent *e )

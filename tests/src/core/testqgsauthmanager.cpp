@@ -85,7 +85,7 @@ void TestQgsAuthManager::initTestCase()
   // make QGIS_AUTH_DB_DIR_PATH temp dir for qgis-auth.db and master password file
   QDir tmpDir = QDir::temp();
   QVERIFY2( tmpDir.mkpath( mTempDir ), "Couldn't make temp directory" );
-  qputenv( "QGIS_AUTH_DB_DIR_PATH", mTempDir.toAscii() );
+  qputenv( "QGIS_AUTH_DB_DIR_PATH", mTempDir.toLatin1() );
 
   // init app and auth manager
   QgsApplication::init();
@@ -117,7 +117,7 @@ void TestQgsAuthManager::initTestCase()
     QTextStream fout( &passfile );
     fout << QString( mPass ) << "\r\n";
     passfile.close();
-    qputenv( "QGIS_AUTH_PASSWORD_FILE", passfilepath.toAscii() );
+    qputenv( "QGIS_AUTH_PASSWORD_FILE", passfilepath.toLatin1() );
   }
   // qDebug( "QGIS_AUTH_PASSWORD_FILE=%s", qgetenv( "QGIS_AUTH_PASSWORD_FILE" ).constData() );
 
@@ -209,7 +209,7 @@ void TestQgsAuthManager::testMasterPassword()
   QCOMPARE( spy.count(), 1 );
   spyargs = spy.takeFirst();
   QVERIFY( spyargs.at( 0 ).type() == QVariant::Bool );
-  QVERIFY( spyargs.at( 0 ).toBool() == true );
+  QVERIFY( spyargs.at( 0 ).toBool() );
 
   authm->clearMasterPassword();
   QVERIFY( !authm->masterPasswordIsSet() );
@@ -218,7 +218,7 @@ void TestQgsAuthManager::testMasterPassword()
   QCOMPARE( spy.count(), 1 );
   spyargs = spy.takeFirst();
   QVERIFY( spyargs.at( 0 ).type() == QVariant::Bool );
-  QVERIFY( spyargs.at( 0 ).toBool() == false );
+  QVERIFY( !spyargs.at( 0 ).toBool() );
 
   authm->clearMasterPassword();
   QVERIFY( !authm->masterPasswordIsSet() );
@@ -227,7 +227,7 @@ void TestQgsAuthManager::testMasterPassword()
   QCOMPARE( spy.count(), 1 );
   spyargs = spy.takeFirst();
   QVERIFY( spyargs.at( 0 ).type() == QVariant::Bool );
-  QVERIFY( spyargs.at( 0 ).toBool() == true );
+  QVERIFY( spyargs.at( 0 ).toBool() );
 }
 
 void TestQgsAuthManager::testAuthConfigs()
@@ -426,6 +426,12 @@ void TestQgsAuthManager::doSync()
 void TestQgsAuthManager::testPasswordHelper()
 {
 
+  if ( QgsTest::isCIRun() )
+  {
+    {
+      QSKIP( "QtKeyChain not working on CI (requires dbus)" );
+    }
+  }
   QgsAuthManager *authm = QgsApplication::authManager();
   authm->clearMasterPassword();
 

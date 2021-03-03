@@ -52,7 +52,7 @@ QgsGrassModuleParam::QgsGrassModuleParam( QgsGrassModule *module, QString key,
   , mRequired( false )
   , mDirect( direct )
 {
-  Q_UNUSED( gdesc );
+  Q_UNUSED( gdesc )
   //mAnswer = qdesc.attribute("answer", "");
 
   if ( !qdesc.attribute( QStringLiteral( "answer" ) ).isNull() )
@@ -208,7 +208,7 @@ QgsGrassModuleGroupBoxItem::QgsGrassModuleGroupBoxItem( QgsGrassModule *module, 
 
 void QgsGrassModuleGroupBoxItem::resizeEvent( QResizeEvent *event )
 {
-  Q_UNUSED( event );
+  Q_UNUSED( event )
   adjustTitle();
   setToolTip( mToolTip );
 }
@@ -267,8 +267,8 @@ QgsGrassModuleOption::QgsGrassModuleOption( QgsGrassModule *module, QString key,
   , mValueType( String )
   , mOutputType( None )
   , mHaveLimits( false )
-  , mMin( INT_MAX )
-  , mMax( INT_MIN )
+  , mMin( std::numeric_limits<int>::max() )
+  , mMax( std::numeric_limits<int>::min() )
   , mIsOutput( false )
   , mUsesRegion( false )
 {
@@ -436,7 +436,7 @@ QgsGrassModuleOption::QgsGrassModuleOption( QgsGrassModule *module, QString key,
         {
           QDomElement e = n.toElement();
           QString val = e.text().trimmed();
-          minMax = val.split( QStringLiteral( "-" ) );
+          minMax = val.split( '-' );
           if ( minMax.size() == 2 )
           {
             mHaveLimits = true;
@@ -508,7 +508,7 @@ void QgsGrassModuleOption::addRow()
   {
     if ( mHaveLimits )
     {
-      mValidator = new QIntValidator( ( int )mMin, ( int )mMax, this );
+      mValidator = new QIntValidator( static_cast<int>( mMin ), static_cast<int>( mMax ), this );
     }
     else
     {
@@ -573,10 +573,10 @@ void QgsGrassModuleOption::removeRow()
 
 void QgsGrassModuleOption::browse( bool checked )
 {
-  Q_UNUSED( checked );
+  Q_UNUSED( checked )
 
   QgsSettings settings;
-  QString lastDir = settings.value( QStringLiteral( "GRASS/lastDirectOutputDir" ), "" ).toString();
+  QString lastDir = settings.value( QStringLiteral( "GRASS/lastDirectOutputDir" ), QString() ).toString();
   QString fileName = QFileDialog::getSaveFileName( this, tr( "Output file" ), lastDir, tr( "GeoTIFF" ) + " (*.tif)" );
   if ( !fileName.isEmpty() )
   {
@@ -654,7 +654,7 @@ QString QgsGrassModuleOption::value()
         values.append( mValues[i] );
       }
     }
-    value = values.join( QStringLiteral( "," ) );
+    value = values.join( QLatin1Char( ',' ) );
   }
   return value;
 }
@@ -751,7 +751,7 @@ QString QgsGrassModuleOption::ready()
 QgsGrassModuleFlag::QgsGrassModuleFlag( QgsGrassModule *module, QString key,
                                         QDomElement &qdesc, QDomElement &gdesc, QDomNode &gnode,
                                         bool direct, QWidget *parent )
-  : QgsGrassModuleCheckBox( QLatin1String( "" ), parent ), QgsGrassModuleParam( module, key, qdesc, gdesc, gnode, direct )
+  : QgsGrassModuleCheckBox( QString(), parent ), QgsGrassModuleParam( module, key, qdesc, gdesc, gnode, direct )
 {
 
   if ( mHidden )
@@ -871,7 +871,7 @@ void QgsGrassModuleGdalInput::updateQgisLayers()
   {
     if ( !layer ) continue;
 
-    if ( mType == Ogr && layer->type() == QgsMapLayer::VectorLayer )
+    if ( mType == Ogr && layer->type() == QgsMapLayerType::VectorLayer )
     {
       QgsVectorLayer *vector = qobject_cast<QgsVectorLayer *>( layer );
       if ( !vector ||
@@ -902,18 +902,18 @@ void QgsGrassModuleGdalInput::updateQgisLayers()
       }
       else if ( vector->providerType() == QLatin1String( "ogr" ) )
       {
-        QStringList items = provider->dataSourceUri().split( QStringLiteral( "|" ) );
+        QStringList items = provider->dataSourceUri().split( '|' );
 
         if ( items.size() > 1 )
         {
           uri = items[0];
 
-          ogrLayer = QLatin1String( "" );
-          ogrWhere = QLatin1String( "" );
+          ogrLayer.clear();
+          ogrWhere.clear();
 
           for ( int i = 1; i < items.size(); i++ )
           {
-            QStringList args = items[i].split( QStringLiteral( "=" ) );
+            QStringList args = items[i].split( '=' );
 
             if ( args.size() != 2 )
               continue;
@@ -930,14 +930,14 @@ void QgsGrassModuleGdalInput::updateQgisLayers()
 
           if ( uri.endsWith( QLatin1String( ".shp" ), Qt::CaseInsensitive ) )
           {
-            ogrLayer = QLatin1String( "" );
+            ogrLayer.clear();
           }
         }
         else
         {
           uri = items[0];
-          ogrLayer = QLatin1String( "" );
-          ogrWhere = QLatin1String( "" );
+          ogrLayer.clear();
+          ogrWhere.clear();
         }
       }
 
@@ -952,15 +952,15 @@ void QgsGrassModuleGdalInput::updateQgisLayers()
       mOgrLayers.push_back( ogrLayer );
       mOgrWheres.push_back( ogrWhere );
     }
-    else if ( mType == Gdal && layer->type() == QgsMapLayer::RasterLayer )
+    else if ( mType == Gdal && layer->type() == QgsMapLayerType::RasterLayer )
     {
       QString uri = layer->source();
       mLayerComboBox->addItem( layer->name() );
       if ( layer->name() == current )
         mLayerComboBox->setItemText( mLayerComboBox->currentIndex(), current );
       mUri.push_back( uri );
-      mOgrLayers.push_back( QLatin1String( "" ) );
-      mOgrWheres.push_back( QLatin1String( "" ) );
+      mOgrLayers.push_back( QString() );
+      mOgrWheres.push_back( QString() );
     }
   }
 }
@@ -1111,7 +1111,7 @@ void QgsGrassModuleVectorField::updateFields()
     QString current = comboBox->currentText();
     comboBox->clear();
 
-    if ( mLayerInput == 0 )
+    if ( mLayerInput == nullptr )
     {
       continue;
     }
@@ -1148,7 +1148,7 @@ QStringList QgsGrassModuleVectorField::options()
 
   if ( !valueList.isEmpty() )
   {
-    QString opt = mKey + "=" + valueList.join( QStringLiteral( "," ) );
+    QString opt = mKey + "=" + valueList.join( QLatin1Char( ',' ) );
     list << opt;
   }
 
@@ -1219,7 +1219,7 @@ void QgsGrassModuleSelection::onLayerChanged()
     {
       QString uri = vectorLayer->dataProvider()->dataSourceUri();
       QgsDebugMsg( "uri = " + uri );
-      QString layerCode = uri.split( QStringLiteral( "/" ) ).last();
+      QString layerCode = uri.split( '/' ).last();
       if ( mLayerInput->currentLayerCodes().contains( layerCode ) )
       {
         // Qt::UserRole+1 may be also uri (AddLayer) but hardly matching layer id
@@ -1293,7 +1293,7 @@ QgsVectorLayer *QgsGrassModuleSelection::currentSelectionLayer()
   QString id = currentSelectionLayerId();
   if ( id.isEmpty() )
   {
-    return 0;
+    return nullptr;
   }
   QgsMapLayer *layer = QgsProject::instance()->mapLayer( id );
   return qobject_cast<QgsVectorLayer *>( layer );
@@ -1364,7 +1364,7 @@ void QgsGrassModuleSelection::onLayerSelectionChanged()
     {
       if ( !list.isEmpty() )
       {
-        list += QLatin1String( "," );
+        list += QLatin1Char( ',' );
       }
       list += QString::number( cat );
     }
@@ -1464,19 +1464,19 @@ void QgsGrassModuleFile::browse()
 
   if ( mType == Multiple )
   {
-    QString path = mLineEdit->text().split( QStringLiteral( "," ) ).first();
+    QString path = mLineEdit->text().split( ',' ).first();
     if ( path.isEmpty() )
       path = lastDir;
     else
       path = QFileInfo( path ).absolutePath();
 
-    QStringList files = QFileDialog::getOpenFileNames( this, 0, path, mFilters );
+    QStringList files = QFileDialog::getOpenFileNames( this, nullptr, path, mFilters );
     if ( files.isEmpty() )
       return;
 
     lastDir = QFileInfo( files[0] ).absolutePath();
 
-    mLineEdit->setText( files.join( QStringLiteral( "," ) ) );
+    mLineEdit->setText( files.join( QLatin1Char( ',' ) ) );
   }
   else
   {
@@ -1485,11 +1485,11 @@ void QgsGrassModuleFile::browse()
       selectedFile = lastDir;
 
     if ( mType == New )
-      selectedFile = QFileDialog::getSaveFileName( this, 0, selectedFile, mFilters );
+      selectedFile = QFileDialog::getSaveFileName( this, nullptr, selectedFile, mFilters );
     else if ( mType == Directory )
-      selectedFile = QFileDialog::getExistingDirectory( this, 0, selectedFile );
+      selectedFile = QFileDialog::getExistingDirectory( this, nullptr, selectedFile );
     else
-      selectedFile = QFileDialog::getOpenFileName( this, 0, selectedFile, mFilters );
+      selectedFile = QFileDialog::getOpenFileName( this, nullptr, selectedFile, mFilters );
 
     lastDir = QFileInfo( selectedFile ).absolutePath();
 
@@ -1531,7 +1531,7 @@ QgsGrassModuleCheckBox::QgsGrassModuleCheckBox( const QString &text, QWidget *pa
 
 void QgsGrassModuleCheckBox::resizeEvent( QResizeEvent *event )
 {
-  Q_UNUSED( event );
+  Q_UNUSED( event )
   adjustText();
 }
 void QgsGrassModuleCheckBox::setText( const QString &text )

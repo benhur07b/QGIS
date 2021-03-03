@@ -31,6 +31,8 @@
 
 #include <QTime>
 
+#define SIP_NO_FILE
+
 namespace Qt3DCore
 {
   class QEntity;
@@ -43,10 +45,46 @@ class QgsChunkQueueJobFactory;
 
 
 /**
+ * Helper class to store integer coordinates of a chunk node.
+ *
+ * - "d" is the depth of the tree
+ * - when used with a quadtree, "x" and "y" are the coordinates within the depth level of the tree ("z" coordinate is always -1)
+ * - when used with an octree, "x", "y" and "z" are the coordinates within the depth level of the tree
+ */
+struct QgsChunkNodeId
+{
+  //! Constructs node ID
+  QgsChunkNodeId( int _d = -1, int _x = -1, int _y = -1, int _z = -1 )
+    : d( _d ), x( _x ), y( _y ), z( _z ) {}
+
+  int d, x, y, z;
+
+  //! Returns textual representation of the node ID in form of "Z/X/Y"
+  QString text() const
+  {
+    if ( z == -1 )
+      return QStringLiteral( "%1/%2/%3" ).arg( d ).arg( x ).arg( y );   // quadtree
+    else
+      return QStringLiteral( "%1/%2/%3/%4" ).arg( d ).arg( x ).arg( y ).arg( z );   // octree
+  }
+
+  bool operator==( const QgsChunkNodeId &other ) const
+  {
+    return d == other.d && x == other.x && y == other.y && z == other.z;
+  }
+
+  bool operator!=( const QgsChunkNodeId &other ) const
+  {
+    return !( *this == other );
+  }
+};
+
+/**
  * \ingroup 3d
- * Data structure for keeping track of chunks of data for 3D entities that use "out of core" rendering,
- * i.e. not all of the data are available in the memory all the time. This is useful for large datasets
- * where it may be impossible to load all data into memory or the rendering would get very slow.
+ * \brief Data structure for keeping track of chunks of data for 3D entities that use "out of core" rendering,
+ * i.e. not all of the data are available in the memory all the time.
+ *
+ * This is useful for large datasets where it may be impossible to load all data into memory or the rendering would get very slow.
  * This is currently used for rendering of terrain, but it is not limited to it and may be used for
  * other data as well.
  *
@@ -59,8 +97,9 @@ class QgsChunkQueueJobFactory;
 class QgsChunkNode
 {
   public:
+
     //! constructs a skeleton chunk
-    QgsChunkNode( int tileX, int tileY, int tileZ, const QgsAABB &bbox, float error, QgsChunkNode *parent = nullptr );
+    QgsChunkNode( const QgsChunkNodeId &nodeId, const QgsAABB &bbox, float error, QgsChunkNode *parent = nullptr );
 
     ~QgsChunkNode();
 
@@ -96,35 +135,33 @@ class QgsChunkNode
     QgsAABB bbox() const { return mBbox; }
     //! Returns measure geometric/texture error of the chunk (in world coordinates)
     float error() const { return mError; }
-    //! Returns chunk tile X coordinate of the tiling scheme
-    int tileX() const { return mTileX; }
-    //! Returns chunk tile Y coordinate of the tiling scheme
-    int tileY() const { return mTileY; }
-    //! Returns chunk tile Z coordinate of the tiling scheme
-    int tileZ() const { return mTileZ; }
-    //! Returns pointer to the parent node. Parent is a null pointer in the root node
+    //! Returns chunk tile coordinates of the tiling scheme
+    QgsChunkNodeId tileId() const { return mNodeId; }
+    //! Returns pointer to the parent node. Parent is NULLPTR in the root node
     QgsChunkNode *parent() const { return mParent; }
-    //! Returns array of the four children. Children may be null pointers if they were not created yet
+    //! Returns number of children of the node (returns -1 if the node has not yet been populated with populateChildren())
+    int childCount() const { return mChildCount; }
+    //! Returns array of the four children. Children may be NULLPTR if they were not created yet
     QgsChunkNode *const *children() const { return mChildren; }
     //! Returns current state of the node
     State state() const { return mState; }
 
-    //! Returns node's entry in the loader queue. Not null only when in QueuedForLoad / QueuedForUpdate state
+    //! Returns node's entry in the loader queue. Not NULLPTR only when in QueuedForLoad / QueuedForUpdate state
     QgsChunkListEntry *loaderQueueEntry() const { return mLoaderQueueEntry; }
-    //! Returns node's entry in the replacement queue. Not null only when in Loaded / QueuedForUpdate / Updating state
+    //! Returns node's entry in the replacement queue. Not NULLPTR only when in Loaded / QueuedForUpdate / Updating state
     QgsChunkListEntry *replacementQueueEntry() const { return mReplacementQueueEntry; }
-    //! Returns loader of the node. Not null only when in Loading state
+    //! Returns loader of the node. Not NULLPTR only when in Loading state
     QgsChunkLoader *loader() const { return mLoader; }
-    //! Returns associated entity (3D object). Not null only when Loaded / QueuedForUpdate / Updating state
+    //! Returns associated entity (3D object). Not NULLPTR only when Loaded / QueuedForUpdate / Updating state
     Qt3DCore::QEntity *entity() const { return mEntity; }
-    //! Returns updater job. Not null only when in Updating state
+    //! Returns updater job. Not NULLPTR only when in Updating state
     QgsChunkQueueJob *updater() const { return mUpdater; }
 
-    //! Returns true if all child chunks are available and thus this node could be swapped to the child nodes
-    bool allChildChunksResident( const QTime &currentTime ) const;
+    //! Returns TRUE if all child chunks are available and thus this node could be swapped to the child nodes
+    bool allChildChunksResident( QTime currentTime ) const;
 
-    //! make sure that all child nodes are at least skeleton nodes
-    void ensureAllChildrenExist();
+    //! Sets child nodes of this node. Takes ownership of all objects. Must be only called once.
+    void populateChildren( const QVector<QgsChunkNode *> &children );
 
     //! how deep is the node in the tree (zero means root node, every level adds one)
     int level() const;
@@ -172,14 +209,20 @@ class QgsChunkNode
     //! called when bounding box
     void setExactBbox( const QgsAABB &box );
 
+    //! Sets whether the node has any data to be displayed. Can be used to set to FALSE after load returned no data
+    void setHasData( bool hasData ) { mHasData = hasData; }
+    //! Returns whether the node has any data to be displayed. If not, it will be kept as a skeleton node and will not get loaded anymore
+    bool hasData() const { return mHasData; }
+
   private:
     QgsAABB mBbox;      //!< Bounding box in world coordinates
-    float mError;    //!< Error of the node in world coordinates
+    float mError;    //!< Error of the node in world coordinates (negative error means that chunk at this level has no data, but there may be children that do)
 
-    int mTileX, mTileY, mTileZ;  //!< Chunk coordinates (for use with a tiling scheme)
+    QgsChunkNodeId mNodeId;  //!< Chunk coordinates (for use with a tiling scheme)
 
     QgsChunkNode *mParent;        //!< TODO: should be shared pointer
-    QgsChunkNode *mChildren[4];   //!< TODO: should be weak pointers. May be null if not created yet or removed already
+    QgsChunkNode *mChildren[8];   //!< TODO: should be weak pointers. May be nullptr if not created yet or removed already
+    int mChildCount = -1;         //! Number of children (-1 == not yet populated)
 
     State mState;  //!< State of the node
 
@@ -193,6 +236,7 @@ class QgsChunkNode
     QgsChunkQueueJob *mUpdater;                //!< Object that does update of the chunk (not null <=> Updating state)
 
     QTime mEntityCreatedTime;
+    bool mHasData = true;   //!< Whether there are (will be) any data in this node (or any descentants) and so whether it makes sense to load this node
 };
 
 /// @endcond

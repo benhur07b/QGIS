@@ -18,10 +18,11 @@
 #include "qgsexpressionfunction.h"
 #include "qgsexpression.h"
 
-QgsSqlExpressionCompiler::QgsSqlExpressionCompiler( const QgsFields &fields, Flags flags )
+QgsSqlExpressionCompiler::QgsSqlExpressionCompiler( const QgsFields &fields, Flags flags, bool ignoreStaticNodes )
   : mResult( None )
   , mFields( fields )
   , mFlags( flags )
+  , mIgnoreStaticNodes( ignoreStaticNodes )
 {
 }
 
@@ -36,6 +37,18 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compile( const QgsExp
 QString QgsSqlExpressionCompiler::result()
 {
   return mResult;
+}
+
+bool QgsSqlExpressionCompiler::opIsStringComparison( QgsExpressionNodeBinaryOperator::BinaryOperator op )
+{
+  if ( op == QgsExpressionNodeBinaryOperator::BinaryOperator::boILike ||
+       op == QgsExpressionNodeBinaryOperator::BinaryOperator::boLike ||
+       op == QgsExpressionNodeBinaryOperator::BinaryOperator::boNotILike ||
+       op == QgsExpressionNodeBinaryOperator::BinaryOperator::boNotLike ||
+       op == QgsExpressionNodeBinaryOperator::BinaryOperator::boRegexp )
+    return true;
+  else
+    return false;
 }
 
 QString QgsSqlExpressionCompiler::quotedIdentifier( const QString &identifier )
@@ -61,7 +74,7 @@ QString QgsSqlExpressionCompiler::quotedValue( const QVariant &value, bool &ok )
       return value.toString();
 
     case QVariant::Bool:
-      return value.toBool() ? "TRUE" : "FALSE";
+      return value.toBool() ? QStringLiteral( "TRUE" ) : QStringLiteral( "FALSE" );
 
     default:
     case QVariant::String:
@@ -76,6 +89,10 @@ QString QgsSqlExpressionCompiler::quotedValue( const QVariant &value, bool &ok )
 
 QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const QgsExpressionNode *node, QString &result )
 {
+  QgsSqlExpressionCompiler::Result staticRes = replaceNodeByStaticCachedValueIfPossible( node, result );
+  if ( staticRes != Fail )
+    return staticRes;
+
   switch ( node->nodeType() )
   {
     case QgsExpressionNode::ntUnaryOperator:
@@ -253,6 +270,9 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
       QString left;
       Result lr( compileNode( n->opLeft(), left ) );
 
+      if ( opIsStringComparison( n ->op() ) )
+        left = castToText( left );
+
       QString right;
       Result rr( compileNode( n->opRight(), right ) );
 
@@ -310,11 +330,14 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
     {
       const QgsExpressionNodeColumnRef *n = static_cast<const QgsExpressionNodeColumnRef *>( node );
 
-      if ( mFields.indexFromName( n->name() ) == -1 )
+      // QGIS expressions don't care about case sensitive field naming, so we match case insensitively here to the
+      // layer's fields and then retrieve the actual case of the field name for use in the compilation
+      const int fieldIndex = mFields.lookupField( n->name() );
+      if ( fieldIndex == -1 )
         // Not a provider field
         return Fail;
 
-      result = quotedIdentifier( n->name() );
+      result = quotedIdentifier( mFields.at( fieldIndex ).name() );
 
       return Complete;
     }
@@ -325,7 +348,8 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
       QStringList list;
 
       Result inResult = Complete;
-      Q_FOREACH ( const QgsExpressionNode *ln, n->list()->list() )
+      const auto constList = n->list()->list();
+      for ( const QgsExpressionNode *ln : constList )
       {
         QString s;
         Result r = compileNode( ln, s );
@@ -344,7 +368,7 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
       if ( rn != Complete && rn != Partial )
         return rn;
 
-      result = QStringLiteral( "%1 %2IN (%3)" ).arg( nd, n->isNotIn() ? "NOT " : "", list.join( QStringLiteral( "," ) ) );
+      result = QStringLiteral( "%1 %2IN (%3)" ).arg( nd, n->isNotIn() ? QStringLiteral( "NOT " ) : QString(), list.join( ',' ) );
       return ( inResult == Partial || rn == Partial ) ? Partial : Complete;
     }
 
@@ -356,13 +380,14 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
       // get sql function to compile node expression
       QString nd = sqlFunctionFromFunctionName( fd->name() );
       // if no sql function the node can't be compiled
-      if ( nd.isEmpty() )
+      if ( nd.isNull() )
         return Fail;
 
       // compile arguments
       QStringList args;
       Result inResult = Complete;
-      Q_FOREACH ( const QgsExpressionNode *ln, n->args()->list() )
+      const auto constList = n->args()->list();
+      for ( const QgsExpressionNode *ln : constList )
       {
         QString s;
         Result r = compileNode( ln, s );
@@ -380,11 +405,14 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
       args = sqlArgumentsFromFunctionName( fd->name(), args );
 
       // build result
-      result = QStringLiteral( "%1(%2)" ).arg( nd, args.join( ',' ) );
+      result = !nd.isEmpty() ? QStringLiteral( "%1(%2)" ).arg( nd, args.join( ',' ) ) : args.join( ',' );
       return inResult == Partial ? Partial : Complete;
     }
 
     case QgsExpressionNode::ntCondition:
+      break;
+
+    case QgsExpressionNode::ntIndexOperator:
       break;
   }
 
@@ -393,26 +421,55 @@ QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::compileNode( const Qg
 
 QString QgsSqlExpressionCompiler::sqlFunctionFromFunctionName( const QString &fnName ) const
 {
-  Q_UNUSED( fnName );
+  Q_UNUSED( fnName )
   return QString();
 }
 
 QStringList QgsSqlExpressionCompiler::sqlArgumentsFromFunctionName( const QString &fnName, const QStringList &fnArgs ) const
 {
-  Q_UNUSED( fnName );
+  Q_UNUSED( fnName )
   return QStringList( fnArgs );
 }
 
 QString QgsSqlExpressionCompiler::castToReal( const QString &value ) const
 {
-  Q_UNUSED( value );
+  Q_UNUSED( value )
   return QString();
+}
+
+QString QgsSqlExpressionCompiler::castToText( const QString &value ) const
+{
+  return value;
 }
 
 QString QgsSqlExpressionCompiler::castToInt( const QString &value ) const
 {
-  Q_UNUSED( value );
+  Q_UNUSED( value )
   return QString();
+}
+
+QgsSqlExpressionCompiler::Result QgsSqlExpressionCompiler::replaceNodeByStaticCachedValueIfPossible( const QgsExpressionNode *node, QString &result )
+{
+  if ( mIgnoreStaticNodes )
+    return Fail;
+
+  if ( node->hasCachedStaticValue() )
+  {
+    bool ok = false;
+    if ( mFlags.testFlag( CaseInsensitiveStringMatch ) && node->cachedStaticValue().type() == QVariant::String )
+    {
+      // provider uses case insensitive matching, so if literal was a string then we only have a Partial compilation and need to
+      // double check results using QGIS' expression engine
+      result = quotedValue( node->cachedStaticValue(), ok );
+      return ok ? Partial : Fail;
+    }
+    else
+    {
+      result = quotedValue( node->cachedStaticValue(), ok );
+      return ok ? Complete : Fail;
+    }
+  }
+  return Fail;
 }
 
 bool QgsSqlExpressionCompiler::nodeIsNullLiteral( const QgsExpressionNode *node ) const

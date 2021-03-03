@@ -76,13 +76,13 @@ class GUI_EXPORT QgsDrawSourceWidget : public QgsPaintEffectWidget, private Ui::
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsDrawSourceWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsDrawSourceEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
+    void blockSignals( bool block );
 
   private slots:
 
@@ -109,18 +109,19 @@ class GUI_EXPORT QgsBlurWidget : public QgsPaintEffectWidget, private Ui::Widget
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsBlurWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsBlurEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
+    void blockSignals( bool block );
 
   private slots:
 
     void mBlurTypeCombo_currentIndexChanged( int index );
-    void mBlurStrengthSpnBx_valueChanged( int value );
+    void mBlurStrengthSpnBx_valueChanged( double value );
+    void mBlurUnitWidget_changed();
     void opacityChanged( double value );
     void mDrawModeComboBox_currentIndexChanged( int index );
     void mBlendCmbBx_currentIndexChanged( int index );
@@ -144,13 +145,13 @@ class GUI_EXPORT QgsShadowEffectWidget : public QgsPaintEffectWidget, private Ui
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsShadowEffectWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsShadowEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
+    void blockSignals( bool block );
 
   private slots:
     void mShadowOffsetAngleSpnBx_valueChanged( int value );
@@ -161,7 +162,8 @@ class GUI_EXPORT QgsShadowEffectWidget : public QgsPaintEffectWidget, private Ui
     void mShadowColorBtn_colorChanged( const QColor &color );
     void mDrawModeComboBox_currentIndexChanged( int index );
     void mShadowBlendCmbBx_currentIndexChanged( int index );
-    void mShadowRadiuSpnBx_valueChanged( int value );
+    void mShadowRadiuSpnBx_valueChanged( double value );
+    void mBlurUnitWidget_changed();
 };
 
 
@@ -180,13 +182,13 @@ class GUI_EXPORT QgsGlowWidget : public QgsPaintEffectWidget, private Ui::Widget
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsGlowWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsGlowEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
+    void blockSignals( bool block );
 
   private slots:
     void colorModeChanged();
@@ -196,7 +198,8 @@ class GUI_EXPORT QgsGlowWidget : public QgsPaintEffectWidget, private Ui::Widget
     void mColorBtn_colorChanged( const QColor &color );
     void mBlendCmbBx_currentIndexChanged( int index );
     void mDrawModeComboBox_currentIndexChanged( int index );
-    void mBlurRadiusSpnBx_valueChanged( int value );
+    void mBlurRadiusSpnBx_valueChanged( double value );
+    void mBlurUnitWidget_changed();
     void applyColorRamp();
 
 };
@@ -216,13 +219,13 @@ class GUI_EXPORT QgsTransformWidget : public QgsPaintEffectWidget, private Ui::W
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsTransformWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsTransformEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
+    void blockSignals( bool block );
 
   private slots:
 
@@ -256,14 +259,14 @@ class GUI_EXPORT QgsColorEffectWidget : public QgsPaintEffectWidget, private Ui:
 
     static QgsPaintEffectWidget *create() SIP_FACTORY { return new QgsColorEffectWidget(); }
 
-    virtual void setPaintEffect( QgsPaintEffect *effect ) override;
+    void setPaintEffect( QgsPaintEffect *effect ) override;
 
   private:
     QgsColorEffect *mEffect = nullptr;
 
     void initGui();
-    void blockSignals( const bool block );
-    void enableColorizeControls( const bool enable );
+    void blockSignals( bool block );
+    void enableColorizeControls( bool enable );
 
   private slots:
 

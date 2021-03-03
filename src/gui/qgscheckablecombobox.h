@@ -23,19 +23,20 @@
 #include <QStandardItemModel>
 #include <QStyledItemDelegate>
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
+#include "qgis.h"
 
 class QEvent;
 
 /**
  * \class QgsCheckableItemModel
  * \ingroup gui
- * QStandardItemModel subclass which makes all items checkable
+ * \brief QStandardItemModel subclass which makes all items checkable
  * by default.
- * \since QGIS 3.0
  * \note not available in Python bindings
- **/
+ * \since QGIS 3.0
+ */
 #ifndef SIP_RUN
 class QgsCheckableItemModel : public QStandardItemModel
 {
@@ -55,7 +56,7 @@ class QgsCheckableItemModel : public QStandardItemModel
      * (ItemIsUserCheckable).
      * \param index item index
      */
-    virtual Qt::ItemFlags flags( const QModelIndex &index ) const;
+    Qt::ItemFlags flags( const QModelIndex &index ) const override;
 
     /**
      * Returns the data stored under the given role for the item
@@ -63,35 +64,34 @@ class QgsCheckableItemModel : public QStandardItemModel
      * \param index item index
      * \param role data role
      */
-    virtual QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const;
+    QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
 
     /**
      * Sets the role data for the item at index to value.
      * \param index item index
      * \param value data value
      * \param role data role
-     * \returns true on success, false otherwise
+     * \returns TRUE on success, FALSE otherwise
      */
-    virtual bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole );
+    bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
 
   signals:
 
     /**
-     * This signal is emitted whenever the items checkstate has changed.
+     * Emitted whenever the item's checkstate has changed.
      */
-    void itemCheckStateChanged();
+    void itemCheckStateChanged( const QModelIndex &index );
 };
 
 
 /**
  * \class QgsCheckBoxDelegate
  * \ingroup gui
- * QStyledItemDelegate subclass for QgsCheckableComboBox. Needed for
+ * \brief QStyledItemDelegate subclass for QgsCheckableComboBox. Needed for
  * correct drawing of the checkable items on Mac and GTK.
- * \since QGIS 3.0
  * \note not available in Python bindings
- **/
-
+ * \since QGIS 3.0
+ */
 class QgsCheckBoxDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
@@ -111,17 +111,16 @@ class QgsCheckBoxDelegate : public QStyledItemDelegate
      * \param option style option
      * \param index item index
      */
-    virtual void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index ) const;
+    void paint( QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index ) const override;
 };
 #endif
 
 /**
  * \class QgsCheckableComboBox
  * \ingroup gui
- * QComboBox subclass which allows selecting multiple items.
+ * \brief QComboBox subclass which allows selecting multiple items.
  * \since QGIS 3.0
- **/
-
+ */
 class GUI_EXPORT QgsCheckableComboBox : public QComboBox
 {
     Q_OBJECT
@@ -166,10 +165,25 @@ class GUI_EXPORT QgsCheckableComboBox : public QComboBox
     void setDefaultText( const QString &text );
 
     /**
+     * Adds an item to the combobox with the given \a text, check \a state (stored in the Qt::CheckStateRole)
+     * and containing the specified \a userData (stored in the Qt::UserRole).
+     * The item is appended to the list of existing items.
+     * \since QGIS 3.16
+     */
+    void addItemWithCheckState( const QString &text, Qt::CheckState state, const QVariant &userData = QVariant() );
+
+    /**
      * Returns currently checked items.
      * \see setCheckedItems()
      */
     QStringList checkedItems() const;
+
+    /**
+     * Returns userData (stored in the Qt::UserRole) associated with
+     * currently checked items.
+     * \see checkedItems()
+     */
+    QVariantList checkedItemsData() const;
 
     /**
      * Returns the checked state of the item identified by index
@@ -197,20 +211,27 @@ class GUI_EXPORT QgsCheckableComboBox : public QComboBox
     void toggleItemCheckState( int index );
 
     /**
+     * Returns the custom item model which handles checking the items
+     * \see QgsCheckableItemModel
+     * \since QGIS 3.16
+     */
+    QgsCheckableItemModel *model() const SIP_SKIP {return mModel;}
+
+    /**
      * Hides the list of items in the combobox if it is currently
      * visible and resets the internal state.
      */
-    virtual void hidePopup() override;
+    void hidePopup() override;
 
     /**
      * Filters events to enable context menu
      */
-    virtual bool eventFilter( QObject *object, QEvent *event ) override;
+    bool eventFilter( QObject *object, QEvent *event ) override;
 
   signals:
 
     /**
-     * This signal is emitted whenever the checked items list changed.
+     * Emitted whenever the checked items list changed.
      */
     void checkedItemsChanged( const QStringList &items );
 
@@ -228,7 +249,7 @@ class GUI_EXPORT QgsCheckableComboBox : public QComboBox
     /**
      * Handler for widget resizing
      */
-    virtual void resizeEvent( QResizeEvent *event ) override;
+    void resizeEvent( QResizeEvent *event ) override;
 
   protected slots:
 
@@ -236,7 +257,7 @@ class GUI_EXPORT QgsCheckableComboBox : public QComboBox
      * Display context menu which allows selecting/deselecting
      * all items at once.
      */
-    void showContextMenu( const QPoint &pos );
+    void showContextMenu( QPoint pos );
 
     /**
      * Selects all items.
@@ -247,6 +268,9 @@ class GUI_EXPORT QgsCheckableComboBox : public QComboBox
      * Removes selection from all items.
      */
     void deselectAllOptions();
+
+  protected:
+    QgsCheckableItemModel *mModel = nullptr;
 
   private:
     void updateCheckedItems();

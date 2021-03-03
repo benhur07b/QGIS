@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '30/07/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -32,13 +30,13 @@ def createReferencingLayer():
                            "referencinglayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["test1", 123])
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["test2", 123])
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 124])
     assert pr.addFeatures([f1, f2, f3])
     return layer
@@ -50,13 +48,13 @@ def createReferencedLayer():
         "referencedlayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["foo", 123, 321])
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["bar", 456, 654])
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 789, 554])
     assert pr.addFeatures([f1, f2, f3])
     return layer
@@ -165,6 +163,56 @@ class TestQgsExpressionBuilderWidget(unittest.TestCase):
         self.assertEqual(len(items), 1)
         items = m.findItems('Relation Number Two', Qt.MatchRecursive)
         self.assertEqual(len(items), 1)
+
+    def testStoredExpressions(self):
+        """Check that expressions can be stored and retrieved"""
+
+        w = QgsExpressionBuilderWidget()
+
+        w.saveToUserExpressions('Stored Expression Number One', '"field_one" = 123', "An humble expression")
+        items = w.findExpressions('Stored Expression Number One')
+        self.assertEqual(len(items), 1)
+        exp = items[0]
+        self.assertEqual(exp.getExpressionText(), '"field_one" = 123')
+
+        # Add another one with the same name (overwrite)
+        w.saveToUserExpressions('Stored Expression Number One', '"field_two" = 456', "An even more humble expression")
+        items = w.findExpressions('Stored Expression Number One')
+        self.assertEqual(len(items), 1)
+        exp = items[0]
+        self.assertEqual(exp.getExpressionText(), '"field_two" = 456')
+
+        # Reload by creating a new widget
+        w = QgsExpressionBuilderWidget()
+        items = w.findExpressions('Stored Expression Number One')
+        self.assertEqual(len(items), 1)
+        exp = items[0]
+        self.assertEqual(exp.getExpressionText(), '"field_two" = 456')
+
+        # Test removal
+        w.removeFromUserExpressions('Stored Expression Number One')
+        items = w.findExpressions('Stored Expression Number One')
+        self.assertEqual(len(items), 0)
+
+    def testLayerVariables(self):
+        """ check through widget model to ensure it is populated with layer variables """
+        w = QgsExpressionBuilderWidget()
+        m = w.model()
+
+        p = QgsProject.instance()
+        layer = QgsVectorLayer("Point", "layer1", "memory")
+        p.addMapLayers([layer])
+
+        w.setLayer(layer)
+
+        items = m.findItems("layer", Qt.MatchRecursive)
+        self.assertEqual(len(items), 1)
+        items = m.findItems("layer_id", Qt.MatchRecursive)
+        self.assertEqual(len(items), 1)
+        items = m.findItems("layer_name", Qt.MatchRecursive)
+        self.assertEqual(len(items), 1)
+
+        p.removeMapLayer(layer)
 
 
 if __name__ == '__main__':

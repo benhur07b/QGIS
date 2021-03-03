@@ -22,7 +22,7 @@
 
 /**
  * \ingroup core
- * A unary node is either negative as in boolean (not) or as in numbers (minus).
+ * \brief A unary node is either negative as in boolean (not) or as in numbers (minus).
  */
 class CORE_EXPORT QgsExpressionNodeUnaryOperator : public QgsExpressionNode
 {
@@ -45,22 +45,31 @@ class CORE_EXPORT QgsExpressionNodeUnaryOperator : public QgsExpressionNode
       : mOp( op )
       , mOperand( operand )
     {}
-    ~QgsExpressionNodeUnaryOperator() { delete mOperand; }
+    ~QgsExpressionNodeUnaryOperator() override { delete mOperand; }
 
+    /**
+     * Returns the unary operator.
+     */
     QgsExpressionNodeUnaryOperator::UnaryOperator op() const { return mOp; }
+
+    /**
+     * Returns the node the operator will operate upon.
+     */
     QgsExpressionNode *operand() const { return mOperand; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+    QList<const QgsExpressionNode *> nodes() const override; SIP_SKIP
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
 
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
     /**
      * Returns a the name of this operator without the operands.
@@ -76,6 +85,7 @@ class CORE_EXPORT QgsExpressionNodeUnaryOperator : public QgsExpressionNode
 };
 
 /**
+ * \brief A binary expression operator, which operates on two values.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeBinaryOperator : public QgsExpressionNode
@@ -128,24 +138,47 @@ class CORE_EXPORT QgsExpressionNodeBinaryOperator : public QgsExpressionNode
       , mOpLeft( opLeft )
       , mOpRight( opRight )
     {}
-    ~QgsExpressionNodeBinaryOperator() { delete mOpLeft; delete mOpRight; }
+    ~QgsExpressionNodeBinaryOperator() override { delete mOpLeft; delete mOpRight; }
 
+    /**
+     * Returns the binary operator.
+     */
     QgsExpressionNodeBinaryOperator::BinaryOperator op() const { return mOp; }
+
+    /**
+     * Returns the node to the left of the operator.
+     * \see opRight()
+     */
     QgsExpressionNode *opLeft() const { return mOpLeft; }
+
+    /**
+     * Returns the node to the right of the operator.
+     * \see opLeft()
+     */
     QgsExpressionNode *opRight() const { return mOpRight; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+    QList<const QgsExpressionNode *> nodes( ) const override; SIP_SKIP
 
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+    /**
+     * Returns the precedence index for the operator. Higher values have higher precedence.
+     */
     int precedence() const;
+
+    /**
+     * Returns TRUE if the operator is left-associative.
+     */
     bool leftAssociative() const;
 
     /**
@@ -174,6 +207,58 @@ class CORE_EXPORT QgsExpressionNodeBinaryOperator : public QgsExpressionNode
 };
 
 /**
+ * \brief A indexing expression operator, which allows use of square brackets [] to reference map and array items.
+ * \ingroup core
+ * \since QGIS 3.6
+ */
+class CORE_EXPORT QgsExpressionNodeIndexOperator : public QgsExpressionNode
+{
+  public:
+
+    /**
+     * Constructor for QgsExpressionNodeIndexOperator.
+     */
+    QgsExpressionNodeIndexOperator( QgsExpressionNode *container SIP_TRANSFER, QgsExpressionNode *index SIP_TRANSFER )
+      : mContainer( container )
+      , mIndex( index )
+    {}
+    ~QgsExpressionNodeIndexOperator() override { delete mContainer; delete mIndex; }
+
+    /**
+     * Returns the container node, representing an array or map value.
+     * \see index()
+     */
+    QgsExpressionNode *container() const { return mContainer; }
+
+    /**
+     * Returns the index node, representing an array element index or map key.
+     * \see container()
+     */
+    QgsExpressionNode *index() const { return mIndex; }
+
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
+
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+    QList<const QgsExpressionNode *> nodes( ) const override; SIP_SKIP
+
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+  private:
+
+    QgsExpressionNode *mContainer = nullptr;
+    QgsExpressionNode *mIndex = nullptr;
+
+};
+
+/**
+ * \brief An expression node for value IN or NOT IN clauses.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeInOperator : public QgsExpressionNode
@@ -181,29 +266,42 @@ class CORE_EXPORT QgsExpressionNodeInOperator : public QgsExpressionNode
   public:
 
     /**
-     * This node tests if the result of \a node is in the result of \a list. Optionally it can be inverted with \a notin which by default is false.
+     * This node tests if the result of \a node is in the result of \a list. Optionally it can be inverted with \a notin which by default is FALSE.
      */
     QgsExpressionNodeInOperator( QgsExpressionNode *node SIP_TRANSFER, QgsExpressionNode::NodeList *list SIP_TRANSFER, bool notin = false )
       : mNode( node )
       , mList( list )
       , mNotIn( notin )
     {}
-    virtual ~QgsExpressionNodeInOperator();
+    ~QgsExpressionNodeInOperator() override;
 
+    /**
+     * Returns the expression node.
+     */
     QgsExpressionNode *node() const { return mNode; }
+
+    /**
+     * Returns TRUE if this node is a "NOT IN" operator, or FALSE if the node is a normal "IN" operator.
+     */
     bool isNotIn() const { return mNotIn; }
+
+    /**
+     * Returns the list of nodes to search for matching values within.
+     */
     QgsExpressionNode::NodeList *list() const { return mList; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+    QList<const QgsExpressionNode *> nodes() const override; SIP_SKIP
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
   private:
     QgsExpressionNode *mNode = nullptr;
@@ -212,6 +310,7 @@ class CORE_EXPORT QgsExpressionNodeInOperator : public QgsExpressionNode
 };
 
 /**
+ * \brief An expression node for expression functions.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeFunction : public QgsExpressionNode
@@ -224,21 +323,31 @@ class CORE_EXPORT QgsExpressionNodeFunction : public QgsExpressionNode
      */
     QgsExpressionNodeFunction( int fnIndex, QgsExpressionNode::NodeList *args SIP_TRANSFER );
 
-    virtual ~QgsExpressionNodeFunction();
+    ~QgsExpressionNodeFunction() override;
 
+    /**
+     * Returns the index of the node's function.
+     */
     int fnIndex() const { return mFnIndex; }
+
+    /**
+     * Returns a list of arguments specified for the function.
+     */
     QgsExpressionNode::NodeList *args() const { return mArgs; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+
+    QList<const QgsExpressionNode *> nodes() const override; SIP_SKIP
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
     //! Tests whether the provided argument list is valid for the matching function
     static bool validateParams( int fnIndex, QgsExpressionNode::NodeList *args, QString &error );
@@ -249,11 +358,16 @@ class CORE_EXPORT QgsExpressionNodeFunction : public QgsExpressionNode
 };
 
 /**
+ * \brief An expression node for literal values.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeLiteral : public QgsExpressionNode
 {
   public:
+
+    /**
+     * Constructor for QgsExpressionNodeLiteral, with the specified literal \a value.
+     */
     QgsExpressionNodeLiteral( const QVariant &value )
       : mValue( value )
     {}
@@ -261,27 +375,36 @@ class CORE_EXPORT QgsExpressionNodeLiteral : public QgsExpressionNode
     //! The value of the literal.
     inline QVariant value() const { return mValue; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+
+    QList<const QgsExpressionNode *> nodes() const override; SIP_SKIP
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
   private:
     QVariant mValue;
 };
 
 /**
+ * \brief An expression node which takes it value from a feature's field.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeColumnRef : public QgsExpressionNode
 {
   public:
+
+    /**
+     * Constructor for QgsExpressionNodeColumnRef, referencing the column
+     * with the specified \a name.
+     */
     QgsExpressionNodeColumnRef( const QString &name )
       : mName( name )
       , mIndex( -1 )
@@ -290,17 +413,20 @@ class CORE_EXPORT QgsExpressionNodeColumnRef : public QgsExpressionNode
     //! The name of the column.
     QString name() const { return mName; }
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+    QList<const QgsExpressionNode *> nodes( ) const override; SIP_SKIP
 
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    bool needsGeometry() const override;
+
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
   private:
     QString mName;
@@ -308,11 +434,17 @@ class CORE_EXPORT QgsExpressionNodeColumnRef : public QgsExpressionNode
 };
 
 /**
+ * \brief An expression node for CASE WHEN clauses.
  * \ingroup core
  */
 class CORE_EXPORT QgsExpressionNodeCondition : public QgsExpressionNode
 {
   public:
+
+    /**
+     * \brief Represents a "WHEN... THEN..." portation of a CASE WHEN clause in an expression.
+     * \ingroup core
+     */
     class CORE_EXPORT WhenThen
     {
       public:
@@ -329,9 +461,22 @@ class CORE_EXPORT QgsExpressionNodeCondition : public QgsExpressionNode
         WhenThen &operator=( const WhenThen &rh ) = delete;
 
         /**
-         * Get a deep copy of this WhenThen combination.
+         * Gets a deep copy of this WhenThen combination.
          */
         QgsExpressionNodeCondition::WhenThen *clone() const SIP_FACTORY;
+
+        /**
+         * The expression that makes the WHEN part of the condition.
+         * \return The expression node that makes the WHEN part of the condition check.
+         */
+        QgsExpressionNode *whenExp() const { return mWhenExp; }
+
+        /**
+         * The expression node that makes the THEN result part of the condition.
+         * \return The expression node that makes the THEN result part of the condition.
+         */
+
+        QgsExpressionNode *thenExp() const { return mThenExp; }
 
       private:
 #ifdef SIP_RUN
@@ -357,18 +502,34 @@ class CORE_EXPORT QgsExpressionNodeCondition : public QgsExpressionNode
     , mElseExp( elseExp )
     {}
 
-    ~QgsExpressionNodeCondition();
+    ~QgsExpressionNodeCondition() override;
 
-    virtual QgsExpressionNode::NodeType nodeType() const override;
-    virtual QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
-    virtual QString dump() const override;
+    QgsExpressionNode::NodeType nodeType() const override;
+    QVariant evalNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    bool prepareNode( QgsExpression *parent, const QgsExpressionContext *context ) override;
+    QString dump() const override;
 
-    virtual QSet<QString> referencedColumns() const override;
-    virtual QSet<QString> referencedVariables() const override;
-    virtual bool needsGeometry() const override;
-    virtual QgsExpressionNode *clone() const override SIP_FACTORY;
-    virtual bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    /**
+     * The list of WHEN THEN expression parts of the expression.
+     * \return The list of WHEN THEN expression parts of the expression.
+     */
+    WhenThenList conditions() const { return mConditions; }
+
+    /**
+     * The ELSE expression used for the condition.
+     * \return The ELSE expression used for the condition.
+     */
+    QgsExpressionNode *elseExp() const { return mElseExp; }
+
+    QSet<QString> referencedColumns() const override;
+    QSet<QString> referencedVariables() const override;
+    QSet<QString> referencedFunctions() const override;
+
+    QList<const QgsExpressionNode *> nodes() const override; SIP_SKIP
+
+    bool needsGeometry() const override;
+    QgsExpressionNode *clone() const override SIP_FACTORY;
+    bool isStatic( QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
   private:
     WhenThenList mConditions;

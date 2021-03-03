@@ -19,8 +19,9 @@ email                : marco.hugentobler at sourcepole dot com
 #include "qgis_core.h"
 #include "qgslinestring.h"
 #include "qgsgeometry.h"
+#include "qgslogger.h"
 
-#include <QList>
+#include <QVector>
 
 class QgsAbstractGeometry;
 
@@ -96,14 +97,14 @@ class CORE_EXPORT QgsGeometryEngine
      *
      * \since QGIS 3.0 \a geom is a pointer
      */
-    virtual QgsAbstractGeometry *combine( const QList<QgsAbstractGeometry *> &geomList, QString *errorMsg ) const = 0 SIP_FACTORY;
+    virtual QgsAbstractGeometry *combine( const QVector<QgsAbstractGeometry *> &geomList, QString *errorMsg ) const = 0 SIP_FACTORY;
 
     /**
      * Calculate the combination of this and \a geometries.
      *
      * \since QGIS 3.0 \a geom is a pointer
      */
-    virtual QgsAbstractGeometry *combine( const QList< QgsGeometry > &geometries, QString *errorMsg = nullptr ) const = 0 SIP_FACTORY;
+    virtual QgsAbstractGeometry *combine( const QVector< QgsGeometry > &geometries, QString *errorMsg = nullptr ) const = 0 SIP_FACTORY;
 
     /**
      * Calculate the symmetric difference of this and \a geom.
@@ -119,7 +120,7 @@ class CORE_EXPORT QgsGeometryEngine
 
     /**
      * Calculates the centroid of this.
-     * May return a `nullptr`.
+     * May return a `NULLPTR`.
      *
      * \since QGIS 3.0 the centroid is returned
      */
@@ -127,7 +128,7 @@ class CORE_EXPORT QgsGeometryEngine
 
     /**
      * Calculate a point that is guaranteed to be on the surface of this.
-     * May return a `nullptr`.
+     * May return a `NULLPTR`.
      *
      * \since QGIS 3.0 the centroid is returned
      */
@@ -210,18 +211,30 @@ class CORE_EXPORT QgsGeometryEngine
      * \param geom geometry to relate to
      * \param pattern DE-9IM pattern for match
      * \param errorMsg destination storage for any error message
-     * \returns true if geometry relationship matches with pattern
+     * \returns TRUE if geometry relationship matches with pattern
      * \since QGIS 2.14
      */
     virtual bool relatePattern( const QgsAbstractGeometry *geom, const QString &pattern, QString *errorMsg = nullptr ) const = 0;
 
     virtual double area( QString *errorMsg = nullptr ) const = 0;
     virtual double length( QString *errorMsg = nullptr ) const = 0;
-    virtual bool isValid( QString *errorMsg = nullptr ) const = 0;
+
+    /**
+     * Returns TRUE if the geometry is valid.
+     *
+     * If the geometry is invalid, \a errorMsg will be filled with the reported geometry error.
+     *
+     * The \a allowSelfTouchingHoles argument specifies whether self-touching holes are permitted.
+     * OGC validity states that self-touching holes are NOT permitted, whilst other vendor
+     * validity checks (e.g. ESRI) permit self-touching holes.
+     *
+     * If \a errorLoc is specified, it will be set to the geometry of the error location.
+     */
+    virtual bool isValid( QString *errorMsg = nullptr, bool allowSelfTouchingHoles = false, QgsGeometry *errorLoc = nullptr ) const = 0;
 
     /**
      * Checks if this is equal to \a geom.
-     * If both are Null geometries, `false` is returned.
+     * If both are Null geometries, `FALSE` is returned.
      *
      * \since QGIS 3.0 \a geom is a pointer
      */
@@ -238,28 +251,58 @@ class CORE_EXPORT QgsGeometryEngine
      * Splits this geometry according to a given line.
      * \param splitLine the line that splits the geometry
      * \param[out] newGeometries list of new geometries that have been created with the split
-     * \param topological true if topological editing is enabled
+     * \param topological TRUE if topological editing is enabled
      * \param[out] topologyTestPoints points that need to be tested for topological completeness in the dataset
      * \param[out] errorMsg error messages emitted, if any
+     * \param skipIntersectionCheck set to TRUE to skip the potentially expensive initial intersection check. Only set this flag if an intersection
+     * test has already been performed by the caller!
      * \returns 0 in case of success, 1 if geometry has not been split, error else
     */
     virtual QgsGeometryEngine::EngineOperationResult splitGeometry( const QgsLineString &splitLine,
-        QList<QgsGeometry > &newGeometries SIP_OUT,
+        QVector<QgsGeometry > &newGeometries SIP_OUT,
         bool topological,
-        QgsPointSequence &topologyTestPoints, QString *errorMsg = nullptr ) const
+        QgsPointSequence &topologyTestPoints, QString *errorMsg = nullptr, bool skipIntersectionCheck = false ) const
     {
-      Q_UNUSED( splitLine );
-      Q_UNUSED( newGeometries );
-      Q_UNUSED( topological );
-      Q_UNUSED( topologyTestPoints );
-      Q_UNUSED( errorMsg );
+      Q_UNUSED( splitLine )
+      Q_UNUSED( newGeometries )
+      Q_UNUSED( topological )
+      Q_UNUSED( topologyTestPoints )
+      Q_UNUSED( errorMsg )
+      Q_UNUSED( skipIntersectionCheck )
       return MethodNotImplemented;
     }
 
     virtual QgsAbstractGeometry *offsetCurve( double distance, int segments, int joinStyle, double miterLimit, QString *errorMsg = nullptr ) const = 0 SIP_FACTORY;
 
+    /**
+     * Sets whether warnings and errors encountered during the geometry operations should be logged.
+     *
+     * By default these errors are logged to the console and in the QGIS UI. But for some operations errors are expected and logging
+     * these just results in noise. In this case setting \a enabled to FALSE will avoid the automatic error reporting.
+     *
+     * \since QGIS 3.16
+     */
+    void setLogErrors( bool enabled ) { mLogErrors = enabled; }
+
   protected:
     const QgsAbstractGeometry *mGeometry = nullptr;
+    bool mLogErrors = true;
+
+    /**
+     * Logs an error \a message encountered during an operation.
+     *
+     * \see setLogErrors()
+     *
+     * \since QGIS 3.16
+     */
+    void logError( const QString &engineName, const QString &message ) const
+    {
+      if ( mLogErrors )
+      {
+        QgsDebugMsg( QStringLiteral( "%1 notice: %2" ).arg( engineName, message ) );
+        qWarning( "%s exception: %s", engineName.toLocal8Bit().constData(), message.toLocal8Bit().constData() );
+      }
+    }
 
     QgsGeometryEngine( const QgsAbstractGeometry *geometry )
       : mGeometry( geometry )
@@ -267,3 +310,4 @@ class CORE_EXPORT QgsGeometryEngine
 };
 
 #endif // QGSGEOMETRYENGINE_H
+

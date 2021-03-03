@@ -21,17 +21,15 @@ __author__ = 'Alexander Bruy'
 __date__ = 'January 2016'
 __copyright__ = '(C) 2016, Alexander Bruy'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsProcessingParameterRasterLayer,
+from qgis.core import (QgsProcessingException,
+                       QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterCrs,
-                       QgsProcessingOutputRasterLayer)
+                       QgsProcessingOutputRasterLayer,
+                       QgsProcessingContext)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
 from processing.algs.gdal.GdalUtils import GdalUtils
 
@@ -41,7 +39,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class AssignProjection(GdalAlgorithm):
-
     INPUT = 'INPUT'
     CRS = 'CRS'
     OUTPUT = 'OUTPUT'
@@ -70,24 +67,62 @@ class AssignProjection(GdalAlgorithm):
     def group(self):
         return self.tr('Raster projections')
 
-    def getConsoleCommands(self, parameters, context, feedback):
+    def groupId(self):
+        return 'rasterprojections'
+
+    def commandName(self):
+        return 'gdal_edit'
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         inLayer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if inLayer is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
         fileName = inLayer.source()
 
-        crs = self.parameterAsCrs(parameters, self.CRS, context).authid()
+        crs = self.parameterAsCrs(parameters, self.CRS, context)
 
-        arguments = []
-        arguments.append('-a_srs')
-        arguments.append(crs)
+        arguments = [
+            '-a_srs',
+            GdalUtils.gdal_crs_string(crs),
 
-        arguments.append(fileName)
-
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal_edit.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal_edit.py', GdalUtils.escapeAndJoin(arguments)]
+            fileName
+        ]
 
         self.setOutputValue(self.OUTPUT, fileName)
-        return commands
+
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]
+
+    def postProcessAlgorithm(self, context, feedback):
+        # get output value
+        fileName = self.output_values.get(self.OUTPUT)
+        if not fileName:
+            return {}
+
+        # search in context project's layers
+        if context.project():
+
+            for l in context.project().mapLayers().values():
+
+                # check the source
+                if l.source() != fileName:
+                    continue
+
+                # reload provider's data
+                l.dataProvider().reloadData()
+                l.setCrs(l.dataProvider().crs())
+                l.triggerRepaint()
+
+        # search in context temporary layer store
+        for l in context.temporaryLayerStore().mapLayers().values():
+
+            # check the source
+            if l.source() != fileName:
+                continue
+
+            # reload provider's data
+            l.dataProvider().reloadData()
+            l.setCrs(l.dataProvider().crs())
+            context.temporaryLayerStore().addMapLayer(l)
+
+        return {}

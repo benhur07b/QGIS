@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsalgorithmboundary.h"
+#include "qgsvectorlayer.h"
 
 ///@cond PRIVATE
 
@@ -39,6 +40,11 @@ QString QgsBoundaryAlgorithm::group() const
   return QObject::tr( "Vector geometry" );
 }
 
+QString QgsBoundaryAlgorithm::groupId() const
+{
+  return  QStringLiteral( "vectorgeometry" );
+}
+
 QString QgsBoundaryAlgorithm::outputName() const
 {
   return QObject::tr( "Boundary" );
@@ -57,9 +63,19 @@ QList<int> QgsBoundaryAlgorithm::inputLayerTypes() const
   return QList<int>() << QgsProcessing::TypeVectorLine << QgsProcessing::TypeVectorPolygon;
 }
 
+bool QgsBoundaryAlgorithm::supportInPlaceEdit( const QgsMapLayer * ) const
+{
+  return false;
+}
+
 QgsBoundaryAlgorithm *QgsBoundaryAlgorithm::createInstance() const
 {
   return new QgsBoundaryAlgorithm();
+}
+
+QgsProcessingFeatureSource::Flag QgsBoundaryAlgorithm::sourceFlags() const
+{
+  return QgsProcessingFeatureSource::FlagSkipGeometryValidityChecks;
 }
 
 QgsWkbTypes::Type QgsBoundaryAlgorithm::outputWkbType( QgsWkbTypes::Type inputWkbType ) const
@@ -90,7 +106,7 @@ QgsWkbTypes::Type QgsBoundaryAlgorithm::outputWkbType( QgsWkbTypes::Type inputWk
   return outputWkb;
 }
 
-QgsFeature QgsBoundaryAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingFeedback *feedback )
+QgsFeatureList QgsBoundaryAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingContext &, QgsProcessingFeedback *feedback )
 {
   QgsFeature outFeature = feature;
 
@@ -98,7 +114,7 @@ QgsFeature QgsBoundaryAlgorithm::processFeature( const QgsFeature &feature, QgsP
   {
     QgsGeometry inputGeometry = feature.geometry();
     QgsGeometry outputGeometry = QgsGeometry( inputGeometry.constGet()->boundary() );
-    if ( !outputGeometry )
+    if ( outputGeometry.isNull() )
     {
       feedback->reportError( QObject::tr( "No boundary for feature %1 (possibly a closed linestring?)'" ).arg( feature.id() ) );
       outFeature.clearGeometry();
@@ -108,7 +124,7 @@ QgsFeature QgsBoundaryAlgorithm::processFeature( const QgsFeature &feature, QgsP
       outFeature.setGeometry( outputGeometry );
     }
   }
-  return outFeature;
+  return QgsFeatureList() << outFeature;
 }
 
 ///@endcond

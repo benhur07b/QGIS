@@ -21,7 +21,7 @@
 #include "qgis_app.h"
 
 class QgsMarkerSymbol;
-class QgsPointMarkerItem;
+class QgsMapCanvasMarkerSymbolItem;
 
 /**
  * \ingroup app
@@ -35,23 +35,23 @@ class APP_EXPORT QgsMapToolOffsetPointSymbol: public QgsMapToolPointSymbol
 
   public:
     QgsMapToolOffsetPointSymbol( QgsMapCanvas *canvas );
-    ~QgsMapToolOffsetPointSymbol();
+    ~QgsMapToolOffsetPointSymbol() override;
 
     void canvasPressEvent( QgsMapMouseEvent *e ) override;
     void canvasMoveEvent( QgsMapMouseEvent *e ) override;
-    void canvasReleaseEvent( QgsMapMouseEvent *e ) override;
+    void keyPressEvent( QKeyEvent *e ) override;
 
     /**
-     * Returns true if the symbols of a map layer can be offset. This means the layer
+     * Returns TRUE if the symbols of a map layer can be offset. This means the layer
      *  is a vector layer, has type point or multipoint and has at least one offset attribute in the renderer.
     */
     static bool layerIsOffsetable( QgsMapLayer *ml );
 
   protected:
 
-    virtual void canvasPressOnFeature( QgsMapMouseEvent *e, const QgsFeature &feature, const QgsPointXY &snappedPoint ) override;
-    virtual bool checkSymbolCompatibility( QgsMarkerSymbol *markerSymbol, QgsRenderContext &context ) override;
-    virtual void noCompatibleSymbols() override;
+    void canvasPressOnFeature( QgsMapMouseEvent *e, const QgsFeature &feature, const QgsPointXY &snappedPoint ) override;
+    bool checkSymbolCompatibility( QgsMarkerSymbol *markerSymbol, QgsRenderContext &context ) override;
+    void noCompatibleSymbols() override;
 
   private:
 
@@ -59,7 +59,7 @@ class APP_EXPORT QgsMapToolOffsetPointSymbol: public QgsMapToolPointSymbol
     bool mOffsetting;
 
     //! Item that previews the offset during mouse move
-    QgsPointMarkerItem *mOffsetItem = nullptr;
+    QgsMapCanvasMarkerSymbolItem *mOffsetItem = nullptr;
 
     //! Clone of first found marker symbol for feature with offset attribute set
     std::unique_ptr< QgsMarkerSymbol > mMarkerSymbol;

@@ -20,7 +20,7 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 
 ///@cond PRIVATE
@@ -36,8 +36,9 @@ class QgsSnapToGridAlgorithm : public QgsProcessingFeatureBasedAlgorithm
     QgsSnapToGridAlgorithm() = default;
     QString name() const override;
     QString displayName() const override;
-    virtual QStringList tags() const override;
+    QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsSnapToGridAlgorithm *createInstance() const override SIP_FACTORY;
     void initParameters( const QVariantMap &configuration = QVariantMap() ) override;
@@ -45,13 +46,26 @@ class QgsSnapToGridAlgorithm : public QgsProcessingFeatureBasedAlgorithm
   protected:
     QString outputName() const override;
     bool prepareAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
-    QgsFeature processFeature( const QgsFeature &feature, QgsProcessingFeedback *feedback ) override;
+    QgsFeatureList processFeature( const QgsFeature &feature,  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+    QgsProcessingFeatureSource::Flag sourceFlags() const override;
 
   private:
     double mIntervalX = 0.0;
+    bool mDynamicIntervalX = false;
+    QgsProperty mIntervalXProperty;
+
     double mIntervalY = 0.0;
+    bool mDynamicIntervalY = false;
+    QgsProperty mIntervalYProperty;
+
     double mIntervalZ = 0.0;
+    bool mDynamicIntervalZ = false;
+    QgsProperty mIntervalZProperty;
+
     double mIntervalM = 0.0;
+    bool mDynamicIntervalM = false;
+    QgsProperty mIntervalMProperty;
+
 };
 
 ///@endcond PRIVATE

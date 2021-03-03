@@ -18,20 +18,22 @@
 #define QGSDETAILEDITEMWIDGET_H
 
 #include "ui_qgsdetaileditemwidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsdetaileditemdata.h"
 #include "qgis_gui.h"
 
 /**
  * \ingroup gui
- * A widget renderer for detailed item views.
+ * \brief A widget renderer for detailed item views.
  * \see also QgsDetailedItem and QgsDetailedItemData.
  */
 class GUI_EXPORT QgsDetailedItemWidget : public QWidget, private Ui::QgsDetailedItemWidgetBase
 {
     Q_OBJECT
   public:
-    QgsDetailedItemWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    //! Constructor for QgsDetailedItemWidget
+    QgsDetailedItemWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
     void setData( const QgsDetailedItemData &data );
     void setChecked( bool flag );
   private:

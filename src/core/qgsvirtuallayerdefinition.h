@@ -19,11 +19,11 @@ email                : hugo dot mercier at oslandia dot com
 
 #include "qgis_core.h"
 #include "qgsfields.h"
-#include "qgis.h"
+#include "qgswkbtypes.h"
 
 /**
  * \ingroup core
- * Class to manipulate the definition of a virtual layer
+ * \brief Class to manipulate the definition of a virtual layer
  *
  * It is used to extract parameters from an initial virtual layer definition as well as
  * to store the complete, expanded definition once types have been detected.
@@ -34,7 +34,7 @@ class CORE_EXPORT QgsVirtualLayerDefinition
 
     /**
      * \ingroup core
-     * A SourceLayer is either a reference to a live layer in the registry
+     * \brief A SourceLayer is either a reference to a live layer in the registry
      * or all the parameters needed to load it (provider key, source, etc.)
      */
     class CORE_EXPORT SourceLayer
@@ -95,6 +95,7 @@ class CORE_EXPORT QgsVirtualLayerDefinition
      * nogeometry                              is a flag to force the layer to be a non-geometry layer
      * query=sql                               represents the SQL query. Must be URL-encoded
      * field=column_name:[int|real|text]       represents a field with its name and its type
+     * subsetstring=subset_string              represents the subsetstring
      */
     static QgsVirtualLayerDefinition fromUrl( const QUrl &url );
 
@@ -113,46 +114,64 @@ class CORE_EXPORT QgsVirtualLayerDefinition
     //! List of source layers
     typedef QList<QgsVirtualLayerDefinition::SourceLayer> SourceLayers;
 
-    //! Get access to the source layers
+    //! Gets access to the source layers
     const QgsVirtualLayerDefinition::SourceLayers &sourceLayers() const { return mSourceLayers; }
 
-    //! Get the SQL query
+    //! Gets the SQL query
     QString query() const { return mQuery; }
-    //! Set the SQL query
+    //! Sets the SQL query
     void setQuery( const QString &query ) { mQuery = query; }
 
-    //! Get the file path. May be empty
+    //! Gets the file path. May be empty
     QString filePath() const { return mFilePath; }
-    //! Set the file path
+    //! Sets the file path
     void setFilePath( const QString &filePath ) { mFilePath = filePath; }
 
-    //! Get the name of the field with unique identifiers
+    //! Gets the name of the field with unique identifiers
     QString uid() const { return mUid; }
-    //! Set the name of the field with unique identifiers
+    //! Sets the name of the field with unique identifiers
     void setUid( const QString &uid ) { mUid = uid; }
 
-    //! Get the name of the geometry field. Empty if no geometry field
+    /**
+     * Sets the lazy mode. If \a lazy is TRUE, then the loading is
+     * delayed until an explicit reloading of the layer.
+     * \param lazy TRUE to delay the loading, FALSE otherwise
+     * \see QgsDataProvider::reloadData()
+     * \see isLazy()
+     * \since QGIS 3.2
+     */
+    void setLazy( bool lazy ) { mLazy = lazy; }
+
+    /**
+     * Returns the lazy mode.
+     * \returns TRUE if the loading is delayed, FALSE otherwise.
+     * \see setLazy()
+     * \since QGIS 3.2
+     */
+    bool isLazy() const { return mLazy; }
+
+    //! Gets the name of the geometry field. Empty if no geometry field
     QString geometryField() const { return mGeometryField; }
-    //! Set the name of the geometry field
+    //! Sets the name of the geometry field
     void setGeometryField( const QString &geometryField ) { mGeometryField = geometryField; }
 
     /**
-     * Get the type of the geometry
+     * Gets the type of the geometry
      * QgsWkbTypes::NoGeometry to hide any geometry
      * QgsWkbTypes::Unknown for unknown types
      */
     QgsWkbTypes::Type geometryWkbType() const { return mGeometryWkbType; }
-    //! Set the type of the geometry
+    //! Sets the type of the geometry
     void setGeometryWkbType( QgsWkbTypes::Type t ) { mGeometryWkbType = t; }
 
-    //! Get the SRID of the geometry
+    //! Gets the SRID of the geometry
     long geometrySrid() const { return mGeometrySrid; }
-    //! Set the SRID of the geometry
+    //! Sets the SRID of the geometry
     void setGeometrySrid( long srid ) { mGeometrySrid = srid; }
 
-    //! Get field definitions
+    //! Gets field definitions
     QgsFields fields() const { return mFields; }
-    //! Set field definitions
+    //! Sets field definitions
     void setFields( const QgsFields &fields ) { mFields = fields; }
 
     //! Convenience method to test if a given source layer is part of the definition
@@ -167,6 +186,18 @@ class CORE_EXPORT QgsVirtualLayerDefinition
       return geometryWkbType() != QgsWkbTypes::NoGeometry && geometryWkbType() != QgsWkbTypes::Unknown;
     }
 
+    /**
+     * Returns the subset string.
+     * \since QGIS 3.16
+     */
+    QString subsetString() const;
+
+    /**
+     * Sets the \a subsetString
+     * \since QGIS 3.16
+     */
+    void setSubsetString( const QString &subsetString );
+
   private:
     SourceLayers mSourceLayers;
     QString mQuery;
@@ -174,8 +205,10 @@ class CORE_EXPORT QgsVirtualLayerDefinition
     QString mGeometryField;
     QString mFilePath;
     QgsFields mFields;
+    bool mLazy = false;
     QgsWkbTypes::Type mGeometryWkbType = QgsWkbTypes::Unknown;
     long mGeometrySrid = 0;
+    QString mSubsetString;
 };
 
 // clazy:excludeall=qstring-allocations

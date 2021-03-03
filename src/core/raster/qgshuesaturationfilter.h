@@ -19,14 +19,14 @@
 #define QGSHUESATURATIONFILTER_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrasterinterface.h"
 
 class QDomElement;
 
 /**
  * \ingroup core
-  * Color and saturation filter pipe for rasters.
+  * \brief Color and saturation filter pipe for rasters.
   */
 class CORE_EXPORT QgsHueSaturationFilter : public QgsRasterInterface
 {

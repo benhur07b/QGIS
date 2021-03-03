@@ -27,7 +27,9 @@ class NormVecDecorator;
 
 /**
  * \ingroup analysis
- * This is an implementation of a Clough-Tocher interpolator based on a triangular tessellation. The derivatives orthogonal to the boundary curves are interpolated linearly along a triangle edge.
+ * \brief This is an implementation of a Clough-Tocher interpolator based on a triangular tessellation.
+ *
+ * The derivatives orthogonal to the boundary curves are interpolated linearly along a triangle edge.
  * \note Not available in Python bindings
 */
 class ANALYSIS_EXPORT CloughTocherInterpolator : public TriangleInterpolator
@@ -35,7 +37,7 @@ class ANALYSIS_EXPORT CloughTocherInterpolator : public TriangleInterpolator
   protected:
     //! Association with a triangulation object
     NormVecDecorator *mTIN = nullptr;
-    //! Tolerance of the barycentric coordinates at the borders of the triangles (to prevent errors because of very small negativ baricentric coordinates)
+    //! Tolerance of the barycentric coordinates at the borders of the triangles (to prevent errors because of very small negative baricentric coordinates)
     double mEdgeTolerance = 0.00001;
     //! First point of the triangle in x-,y-,z-coordinates
     QgsPoint point1 = QgsPoint( 0, 0, 0 );
@@ -106,9 +108,8 @@ class ANALYSIS_EXPORT CloughTocherInterpolator : public TriangleInterpolator
     CloughTocherInterpolator( NormVecDecorator *tin );
 
     //! Calculates the normal vector and assigns it to vec (not implemented at the moment)
-    virtual bool calcNormVec( double x, double y, Vector3D *result SIP_OUT ) override;
-    //! Performs a linear interpolation in a triangle and assigns the x-,y- and z-coordinates to point
-    virtual bool calcPoint( double x, double y, QgsPoint *result SIP_OUT ) override;
+    bool calcNormVec( double x, double y, QgsPoint &result SIP_OUT ) override;
+    bool calcPoint( double x, double y, QgsPoint &result SIP_OUT ) override;
     virtual void setTriangulation( NormVecDecorator *tin );
 };
 

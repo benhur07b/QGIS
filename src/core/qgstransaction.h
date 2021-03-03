@@ -19,7 +19,7 @@
 #define QGSTRANSACTION_H
 
 #include <QSet>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QString>
 #include <QObject>
 #include <QStack>
@@ -32,7 +32,7 @@ class QgsVectorLayer;
 
 /**
  * \ingroup core
- * This class allows including a set of layers in a database-side transaction,
+ * \brief This class allows including a set of layers in a database-side transaction,
  * provided the layer data providers support transactions and are compatible
  * with each other.
  *
@@ -72,7 +72,7 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
      */
     static QgsTransaction *create( const QSet<QgsVectorLayer *> &layers ) SIP_FACTORY;
 
-    virtual ~QgsTransaction();
+    ~QgsTransaction() override;
 
     /**
      * Add the \a layer to the transaction. The layer must not be
@@ -103,16 +103,16 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
     bool rollback( QString &errorMsg SIP_OUT );
 
     /**
-     * Execute the \a sql string. The result must not be a tuple, so running a
-     * ``SELECT`` query will return an error.
+     * Execute the \a sql string.
      *
      * \param sql The sql query to execute
      * \param error The error message
      * \param isDirty Flag to indicate if the underlying data will be modified
+     * \param name Name of the transaction ( only used if `isDirty` is TRUE)
      *
-     * \returns true if everything is OK, false otherwise
+     * \returns TRUE if everything is OK, FALSE otherwise
      */
-    virtual bool executeSql( const QString &sql, QString &error SIP_OUT, bool isDirty = false ) = 0;
+    virtual bool executeSql( const QString &sql, QString &error SIP_OUT, bool isDirty = false, const QString &name = QString() ) = 0;
 
     /**
      * Checks if the provider of a given \a layer supports transactions.
@@ -158,6 +158,11 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
      */
     bool lastSavePointIsDirty() const { return mLastSavePointIsDirty; }
 
+///@cond PRIVATE
+    // For internal use only, or by QgsTransactionGroup
+    static QString connectionString( const QString &layerUri ) SIP_SKIP;
+///@endcond
+
   signals:
 
     /**
@@ -168,7 +173,7 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
     /**
      * Emitted if a sql query is executed and the underlying data is modified
      */
-    void dirtied( const QString &sql );
+    void dirtied( const QString &sql, const QString &name );
 
   protected:
     QgsTransaction( const QString &connString ) SIP_SKIP;
@@ -187,6 +192,8 @@ class CORE_EXPORT QgsTransaction : public QObject SIP_ABSTRACT
     bool mLastSavePointIsDirty;
 
     void setLayerTransactionIds( QgsTransaction *transaction );
+
+    static QString removeLayerIdOrName( const QString &str );
 
     virtual bool beginTransaction( QString &error, int statementTimeout ) = 0;
     virtual bool commitTransaction( QString &error ) = 0;

@@ -19,8 +19,10 @@
 #define QGSDB2TABLEMODEL_H
 
 #include <QStandardItemModel>
+#include <QString>
+#include <QObject>
 #include "qgsdataitem.h"
-#include "qgis.h"
+#include "qgswkbtypes.h"
 
 //! Layer Property structure
 struct QgsDb2LayerProperty
@@ -58,7 +60,8 @@ class QgsDb2TableModel : public QStandardItemModel
 
     /**
      * Sets one or more geometry types to a row. In case of several types, additional rows are inserted.
-       This is for tables where the type is detected later by thread*/
+     * This is for tables where the type is detected later by thread.
+    */
     void setGeometryTypesForTable( QgsDb2LayerProperty layerProperty );
 
     //! Returns the number of tables in the model
@@ -80,8 +83,6 @@ class QgsDb2TableModel : public QStandardItemModel
     bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
 
     QString layerURI( const QModelIndex &index, const QString &connInfo, bool useEstimatedMetadata );
-
-    static QIcon iconForWkbType( QgsWkbTypes::Type type );
 
     static QgsWkbTypes::Type wkbTypeFromDb2( QString dbType, int dim = 2 );
 

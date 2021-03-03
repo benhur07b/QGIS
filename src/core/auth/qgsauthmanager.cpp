@@ -30,6 +30,11 @@
 #include <QTime>
 #include <QTimer>
 #include <QVariant>
+#include <QSqlDriver>
+
+#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
+#include <QRandomGenerator>
+#endif
 
 #include <QtCrypto>
 
@@ -41,6 +46,7 @@
 #include "keychain.h"
 
 // QGIS includes
+#include "qgsapplication.h"
 #include "qgsauthcertutils.h"
 #include "qgsauthcrypto.h"
 #include "qgsauthmethod.h"
@@ -50,6 +56,7 @@
 #include "qgslogger.h"
 #include "qgsmessagelog.h"
 #include "qgssettings.h"
+#include "qgsruntimeprofiler.h"
 
 QgsAuthManager *QgsAuthManager::sInstance = nullptr;
 
@@ -67,32 +74,25 @@ const QString QgsAuthManager::AUTH_CFG_REGEX = QStringLiteral( "authcfg=([a-z]|[
 const QLatin1String QgsAuthManager::AUTH_PASSWORD_HELPER_KEY_NAME( "QGIS-Master-Password" );
 const QLatin1String QgsAuthManager::AUTH_PASSWORD_HELPER_FOLDER_NAME( "QGIS" );
 
+
+
 #if defined(Q_OS_MAC)
 const QString QgsAuthManager::AUTH_PASSWORD_HELPER_DISPLAY_NAME( "Keychain" );
-static const QString sDescription = QObject::tr( "Master Password <-> KeyChain storage plugin. Store and retrieve your master password in your KeyChain" );
 #elif defined(Q_OS_WIN)
 const QString QgsAuthManager::AUTH_PASSWORD_HELPER_DISPLAY_NAME( "Password Manager" );
-static const QString sDescription = QObject::tr( "Master Password <-> Password Manager storage plugin. Store and retrieve your master password in your Password Manager" );
 #elif defined(Q_OS_LINUX)
 const QString QgsAuthManager::AUTH_PASSWORD_HELPER_DISPLAY_NAME( QStringLiteral( "Wallet/KeyRing" ) );
-static const QString sDescription = QObject::tr( "Master Password <-> Wallet/KeyRing storage plugin. Store and retrieve your master password in your Wallet/KeyRing" );
 #else
 const QString QgsAuthManager::AUTH_PASSWORD_HELPER_DISPLAY_NAME( "Password Manager" );
-static const QString sDescription = QObject::tr( "Master Password <-> KeyChain storage plugin. Store and retrieve your master password in your Wallet/KeyChain/Password Manager" );
 #endif
-
-
 
 QgsAuthManager *QgsAuthManager::instance()
 {
+  static QMutex sMutex;
+  QMutexLocker locker( &sMutex );
   if ( !sInstance )
   {
-    static QMutex sMutex;
-    QMutexLocker locker( &sMutex );
-    if ( !sInstance )
-    {
-      sInstance = new QgsAuthManager( );
-    }
+    sInstance = new QgsAuthManager( );
   }
   return sInstance;
 }
@@ -100,7 +100,8 @@ QgsAuthManager *QgsAuthManager::instance()
 
 QgsAuthManager::QgsAuthManager()
 {
-  mMutex = new QMutex( QMutex::Recursive );
+  mMutex.reset( new QMutex( QMutex::Recursive ) );
+  mMasterPasswordMutex.reset( new QMutex( QMutex::Recursive ) );
   connect( this, &QgsAuthManager::messageOut,
            this, &QgsAuthManager::writeToConsole );
 }
@@ -111,16 +112,50 @@ QSqlDatabase QgsAuthManager::authDatabaseConnection() const
   if ( isDisabled() )
     return authdb;
 
-  QString connectionname = QStringLiteral( "authentication.configs" );
-  if ( !QSqlDatabase::contains( connectionname ) )
+  // while everything we use from QSqlDatabase here is thread safe, we need to ensure
+  // that the connection cleanup on thread finalization happens in a predictable order
+  QMutexLocker locker( mMutex.get() );
+
+  // Sharing the same connection between threads is not allowed.
+  // We use a dedicated connection for each thread requiring access to the database,
+  // using the thread address as connection name.
+  const QString connectionName = QStringLiteral( "authentication.configs:0x%1" ).arg( reinterpret_cast<quintptr>( QThread::currentThread() ), 2 * QT_POINTER_SIZE, 16, QLatin1Char( '0' ) );
+  QgsDebugMsgLevel( QStringLiteral( "Using auth db connection name: %1 " ).arg( connectionName ), 2 );
+  if ( !QSqlDatabase::contains( connectionName ) )
   {
-    authdb = QSqlDatabase::addDatabase( QStringLiteral( "QSQLITE" ), connectionname );
+    QgsDebugMsgLevel( QStringLiteral( "No existing connection, creating a new one" ), 2 );
+    authdb = QSqlDatabase::addDatabase( QStringLiteral( "QSQLITE" ), connectionName );
     authdb.setDatabaseName( authenticationDatabasePath() );
+    // for background threads, remove database when current thread finishes
+    if ( QThread::currentThread() != qApp->thread() )
+    {
+      QgsDebugMsgLevel( QStringLiteral( "Scheduled auth db remove on thread close" ), 2 );
+
+      // IMPORTANT - we use a direct connection here, because the database removal must happen immediately
+      // when the thread finishes, and we cannot let this get queued on the main thread's event loop (where
+      // QgsAuthManager lives).
+      // Otherwise, the QSqlDatabase's private data's thread gets reset immediately the QThread::finished,
+      // and a subsequent call to QSqlDatabase::database with the same thread address (yep it happens, actually a lot)
+      // triggers a condition in QSqlDatabase which detects the nullptr private thread data and returns an invalid database instead.
+      // QSqlDatabase::removeDatabase is thread safe, so this is ok to do.
+      // Right about now is a good time to re-evaluate your selected career ;)
+      QMetaObject::Connection connection = connect( QThread::currentThread(), &QThread::finished, QThread::currentThread(), [connectionName, this ]
+      {
+        QMutexLocker locker( mMutex.get() );
+        QSqlDatabase::removeDatabase( connectionName );
+        mConnectedThreads.remove( QThread::currentThread() );
+      }, Qt::DirectConnection );
+
+      mConnectedThreads.insert( QThread::currentThread(), connection );
+    }
   }
   else
   {
-    authdb = QSqlDatabase::database( connectionname );
+    QgsDebugMsgLevel( QStringLiteral( "Reusing existing connection" ), 2 );
+    authdb = QSqlDatabase::database( connectionName );
   }
+  locker.unlock();
+
   if ( !authdb.isOpen() )
   {
     if ( !authdb.open() )
@@ -140,17 +175,19 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
     return true;
   mAuthInit = true;
 
-  QgsDebugMsg( "Initializing QCA..." );
-  mQcaInitializer = new QCA::Initializer( QCA::Practical, 256 );
+  QgsScopedRuntimeProfile profile( tr( "Initializing authentication manager" ) );
 
-  QgsDebugMsg( "QCA initialized." );
+  QgsDebugMsgLevel( QStringLiteral( "Initializing QCA..." ), 2 );
+  mQcaInitializer = std::make_unique<QCA::Initializer>( QCA::Practical, 256 );
+
+  QgsDebugMsgLevel( QStringLiteral( "QCA initialized." ), 2 );
   QCA::scanForPlugins();
 
-  QgsDebugMsg( QString( "QCA Plugin Diagnostics Context: %1" ).arg( QCA::pluginDiagnosticText() ) );
+  QgsDebugMsgLevel( QStringLiteral( "QCA Plugin Diagnostics Context: %1" ).arg( QCA::pluginDiagnosticText() ), 2 );
   QStringList capabilities;
 
   capabilities = QCA::supportedFeatures();
-  QgsDebugMsg( QString( "QCA supports: %1" ).arg( capabilities.join( "," ) ) );
+  QgsDebugMsgLevel( QStringLiteral( "QCA supports: %1" ).arg( capabilities.join( "," ) ), 2 );
 
   // do run-time check for qca-ossl plugin
   if ( !QCA::isSupported( "cert", QStringLiteral( "qca-ossl" ) ) )
@@ -160,7 +197,7 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
     return isDisabled();
   }
 
-  QgsDebugMsg( "Prioritizing qca-ossl over all other QCA providers..." );
+  QgsDebugMsgLevel( QStringLiteral( "Prioritizing qca-ossl over all other QCA providers..." ), 2 );
   const QCA::ProviderList provds = QCA::providers();
   QStringList prlist;
   for ( QCA::Provider *p : provds )
@@ -174,14 +211,14 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
     QCA::setProviderPriority( pn, pr );
     prlist << QStringLiteral( "%1:%2" ).arg( pn ).arg( QCA::providerPriority( pn ) );
   }
-  QgsDebugMsg( QString( "QCA provider priorities: %1" ).arg( prlist.join( ", " ) ) );
+  QgsDebugMsgLevel( QStringLiteral( "QCA provider priorities: %1" ).arg( prlist.join( ", " ) ), 2 );
 
-  QgsDebugMsg( "Populating auth method registry" );
+  QgsDebugMsgLevel( QStringLiteral( "Populating auth method registry" ), 3 );
   QgsAuthMethodRegistry *authreg = QgsAuthMethodRegistry::instance( pluginPath );
 
   QStringList methods = authreg->authMethodList();
 
-  QgsDebugMsg( QString( "Authentication methods found: %1" ).arg( methods.join( ", " ) ) );
+  QgsDebugMsgLevel( QStringLiteral( "Authentication methods found: %1" ).arg( methods.join( ", " ) ), 2 );
 
   if ( methods.isEmpty() )
   {
@@ -198,15 +235,15 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
   }
 
   mAuthDbPath = QDir::cleanPath( authDatabasePath );
-  QgsDebugMsg( QString( "Auth database path: %1" ).arg( authenticationDatabasePath() ) );
+  QgsDebugMsgLevel( QStringLiteral( "Auth database path: %1" ).arg( authenticationDatabasePath() ), 2 );
 
   QFileInfo dbinfo( authenticationDatabasePath() );
   QFileInfo dbdirinfo( dbinfo.path() );
-  QgsDebugMsg( QString( "Auth db directory path: %1" ).arg( dbdirinfo.filePath() ) );
+  QgsDebugMsgLevel( QStringLiteral( "Auth db directory path: %1" ).arg( dbdirinfo.filePath() ), 2 );
 
   if ( !dbdirinfo.exists() )
   {
-    QgsDebugMsg( QString( "Auth db directory path does not exist, making path: %1" ).arg( dbdirinfo.filePath() ) );
+    QgsDebugMsgLevel( QStringLiteral( "Auth db directory path does not exist, making path: %1" ).arg( dbdirinfo.filePath() ), 2 );
     if ( !QDir().mkpath( dbdirinfo.filePath() ) )
     {
       const char *err = QT_TR_NOOP( "Auth db directory path could not be created" );
@@ -227,7 +264,7 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
     }
     if ( dbinfo.size() > 0 )
     {
-      QgsDebugMsg( "Auth db exists and has data" );
+      QgsDebugMsgLevel( QStringLiteral( "Auth db exists and has data" ), 2 );
 
       if ( !createCertTables() )
         return false;
@@ -266,7 +303,7 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
         {
           if ( setMasterPassword( masterpass, true ) )
           {
-            QgsDebugMsg( "Authentication master password set from QGIS_AUTH_PASSWORD_FILE" );
+            QgsDebugMsgLevel( QStringLiteral( "Authentication master password set from QGIS_AUTH_PASSWORD_FILE" ), 2 );
           }
           else
           {
@@ -286,7 +323,7 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
   }
   else
   {
-    QgsDebugMsg( "Auth db does not exist: creating through QSqlDatabase initial connection" );
+    QgsDebugMsgLevel( QStringLiteral( "Auth db does not exist: creating through QSqlDatabase initial connection" ), 2 );
 
     if ( !createConfigTables() )
       return false;
@@ -304,6 +341,7 @@ bool QgsAuthManager::init( const QString &pluginPath, const QString &authDatabas
 
 bool QgsAuthManager::createConfigTables()
 {
+  QMutexLocker locker( mMutex.get() );
   // create and open the db
   if ( !authDbOpen() )
   {
@@ -318,22 +356,22 @@ bool QgsAuthManager::createConfigTables()
   // create the tables
   QString qstr;
 
-  qstr = QString( "CREATE TABLE %1 (\n"
-                  "    'salt' TEXT NOT NULL,\n"
-                  "    'civ' TEXT NOT NULL\n"
-                  ", 'hash' TEXT  NOT NULL);" ).arg( authDbPassTable() );
+  qstr = QStringLiteral( "CREATE TABLE %1 (\n"
+                         "    'salt' TEXT NOT NULL,\n"
+                         "    'civ' TEXT NOT NULL\n"
+                         ", 'hash' TEXT  NOT NULL);" ).arg( authDbPassTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
   query.clear();
 
-  qstr = QString( "CREATE TABLE %1 (\n"
-                  "    'id' TEXT NOT NULL,\n"
-                  "    'name' TEXT NOT NULL,\n"
-                  "    'uri' TEXT,\n"
-                  "    'type' TEXT NOT NULL,\n"
-                  "    'version' INTEGER NOT NULL\n"
-                  ", 'config' TEXT  NOT NULL);" ).arg( authDatabaseConfigTable() );
+  qstr = QStringLiteral( "CREATE TABLE %1 (\n"
+                         "    'id' TEXT NOT NULL,\n"
+                         "    'name' TEXT NOT NULL,\n"
+                         "    'uri' TEXT,\n"
+                         "    'type' TEXT NOT NULL,\n"
+                         "    'version' INTEGER NOT NULL\n"
+                         ", 'config' TEXT  NOT NULL);" ).arg( authDatabaseConfigTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
@@ -356,27 +394,28 @@ bool QgsAuthManager::createConfigTables()
 
 bool QgsAuthManager::createCertTables()
 {
+  QMutexLocker locker( mMutex.get() );
   // NOTE: these tables were added later, so IF NOT EXISTS is used
-  QgsDebugMsg( "Creating cert tables in auth db" );
+  QgsDebugMsgLevel( QStringLiteral( "Creating cert tables in auth db" ), 2 );
 
   QSqlQuery query( authDatabaseConnection() );
 
   // create the tables
   QString qstr;
 
-  qstr = QString( "CREATE TABLE IF NOT EXISTS %1 (\n"
-                  "    'setting' TEXT NOT NULL\n"
-                  ", 'value' TEXT);" ).arg( authDbSettingsTable() );
+  qstr = QStringLiteral( "CREATE TABLE IF NOT EXISTS %1 (\n"
+                         "    'setting' TEXT NOT NULL\n"
+                         ", 'value' TEXT);" ).arg( authDbSettingsTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
   query.clear();
 
 
-  qstr = QString( "CREATE TABLE IF NOT EXISTS %1 (\n"
-                  "    'id' TEXT NOT NULL,\n"
-                  "    'key' TEXT NOT NULL\n"
-                  ", 'cert' TEXT  NOT NULL);" ).arg( authDbIdentitiesTable() );
+  qstr = QStringLiteral( "CREATE TABLE IF NOT EXISTS %1 (\n"
+                         "    'id' TEXT NOT NULL,\n"
+                         "    'key' TEXT NOT NULL\n"
+                         ", 'cert' TEXT  NOT NULL);" ).arg( authDbIdentitiesTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
@@ -389,11 +428,11 @@ bool QgsAuthManager::createCertTables()
   query.clear();
 
 
-  qstr = QString( "CREATE TABLE IF NOT EXISTS %1 (\n"
-                  "    'id' TEXT NOT NULL,\n"
-                  "    'host' TEXT NOT NULL,\n"
-                  "    'cert' TEXT\n"
-                  ", 'config' TEXT  NOT NULL);" ).arg( authDatabaseServersTable() );
+  qstr = QStringLiteral( "CREATE TABLE IF NOT EXISTS %1 (\n"
+                         "    'id' TEXT NOT NULL,\n"
+                         "    'host' TEXT NOT NULL,\n"
+                         "    'cert' TEXT\n"
+                         ", 'config' TEXT  NOT NULL);" ).arg( authDatabaseServersTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
@@ -406,9 +445,9 @@ bool QgsAuthManager::createCertTables()
   query.clear();
 
 
-  qstr = QString( "CREATE TABLE IF NOT EXISTS %1 (\n"
-                  "    'id' TEXT NOT NULL\n"
-                  ", 'cert' TEXT  NOT NULL);" ).arg( authDbAuthoritiesTable() );
+  qstr = QStringLiteral( "CREATE TABLE IF NOT EXISTS %1 (\n"
+                         "    'id' TEXT NOT NULL\n"
+                         ", 'cert' TEXT  NOT NULL);" ).arg( authDbAuthoritiesTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
@@ -420,9 +459,9 @@ bool QgsAuthManager::createCertTables()
     return false;
   query.clear();
 
-  qstr = QString( "CREATE TABLE IF NOT EXISTS %1 (\n"
-                  "    'id' TEXT NOT NULL\n"
-                  ", 'policy' TEXT  NOT NULL);" ).arg( authDbTrustTable() );
+  qstr = QStringLiteral( "CREATE TABLE IF NOT EXISTS %1 (\n"
+                         "    'id' TEXT NOT NULL\n"
+                         ", 'policy' TEXT  NOT NULL);" ).arg( authDbTrustTable() );
   query.prepare( qstr );
   if ( !authDbQuery( &query ) )
     return false;
@@ -441,7 +480,7 @@ bool QgsAuthManager::isDisabled() const
 {
   if ( mAuthDisabled )
   {
-    QgsDebugMsg( "Authentication system DISABLED: QCA's qca-ossl (OpenSSL) plugin is missing" );
+    QgsDebugMsg( QStringLiteral( "Authentication system DISABLED: QCA's qca-ossl (OpenSSL) plugin is missing" ) );
   }
   return mAuthDisabled;
 }
@@ -453,7 +492,7 @@ const QString QgsAuthManager::disabledMessage() const
 
 bool QgsAuthManager::setMasterPassword( bool verify )
 {
-  QMutexLocker locker( mMutex );
+  QMutexLocker locker( mMasterPasswordMutex.get() );
   if ( isDisabled() )
     return false;
 
@@ -462,16 +501,16 @@ bool QgsAuthManager::setMasterPassword( bool verify )
 
   if ( mMasterPass.isEmpty() )
   {
-    QgsDebugMsg( "Master password is not yet set by user" );
+    QgsDebugMsgLevel( QStringLiteral( "Master password is not yet set by user" ), 2 );
     if ( !masterPasswordInput() )
     {
-      QgsDebugMsg( "Master password input canceled by user" );
+      QgsDebugMsgLevel( QStringLiteral( "Master password input canceled by user" ), 2 );
       return false;
     }
   }
   else
   {
-    QgsDebugMsg( "Master password is set" );
+    QgsDebugMsgLevel( QStringLiteral( "Master password is set" ), 2 );
     if ( !verify )
       return true;
   }
@@ -479,13 +518,13 @@ bool QgsAuthManager::setMasterPassword( bool verify )
   if ( !verifyMasterPassword() )
     return false;
 
-  QgsDebugMsg( "Master password is set and verified" );
+  QgsDebugMsgLevel( QStringLiteral( "Master password is set and verified" ), 2 );
   return true;
 }
 
 bool QgsAuthManager::setMasterPassword( const QString &pass, bool verify )
 {
-  QMutexLocker locker( mMutex );
+  QMutexLocker locker( mMutex.get() );
   if ( isDisabled() )
     return false;
 
@@ -504,7 +543,7 @@ bool QgsAuthManager::setMasterPassword( const QString &pass, bool verify )
     return false;
   }
 
-  QgsDebugMsg( QString( "Master password set: SUCCESS%1" ).arg( verify ? " and verified" : "" ) );
+  QgsDebugMsgLevel( QStringLiteral( "Master password set: SUCCESS%1" ).arg( verify ? " and verified" : "" ), 2 );
   return true;
 }
 
@@ -524,7 +563,7 @@ bool QgsAuthManager::verifyMasterPassword( const QString &compare )
     return false;
   }
 
-  QgsDebugMsg( QString( "Master password: %1 rows in database" ).arg( rows ) );
+  QgsDebugMsgLevel( QStringLiteral( "Master password: %1 rows in database" ).arg( rows ), 2 );
 
   if ( rows > 1 )
   {
@@ -561,7 +600,7 @@ bool QgsAuthManager::verifyMasterPassword( const QString &compare )
     }
     else
     {
-      QgsDebugMsg( "Master password: verified against hash in database" );
+      QgsDebugMsgLevel( QStringLiteral( "Master password: verified against hash in database" ), 2 );
       if ( compare.isNull() )
         emit masterPasswordVerified( true );
     }
@@ -579,7 +618,7 @@ bool QgsAuthManager::verifyMasterPassword( const QString &compare )
     }
     else
     {
-      QgsDebugMsg( "Master password: hash stored in database" );
+      QgsDebugMsgLevel( QStringLiteral( "Master password: hash stored in database" ), 2 );
     }
     // double-check storing
     if ( !masterPasswordCheckAgainstDb() )
@@ -594,7 +633,7 @@ bool QgsAuthManager::verifyMasterPassword( const QString &compare )
     }
     else
     {
-      QgsDebugMsg( "Master password: verified against hash in database" );
+      QgsDebugMsgLevel( QStringLiteral( "Master password: verified against hash in database" ), 2 );
       emit masterPasswordVerified( true );
     }
   }
@@ -627,7 +666,7 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
   if ( !backupAuthenticationDatabase( &dbbackup ) )
     return false;
 
-  QgsDebugMsg( "Master password reset: backed up current database" );
+  QgsDebugMsgLevel( QStringLiteral( "Master password reset: backed up current database" ), 2 );
 
   // create new database and connection
   authDatabaseConnection();
@@ -649,7 +688,7 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
   }
   if ( ok )
   {
-    QgsDebugMsg( "Master password reset: cleared current password from database" );
+    QgsDebugMsgLevel( QStringLiteral( "Master password reset: cleared current password from database" ), 2 );
   }
 
   // mMasterPass empty, set new password (don't verify, since not stored yet)
@@ -665,7 +704,7 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
   }
   if ( ok )
   {
-    QgsDebugMsg( "Master password reset: stored new password in database" );
+    QgsDebugMsgLevel( QStringLiteral( "Master password reset: stored new password in database" ), 2 );
   }
 
   // verify it stored password properly
@@ -687,7 +726,7 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
   }
   if ( ok )
   {
-    QgsDebugMsg( "Master password reset: re-encrypted configs in database" );
+    QgsDebugMsgLevel( QStringLiteral( "Master password reset: re-encrypted configs in database" ), 2 );
   }
 
   // verify it all worked
@@ -723,13 +762,13 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
     QString errdbbackup( dbbackup );
     errdbbackup.replace( QLatin1String( ".db" ), QLatin1String( "_ERROR.db" ) );
     QFile::rename( authenticationDatabasePath(), errdbbackup );
-    QgsDebugMsg( QString( "Master password reset FAILED: backed up failed db at %1" ).arg( errdbbackup ) );
+    QgsDebugMsg( QStringLiteral( "Master password reset FAILED: backed up failed db at %1" ).arg( errdbbackup ) );
 
     // reinstate previous database and password
     QFile::rename( dbbackup, authenticationDatabasePath() );
     mMasterPass = prevpass;
     authDatabaseConnection();
-    QgsDebugMsg( "Master password reset FAILED: reinstated previous password and database" );
+    QgsDebugMsg( QStringLiteral( "Master password reset FAILED: reinstated previous password and database" ) );
 
     // assign error db backup
     if ( backuppath )
@@ -749,12 +788,12 @@ bool QgsAuthManager::resetMasterPassword( const QString &newpass, const QString 
 
   if ( keepbackup )
   {
-    QgsDebugMsg( QString( "Master password reset: backed up previous db at %1" ).arg( dbbackup ) );
+    QgsDebugMsgLevel( QStringLiteral( "Master password reset: backed up previous db at %1" ).arg( dbbackup ), 2 );
     if ( backuppath )
       *backuppath = dbbackup;
   }
 
-  QgsDebugMsg( "Master password reset: SUCCESS" );
+  QgsDebugMsgLevel( QStringLiteral( "Master password reset: SUCCESS" ), 2 );
   emit authDatabaseChanged();
   return true;
 }
@@ -809,24 +848,38 @@ const QString QgsAuthManager::uniqueConfigId() const
   int len = 7;
   // sleep just a bit to make sure the current time has changed
   QEventLoop loop;
-  QTimer::singleShot( 3, &loop, SLOT( quit() ) );
+  QTimer::singleShot( 3, &loop, &QEventLoop::quit );
   loop.exec();
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
   uint seed = static_cast< uint >( QTime::currentTime().msec() );
   qsrand( seed );
+#endif
 
   while ( true )
   {
     id.clear();
     for ( int i = 0; i < len; i++ )
     {
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
       switch ( qrand() % 2 )
+#else
+      switch ( QRandomGenerator::system()->generate() % 2 )
+#endif
       {
         case 0:
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
           id += ( '0' + qrand() % 10 );
+#else
+          id += ( '0' + QRandomGenerator::system()->generate() % 10 );
+#endif
           break;
         case 1:
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
           id += ( 'a' + qrand() % 26 );
+#else
+          id += ( 'a' + QRandomGenerator::system()->generate() % 26 );
+#endif
           break;
       }
     }
@@ -835,7 +888,7 @@ const QString QgsAuthManager::uniqueConfigId() const
       break;
     }
   }
-  QgsDebugMsg( QString( "Generated unique ID: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "Generated unique ID: %1" ).arg( id ), 2 );
   return id;
 }
 
@@ -863,6 +916,7 @@ bool QgsAuthManager::hasConfigId( const QString &txt ) const
 
 QgsAuthMethodConfigsMap QgsAuthManager::availableAuthMethodConfigs( const QString &dataprovider )
 {
+  QMutexLocker locker( mMutex.get() );
   QStringList providerAuthMethodsKeys;
   if ( !dataprovider.isEmpty() )
   {
@@ -907,6 +961,7 @@ QgsAuthMethodConfigsMap QgsAuthManager::availableAuthMethodConfigs( const QStrin
 
 void QgsAuthManager::updateConfigAuthMethods()
 {
+  QMutexLocker locker( mMutex.get() );
   if ( isDisabled() )
     return;
 
@@ -920,7 +975,7 @@ void QgsAuthManager::updateConfigAuthMethods()
 
   if ( query.isActive() )
   {
-    QgsDebugMsg( "Synching existing auth config and their auth methods" );
+    QgsDebugMsgLevel( QStringLiteral( "Syncing existing auth config and their auth methods" ), 2 );
     mConfigAuthMethods.clear();
     QStringList cfgmethods;
     while ( query.next() )
@@ -929,7 +984,7 @@ void QgsAuthManager::updateConfigAuthMethods()
                                  query.value( 1 ).toString() );
       cfgmethods << QStringLiteral( "%1=%2" ).arg( query.value( 0 ).toString(), query.value( 1 ).toString() );
     }
-    QgsDebugMsg( QString( "Stored auth config/methods:\n%1" ).arg( cfgmethods.join( ", " ) ) );
+    QgsDebugMsgLevel( QStringLiteral( "Stored auth config/methods:\n%1" ).arg( cfgmethods.join( ", " ) ), 2 );
   }
 }
 
@@ -940,7 +995,7 @@ QgsAuthMethod *QgsAuthManager::configAuthMethod( const QString &authcfg )
 
   if ( !mConfigAuthMethods.contains( authcfg ) )
   {
-    QgsDebugMsg( QString( "No config auth method found in database for authcfg: %1" ).arg( authcfg ) );
+    QgsDebugMsg( QStringLiteral( "No config auth method found in database for authcfg: %1" ).arg( authcfg ) );
     return nullptr;
   }
 
@@ -960,14 +1015,14 @@ QString QgsAuthManager::configAuthMethodKey( const QString &authcfg ) const
 
 QStringList QgsAuthManager::authMethodsKeys( const QString &dataprovider )
 {
-  return authMethodsMap( dataprovider.toLower() ).uniqueKeys();
+  return authMethodsMap( dataprovider.toLower() ).keys();
 }
 
 QgsAuthMethod *QgsAuthManager::authMethod( const QString &authMethodKey )
 {
   if ( !mAuthMethods.contains( authMethodKey ) )
   {
-    QgsDebugMsg( QString( "No auth method registered for auth method key: %1" ).arg( authMethodKey ) );
+    QgsDebugMsg( QStringLiteral( "No auth method registered for auth method key: %1" ).arg( authMethodKey ) );
     return nullptr;
   }
 
@@ -1004,18 +1059,19 @@ QWidget *QgsAuthManager::authMethodEditWidget( const QString &authMethodKey, QWi
 QgsAuthMethod::Expansions QgsAuthManager::supportedAuthMethodExpansions( const QString &authcfg )
 {
   if ( isDisabled() )
-    return QgsAuthMethod::Expansions( nullptr );
+    return QgsAuthMethod::Expansions();
 
   QgsAuthMethod *authmethod = configAuthMethod( authcfg );
   if ( authmethod )
   {
     return authmethod->supportedExpansions();
   }
-  return QgsAuthMethod::Expansions( nullptr );
+  return QgsAuthMethod::Expansions();
 }
 
 bool QgsAuthManager::storeAuthenticationConfig( QgsAuthMethodConfig &mconfig )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( !setMasterPassword( true ) )
     return false;
 
@@ -1051,17 +1107,17 @@ bool QgsAuthManager::storeAuthenticationConfig( QgsAuthMethodConfig &mconfig )
     return false;
   }
 #if( 0 )
-  QgsDebugMsg( QString( "authDbConfigTable(): %1" ).arg( authDbConfigTable() ) );
-  QgsDebugMsg( QString( "name: %1" ).arg( config.name() ) );
-  QgsDebugMsg( QString( "uri: %1" ).arg( config.uri() ) );
-  QgsDebugMsg( QString( "type: %1" ).arg( config.method() ) );
-  QgsDebugMsg( QString( "version: %1" ).arg( config.version() ) );
-  QgsDebugMsg( QString( "config: %1" ).arg( configstring ) ); // DO NOT LEAVE THIS LINE UNCOMMENTED !
+  QgsDebugMsg( QStringLiteral( "authDbConfigTable(): %1" ).arg( authDbConfigTable() ) );
+  QgsDebugMsg( QStringLiteral( "name: %1" ).arg( config.name() ) );
+  QgsDebugMsg( QStringLiteral( "uri: %1" ).arg( config.uri() ) );
+  QgsDebugMsg( QStringLiteral( "type: %1" ).arg( config.method() ) );
+  QgsDebugMsg( QStringLiteral( "version: %1" ).arg( config.version() ) );
+  QgsDebugMsg( QStringLiteral( "config: %1" ).arg( configstring ) ); // DO NOT LEAVE THIS LINE UNCOMMENTED !
 #endif
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (id, name, uri, type, version, config) "
-                          "VALUES (:id, :name, :uri, :type, :version, :config)" ).arg( authDatabaseConfigTable() ) );
+  query.prepare( QStringLiteral( "INSERT INTO %1 (id, name, uri, type, version, config) "
+                                 "VALUES (:id, :name, :uri, :type, :version, :config)" ).arg( authDatabaseConfigTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), uid );
   query.bindValue( QStringLiteral( ":name" ), mconfig.name() );
@@ -1085,13 +1141,14 @@ bool QgsAuthManager::storeAuthenticationConfig( QgsAuthMethodConfig &mconfig )
 
   updateConfigAuthMethods();
 
-  QgsDebugMsg( QString( "Store config SUCCESS for authcfg: %1" ).arg( uid ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store config SUCCESS for authcfg: %1" ).arg( uid ), 2 );
   return true;
 
 }
 
 bool QgsAuthManager::updateAuthenticationConfig( const QgsAuthMethodConfig &config )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( !setMasterPassword( true ) )
     return false;
 
@@ -1114,19 +1171,19 @@ bool QgsAuthManager::updateAuthenticationConfig( const QgsAuthMethodConfig &conf
   }
 
 #if( 0 )
-  QgsDebugMsg( QString( "authDbConfigTable(): %1" ).arg( authDbConfigTable() ) );
-  QgsDebugMsg( QString( "id: %1" ).arg( config.id() ) );
-  QgsDebugMsg( QString( "name: %1" ).arg( config.name() ) );
-  QgsDebugMsg( QString( "uri: %1" ).arg( config.uri() ) );
-  QgsDebugMsg( QString( "type: %1" ).arg( config.method() ) );
-  QgsDebugMsg( QString( "version: %1" ).arg( config.version() ) );
-  QgsDebugMsg( QString( "config: %1" ).arg( configstring ) ); // DO NOT LEAVE THIS LINE UNCOMMENTED !
+  QgsDebugMsg( QStringLiteral( "authDbConfigTable(): %1" ).arg( authDbConfigTable() ) );
+  QgsDebugMsg( QStringLiteral( "id: %1" ).arg( config.id() ) );
+  QgsDebugMsg( QStringLiteral( "name: %1" ).arg( config.name() ) );
+  QgsDebugMsg( QStringLiteral( "uri: %1" ).arg( config.uri() ) );
+  QgsDebugMsg( QStringLiteral( "type: %1" ).arg( config.method() ) );
+  QgsDebugMsg( QStringLiteral( "version: %1" ).arg( config.version() ) );
+  QgsDebugMsg( QStringLiteral( "config: %1" ).arg( configstring ) ); // DO NOT LEAVE THIS LINE UNCOMMENTED !
 #endif
 
   QSqlQuery query( authDatabaseConnection() );
-  if ( !query.prepare( QString( "UPDATE %1 "
-                                "SET name = :name, uri = :uri, type = :type, version = :version, config = :config "
-                                "WHERE id = :id" ).arg( authDatabaseConfigTable() ) ) )
+  if ( !query.prepare( QStringLiteral( "UPDATE %1 "
+                                       "SET name = :name, uri = :uri, type = :type, version = :version, config = :config "
+                                       "WHERE id = :id" ).arg( authDatabaseConfigTable() ) ) )
   {
     const char *err = QT_TR_NOOP( "Update config: FAILED to prepare query" );
     QgsDebugMsg( err );
@@ -1155,7 +1212,7 @@ bool QgsAuthManager::updateAuthenticationConfig( const QgsAuthMethodConfig &conf
 
   updateConfigAuthMethods();
 
-  QgsDebugMsg( QString( "Update config SUCCESS for authcfg: %1" ).arg( config.id() ) );
+  QgsDebugMsgLevel( QStringLiteral( "Update config SUCCESS for authcfg: %1" ).arg( config.id() ), 2 );
 
   return true;
 }
@@ -1168,16 +1225,18 @@ bool QgsAuthManager::loadAuthenticationConfig( const QString &authcfg, QgsAuthMe
   if ( full && !setMasterPassword( true ) )
     return false;
 
+  QMutexLocker locker( mMutex.get() );
+
   QSqlQuery query( authDatabaseConnection() );
   if ( full )
   {
-    query.prepare( QString( "SELECT id, name, uri, type, version, config FROM %1 "
-                            "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
+    query.prepare( QStringLiteral( "SELECT id, name, uri, type, version, config FROM %1 "
+                                   "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
   }
   else
   {
-    query.prepare( QString( "SELECT id, name, uri, type, version FROM %1 "
-                            "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
+    query.prepare( QStringLiteral( "SELECT id, name, uri, type, version FROM %1 "
+                                   "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
   }
 
   query.bindValue( QStringLiteral( ":id" ), authcfg );
@@ -1210,15 +1269,15 @@ bool QgsAuthManager::loadAuthenticationConfig( const QString &authcfg, QgsAuthMe
       }
       else
       {
-        QgsDebugMsg( QString( "Update of authcfg %1 FAILED for auth method %2" ).arg( authcfg, authMethodKey ) );
+        QgsDebugMsg( QStringLiteral( "Update of authcfg %1 FAILED for auth method %2" ).arg( authcfg, authMethodKey ) );
       }
 
-      QgsDebugMsg( QString( "Load %1 config SUCCESS for authcfg: %2" ).arg( full ? "full" : "base", authcfg ) );
+      QgsDebugMsgLevel( QStringLiteral( "Load %1 config SUCCESS for authcfg: %2" ).arg( full ? "full" : "base", authcfg ), 2 );
       return true;
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for authcfg: %1" ).arg( authcfg ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for authcfg: %1" ).arg( authcfg ) );
       emit messageOut( tr( "Authentication database contains duplicate configuration IDs" ), authManTag(), WARNING );
     }
   }
@@ -1228,6 +1287,7 @@ bool QgsAuthManager::loadAuthenticationConfig( const QString &authcfg, QgsAuthMe
 
 bool QgsAuthManager::removeAuthenticationConfig( const QString &authcfg )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( isDisabled() )
     return false;
 
@@ -1253,13 +1313,14 @@ bool QgsAuthManager::removeAuthenticationConfig( const QString &authcfg )
 
   updateConfigAuthMethods();
 
-  QgsDebugMsg( QString( "REMOVED config for authcfg: %1" ).arg( authcfg ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED config for authcfg: %1" ).arg( authcfg ), 2 );
 
   return true;
 }
 
 bool QgsAuthManager::removeAllAuthenticationConfigs()
 {
+  QMutexLocker locker( mMutex.get() );
   if ( isDisabled() )
     return false;
 
@@ -1273,13 +1334,14 @@ bool QgsAuthManager::removeAllAuthenticationConfigs()
     updateConfigAuthMethods();
   }
 
-  QgsDebugMsg( QString( "Remove configs from database: %1" ).arg( res ? "SUCCEEDED" : "FAILED" ) );
+  QgsDebugMsgLevel( QStringLiteral( "Remove configs from database: %1" ).arg( res ? "SUCCEEDED" : "FAILED" ), 2 );
 
   return res;
 }
 
 bool QgsAuthManager::backupAuthenticationDatabase( QString *backuppath )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( !QFile::exists( authenticationDatabasePath() ) )
   {
     const char *err = QT_TR_NOOP( "No authentication database found" );
@@ -1309,12 +1371,13 @@ bool QgsAuthManager::backupAuthenticationDatabase( QString *backuppath )
   if ( backuppath )
     *backuppath = dbbackup;
 
-  QgsDebugMsg( QString( "Backed up auth database at %1" ).arg( dbbackup ) );
+  QgsDebugMsgLevel( QStringLiteral( "Backed up auth database at %1" ).arg( dbbackup ), 2 );
   return true;
 }
 
 bool QgsAuthManager::eraseAuthenticationDatabase( bool backup, QString *backuppath )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( isDisabled() )
     return false;
 
@@ -1356,7 +1419,7 @@ bool QgsAuthManager::eraseAuthenticationDatabase( bool backup, QString *backuppa
 
   mMasterPass = QString();
 
-  QgsDebugMsg( "Creating Auth db through QSqlDatabase initial connection" );
+  QgsDebugMsgLevel( QStringLiteral( "Creating Auth db through QSqlDatabase initial connection" ), 2 );
 
   QSqlDatabase authConn = authDatabaseConnection();
   if ( !authConn.isValid() || !authConn.isOpen() )
@@ -1403,7 +1466,7 @@ bool QgsAuthManager::updateNetworkRequest( QNetworkRequest &request, const QStri
   {
     if ( !( authmethod->supportedExpansions() & QgsAuthMethod::NetworkRequest ) )
     {
-      QgsDebugMsg( QString( "Network request updating not supported by authcfg: %1" ).arg( authcfg ) );
+      QgsDebugMsg( QStringLiteral( "Network request updating not supported by authcfg: %1" ).arg( authcfg ) );
       return true;
     }
 
@@ -1428,7 +1491,7 @@ bool QgsAuthManager::updateNetworkReply( QNetworkReply *reply, const QString &au
   {
     if ( !( authmethod->supportedExpansions() & QgsAuthMethod::NetworkReply ) )
     {
-      QgsDebugMsg( QString( "Network reply updating not supported by authcfg: %1" ).arg( authcfg ) );
+      QgsDebugMsg( QStringLiteral( "Network reply updating not supported by authcfg: %1" ).arg( authcfg ) );
       return true;
     }
 
@@ -1454,7 +1517,7 @@ bool QgsAuthManager::updateDataSourceUriItems( QStringList &connectionItems, con
   {
     if ( !( authmethod->supportedExpansions() & QgsAuthMethod::DataSourceUri ) )
     {
-      QgsDebugMsg( QString( "Data source URI updating not supported by authcfg: %1" ).arg( authcfg ) );
+      QgsDebugMsg( QStringLiteral( "Data source URI updating not supported by authcfg: %1" ).arg( authcfg ) );
       return true;
     }
 
@@ -1488,7 +1551,7 @@ bool QgsAuthManager::updateNetworkProxy( QNetworkProxy &proxy, const QString &au
       authmethod->clearCachedConfig( authcfg );
       return false;
     }
-    QgsDebugMsg( QStringLiteral( "Proxy updated successfully from authcfg: %1" ).arg( authcfg ) );
+    QgsDebugMsgLevel( QStringLiteral( "Proxy updated successfully from authcfg: %1" ).arg( authcfg ), 2 );
     return true;
   }
 
@@ -1497,6 +1560,7 @@ bool QgsAuthManager::updateNetworkProxy( QNetworkProxy &proxy, const QString &au
 
 bool QgsAuthManager::storeAuthSetting( const QString &key, const QVariant &value, bool encrypt )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( key.isEmpty() )
     return false;
 
@@ -1516,8 +1580,8 @@ bool QgsAuthManager::storeAuthSetting( const QString &key, const QVariant &value
   removeAuthSetting( key );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (setting, value) "
-                          "VALUES (:setting, :value)" ).arg( authDbSettingsTable() ) );
+  query.prepare( QStringLiteral( "INSERT INTO %1 (setting, value) "
+                                 "VALUES (:setting, :value)" ).arg( authDbSettingsTable() ) );
 
   query.bindValue( QStringLiteral( ":setting" ), key );
   query.bindValue( QStringLiteral( ":value" ), storeval );
@@ -1531,12 +1595,13 @@ bool QgsAuthManager::storeAuthSetting( const QString &key, const QVariant &value
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "Store setting SUCCESS for key: %1" ).arg( key ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store setting SUCCESS for key: %1" ).arg( key ), 2 );
   return true;
 }
 
 QVariant QgsAuthManager::authSetting( const QString &key, const QVariant &defaultValue, bool decrypt )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( key.isEmpty() )
     return QVariant();
 
@@ -1545,8 +1610,8 @@ QVariant QgsAuthManager::authSetting( const QString &key, const QVariant &defaul
 
   QVariant value = defaultValue;
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT value FROM %1 "
-                          "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
+  query.prepare( QStringLiteral( "SELECT value FROM %1 "
+                                 "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
 
   query.bindValue( QStringLiteral( ":setting" ), key );
 
@@ -1565,11 +1630,11 @@ QVariant QgsAuthManager::authSetting( const QString &key, const QVariant &defaul
       {
         value = query.value( 0 );
       }
-      QgsDebugMsg( QString( "Authentication setting retrieved for key: %1" ).arg( key ) );
+      QgsDebugMsgLevel( QStringLiteral( "Authentication setting retrieved for key: %1" ).arg( key ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for setting key: %1" ).arg( key ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for setting key: %1" ).arg( key ) );
       emit messageOut( tr( "Authentication database contains duplicate settings" ), authManTag(), WARNING );
       return QVariant();
     }
@@ -1579,12 +1644,13 @@ QVariant QgsAuthManager::authSetting( const QString &key, const QVariant &defaul
 
 bool QgsAuthManager::existsAuthSetting( const QString &key )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( key.isEmpty() )
     return false;
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT value FROM %1 "
-                          "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
+  query.prepare( QStringLiteral( "SELECT value FROM %1 "
+                                 "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
 
   query.bindValue( QStringLiteral( ":setting" ), key );
 
@@ -1596,12 +1662,12 @@ bool QgsAuthManager::existsAuthSetting( const QString &key )
   {
     if ( query.first() )
     {
-      QgsDebugMsg( QString( "Authentication setting exists for key: %1" ).arg( key ) );
+      QgsDebugMsgLevel( QStringLiteral( "Authentication setting exists for key: %1" ).arg( key ), 2 );
       res = true;
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for setting key: %1" ).arg( key ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for setting key: %1" ).arg( key ) );
       emit messageOut( tr( "Authentication database contains duplicate settings" ), authManTag(), WARNING );
       return false;
     }
@@ -1611,6 +1677,7 @@ bool QgsAuthManager::existsAuthSetting( const QString &key )
 
 bool QgsAuthManager::removeAuthSetting( const QString &key )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( key.isEmpty() )
     return false;
 
@@ -1629,7 +1696,7 @@ bool QgsAuthManager::removeAuthSetting( const QString &key )
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "REMOVED setting for key: %1" ).arg( key ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED setting for key: %1" ).arg( key ), 2 );
 
   return true;
 }
@@ -1641,26 +1708,33 @@ bool QgsAuthManager::removeAuthSetting( const QString &key )
 
 bool QgsAuthManager::initSslCaches()
 {
+  QgsScopedRuntimeProfile profile( "Initialize SSL cache" );
+
+  QMutexLocker locker( mMutex.get() );
   bool res = true;
   res = res && rebuildCaCertsCache();
   res = res && rebuildCertTrustCache();
   res = res && rebuildTrustedCaCertsCache();
   res = res && rebuildIgnoredSslErrorCache();
+  mCustomConfigByHostCache.clear();
+  mHasCheckedIfCustomConfigByHostExists = false;
 
-  QgsDebugMsg( QString( "Init of SSL caches %1" ).arg( res ? "SUCCEEDED" : "FAILED" ) );
+  if ( !res )
+    QgsDebugMsg( QStringLiteral( "Init of SSL caches FAILED" ) );
   return res;
 }
 
 bool QgsAuthManager::storeCertIdentity( const QSslCertificate &cert, const QSslKey &key )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
   if ( key.isNull() )
   {
-    QgsDebugMsg( "Passed private key is null" );
+    QgsDebugMsg( QStringLiteral( "Passed private key is null" ) );
     return false;
   }
 
@@ -1674,8 +1748,8 @@ bool QgsAuthManager::storeCertIdentity( const QSslCertificate &cert, const QSslK
   QString keypem( QgsAuthCrypto::encrypt( mMasterPass, masterPasswordCiv(), key.toPem() ) );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (id, key, cert) "
-                          "VALUES (:id, :key, :cert)" ).arg( authDbIdentitiesTable() ) );
+  query.prepare( QStringLiteral( "INSERT INTO %1 (id, key, cert) "
+                                 "VALUES (:id, :key, :cert)" ).arg( authDbIdentitiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":key" ), keypem );
@@ -1690,20 +1764,21 @@ bool QgsAuthManager::storeCertIdentity( const QSslCertificate &cert, const QSslK
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "Store certificate identity SUCCESS for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store certificate identity SUCCESS for id: %1" ).arg( id ), 2 );
   return true;
 }
 
 const QSslCertificate QgsAuthManager::certIdentity( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   QSslCertificate emptycert;
   QSslCertificate cert;
   if ( id.isEmpty() )
     return emptycert;
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT cert FROM %1 "
-                          "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT cert FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -1715,11 +1790,11 @@ const QSslCertificate QgsAuthManager::certIdentity( const QString &id )
     if ( query.first() )
     {
       cert = QSslCertificate( query.value( 0 ).toByteArray(), QSsl::Pem );
-      QgsDebugMsg( QString( "Certificate identity retrieved for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Certificate identity retrieved for id: %1" ).arg( id ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one certificate identity for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one certificate identity for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate certificate identity" ), authManTag(), WARNING );
       return emptycert;
     }
@@ -1729,6 +1804,7 @@ const QSslCertificate QgsAuthManager::certIdentity( const QString &id )
 
 const QPair<QSslCertificate, QSslKey> QgsAuthManager::certIdentityBundle( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   QPair<QSslCertificate, QSslKey> bundle;
   if ( id.isEmpty() )
     return bundle;
@@ -1737,8 +1813,8 @@ const QPair<QSslCertificate, QSslKey> QgsAuthManager::certIdentityBundle( const 
     return bundle;
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT key, cert FROM %1 "
-                          "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT key, cert FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -1768,11 +1844,11 @@ const QPair<QSslCertificate, QSslKey> QgsAuthManager::certIdentityBundle( const 
         emit messageOut( tr( err ), authManTag(), WARNING );
         return bundle;
       }
-      QgsDebugMsg( QString( "Certificate identity bundle retrieved for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Certificate identity bundle retrieved for id: %1" ).arg( id ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one certificate identity for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one certificate identity for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate certificate identity" ), authManTag(), WARNING );
       return bundle;
     }
@@ -1783,6 +1859,7 @@ const QPair<QSslCertificate, QSslKey> QgsAuthManager::certIdentityBundle( const 
 
 const QStringList QgsAuthManager::certIdentityBundleToPem( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   QPair<QSslCertificate, QSslKey> bundle( certIdentityBundle( id ) );
   if ( QgsAuthCertUtils::certIsViable( bundle.first ) && !bundle.second.isNull() )
   {
@@ -1793,6 +1870,7 @@ const QStringList QgsAuthManager::certIdentityBundleToPem( const QString &id )
 
 const QList<QSslCertificate> QgsAuthManager::certIdentities()
 {
+  QMutexLocker locker( mMutex.get() );
   QList<QSslCertificate> certs;
 
   QSqlQuery query( authDatabaseConnection() );
@@ -1814,6 +1892,7 @@ const QList<QSslCertificate> QgsAuthManager::certIdentities()
 
 QStringList QgsAuthManager::certIdentityIds() const
 {
+  QMutexLocker locker( mMutex.get() );
   QStringList identityids = QStringList();
 
   if ( isDisabled() )
@@ -1839,12 +1918,13 @@ QStringList QgsAuthManager::certIdentityIds() const
 
 bool QgsAuthManager::existsCertIdentity( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( id.isEmpty() )
     return false;
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT cert FROM %1 "
-                          "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT cert FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -1856,12 +1936,12 @@ bool QgsAuthManager::existsCertIdentity( const QString &id )
   {
     if ( query.first() )
     {
-      QgsDebugMsg( QString( "Certificate bundle exists for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Certificate bundle exists for id: %1" ).arg( id ), 2 );
       res = true;
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one certificate bundle for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one certificate bundle for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate certificate bundles" ), authManTag(), WARNING );
       return false;
     }
@@ -1871,9 +1951,10 @@ bool QgsAuthManager::existsCertIdentity( const QString &id )
 
 bool QgsAuthManager::removeCertIdentity( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( id.isEmpty() )
   {
-    QgsDebugMsg( "Passed bundle ID is empty" );
+    QgsDebugMsg( QStringLiteral( "Passed bundle ID is empty" ) );
     return false;
   }
 
@@ -1892,15 +1973,16 @@ bool QgsAuthManager::removeCertIdentity( const QString &id )
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "REMOVED certificate identity for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED certificate identity for id: %1" ).arg( id ), 2 );
   return true;
 }
 
 bool QgsAuthManager::storeSslCertCustomConfig( const QgsAuthConfigSslServer &config )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( config.isNull() )
   {
-    QgsDebugMsg( "Passed config is null" );
+    QgsDebugMsg( QStringLiteral( "Passed config is null" ) );
     return false;
   }
 
@@ -1912,8 +1994,8 @@ bool QgsAuthManager::storeSslCertCustomConfig( const QgsAuthConfigSslServer &con
   QString certpem( cert.toPem() );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (id, host, cert, config) "
-                          "VALUES (:id, :host, :cert, :config)" ).arg( authDatabaseServersTable() ) );
+  query.prepare( QStringLiteral( "INSERT OR REPLACE INTO %1 (id, host, cert, config) "
+                                 "VALUES (:id, :host, :cert, :config)" ).arg( authDatabaseServersTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":host" ), config.sslHostPort().trimmed() );
@@ -1929,27 +2011,30 @@ bool QgsAuthManager::storeSslCertCustomConfig( const QgsAuthConfigSslServer &con
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "Store SSL cert custom config SUCCESS for host:port, id: %1, %2" )
-               .arg( config.sslHostPort().trimmed(), id ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store SSL cert custom config SUCCESS for host:port, id: %1, %2" )
+                    .arg( config.sslHostPort().trimmed(), id ), 2 );
 
   updateIgnoredSslErrorsCacheFromConfig( config );
+  mHasCheckedIfCustomConfigByHostExists = false;
+  mCustomConfigByHostCache.clear();
 
   return true;
 }
 
 const QgsAuthConfigSslServer QgsAuthManager::sslCertCustomConfig( const QString &id, const QString &hostport )
 {
+  QMutexLocker locker( mMutex.get() );
   QgsAuthConfigSslServer config;
 
   if ( id.isEmpty() || hostport.isEmpty() )
   {
-    QgsDebugMsg( "Passed config ID or host:port is empty" );
+    QgsDebugMsg( QStringLiteral( "Passed config ID or host:port is empty" ) );
     return config;
   }
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT id, host, cert, config FROM %1 "
-                          "WHERE id = :id AND host = :host" ).arg( authDatabaseServersTable() ) );
+  query.prepare( QStringLiteral( "SELECT id, host, cert, config FROM %1 "
+                                 "WHERE id = :id AND host = :host" ).arg( authDatabaseServersTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":host" ), hostport.trimmed() );
@@ -1964,11 +2049,11 @@ const QgsAuthConfigSslServer QgsAuthManager::sslCertCustomConfig( const QString 
       config.setSslCertificate( QSslCertificate( query.value( 2 ).toByteArray(), QSsl::Pem ) );
       config.setSslHostPort( query.value( 1 ).toString().trimmed() );
       config.loadConfigString( query.value( 3 ).toString() );
-      QgsDebugMsg( QString( "SSL cert custom config retrieved for host:port, id: %1, %2" ).arg( hostport, id ) );
+      QgsDebugMsgLevel( QStringLiteral( "SSL cert custom config retrieved for host:port, id: %1, %2" ).arg( hostport, id ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ) );
       emit messageOut( tr( "Authentication database contains duplicate SSL cert custom configs for host:port, id: %1, %2" )
                        .arg( hostport, id ), authManTag(), WARNING );
       QgsAuthConfigSslServer emptyconfig;
@@ -1981,21 +2066,52 @@ const QgsAuthConfigSslServer QgsAuthManager::sslCertCustomConfig( const QString 
 const QgsAuthConfigSslServer QgsAuthManager::sslCertCustomConfigByHost( const QString &hostport )
 {
   QgsAuthConfigSslServer config;
-
   if ( hostport.isEmpty() )
   {
-    QgsDebugMsg( "Passed host:port is empty" );
     return config;
   }
 
+  QMutexLocker locker( mMutex.get() );
+  if ( mHasCheckedIfCustomConfigByHostExists && !mHasCustomConfigByHost )
+    return config;
+  if ( mCustomConfigByHostCache.contains( hostport ) )
+    return mCustomConfigByHostCache.value( hostport );
+
   QSqlQuery query( authDatabaseConnection() );
+
+  // first run -- see if we have ANY custom config by host. If not, we can skip all future checks for any host
+  if ( !mHasCheckedIfCustomConfigByHostExists )
+  {
+    mHasCheckedIfCustomConfigByHostExists = true;
+    query.prepare( QString( "SELECT count(*) FROM %1" ).arg( authDatabaseServersTable() ) );
+    if ( !authDbQuery( &query ) )
+    {
+      mHasCustomConfigByHost = false;
+      return config;
+    }
+    if ( query.isActive() && query.isSelect() && query.first() )
+    {
+      mHasCustomConfigByHost = query.value( 0 ).toInt() > 0;
+      if ( !mHasCustomConfigByHost )
+        return config;
+    }
+    else
+    {
+      mHasCustomConfigByHost = false;
+      return config;
+    }
+  }
+
   query.prepare( QString( "SELECT id, host, cert, config FROM %1 "
                           "WHERE host = :host" ).arg( authDatabaseServersTable() ) );
 
   query.bindValue( QStringLiteral( ":host" ), hostport.trimmed() );
 
   if ( !authDbQuery( &query ) )
+  {
+    mCustomConfigByHostCache.insert( hostport, config );
     return config;
+  }
 
   if ( query.isActive() && query.isSelect() )
   {
@@ -2004,22 +2120,26 @@ const QgsAuthConfigSslServer QgsAuthManager::sslCertCustomConfigByHost( const QS
       config.setSslCertificate( QSslCertificate( query.value( 2 ).toByteArray(), QSsl::Pem ) );
       config.setSslHostPort( query.value( 1 ).toString().trimmed() );
       config.loadConfigString( query.value( 3 ).toString() );
-      QgsDebugMsg( QString( "SSL cert custom config retrieved for host:port: %1" ).arg( hostport ) );
+      QgsDebugMsgLevel( QStringLiteral( "SSL cert custom config retrieved for host:port: %1" ).arg( hostport ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one SSL cert custom config for host:port: %1" ).arg( hostport ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one SSL cert custom config for host:port: %1" ).arg( hostport ) );
       emit messageOut( tr( "Authentication database contains duplicate SSL cert custom configs for host:port: %1" )
                        .arg( hostport ), authManTag(), WARNING );
       QgsAuthConfigSslServer emptyconfig;
+      mCustomConfigByHostCache.insert( hostport, emptyconfig );
       return emptyconfig;
     }
   }
+
+  mCustomConfigByHostCache.insert( hostport, config );
   return config;
 }
 
 const QList<QgsAuthConfigSslServer> QgsAuthManager::sslCertCustomConfigs()
 {
+  QMutexLocker locker( mMutex.get() );
   QList<QgsAuthConfigSslServer> configs;
 
   QSqlQuery query( authDatabaseConnection() );
@@ -2046,15 +2166,16 @@ const QList<QgsAuthConfigSslServer> QgsAuthManager::sslCertCustomConfigs()
 
 bool QgsAuthManager::existsSslCertCustomConfig( const QString &id, const QString &hostport )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( id.isEmpty() || hostport.isEmpty() )
   {
-    QgsDebugMsg( "Passed config ID or host:port is empty" );
+    QgsDebugMsg( QStringLiteral( "Passed config ID or host:port is empty" ) );
     return false;
   }
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT cert FROM %1 "
-                          "WHERE id = :id AND host = :host" ).arg( authDatabaseServersTable() ) );
+  query.prepare( QStringLiteral( "SELECT cert FROM %1 "
+                                 "WHERE id = :id AND host = :host" ).arg( authDatabaseServersTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":host" ), hostport.trimmed() );
@@ -2067,12 +2188,12 @@ bool QgsAuthManager::existsSslCertCustomConfig( const QString &id, const QString
   {
     if ( query.first() )
     {
-      QgsDebugMsg( QString( "SSL cert custom config exists for host:port, id: %1, %2" ).arg( hostport, id ) );
+      QgsDebugMsgLevel( QStringLiteral( "SSL cert custom config exists for host:port, id: %1, %2" ).arg( hostport, id ), 2 );
       res = true;
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ) );
       emit messageOut( tr( "Authentication database contains duplicate SSL cert custom configs for host:port, id: %1, %2" )
                        .arg( hostport, id ), authManTag(), WARNING );
       return false;
@@ -2083,11 +2204,15 @@ bool QgsAuthManager::existsSslCertCustomConfig( const QString &id, const QString
 
 bool QgsAuthManager::removeSslCertCustomConfig( const QString &id, const QString &hostport )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( id.isEmpty() || hostport.isEmpty() )
   {
-    QgsDebugMsg( "Passed config ID or host:port is empty" );
+    QgsDebugMsg( QStringLiteral( "Passed config ID or host:port is empty" ) );
     return false;
   }
+
+  mHasCheckedIfCustomConfigByHostExists = false;
+  mCustomConfigByHostCache.clear();
 
   QSqlQuery query( authDatabaseConnection() );
 
@@ -2111,16 +2236,17 @@ bool QgsAuthManager::removeSslCertCustomConfig( const QString &id, const QString
     mIgnoredSslErrorsCache.remove( shahostport );
   }
 
-  QgsDebugMsg( QString( "REMOVED SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED SSL cert custom config for host:port, id: %1, %2" ).arg( hostport, id ), 2 );
   dumpIgnoredSslErrorsCache_();
   return true;
 }
 
 void QgsAuthManager::dumpIgnoredSslErrorsCache_()
 {
+  QMutexLocker locker( mMutex.get() );
   if ( !mIgnoredSslErrorsCache.isEmpty() )
   {
-    QgsDebugMsg( "Ignored SSL errors cache items:" );
+    QgsDebugMsg( QStringLiteral( "Ignored SSL errors cache items:" ) );
     QHash<QString, QSet<QSslError::SslError> >::const_iterator i = mIgnoredSslErrorsCache.constBegin();
     while ( i != mIgnoredSslErrorsCache.constEnd() )
     {
@@ -2129,21 +2255,22 @@ void QgsAuthManager::dumpIgnoredSslErrorsCache_()
       {
         errs << QgsAuthCertUtils::sslErrorEnumString( err );
       }
-      QgsDebugMsg( QString( "%1 = %2" ).arg( i.key(), errs.join( ", " ) ) );
+      QgsDebugMsg( QStringLiteral( "%1 = %2" ).arg( i.key(), errs.join( ", " ) ) );
       ++i;
     }
   }
   else
   {
-    QgsDebugMsg( "Ignored SSL errors cache EMPTY" );
+    QgsDebugMsgLevel( QStringLiteral( "Ignored SSL errors cache EMPTY" ), 2 );
   }
 }
 
 bool QgsAuthManager::updateIgnoredSslErrorsCacheFromConfig( const QgsAuthConfigSslServer &config )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( config.isNull() )
   {
-    QgsDebugMsg( "Passed config is null" );
+    QgsDebugMsg( QStringLiteral( "Passed config is null" ) );
     return false;
   }
 
@@ -2157,18 +2284,19 @@ bool QgsAuthManager::updateIgnoredSslErrorsCacheFromConfig( const QgsAuthConfigS
   QList<QSslError::SslError> errenums( config.sslIgnoredErrorEnums() );
   if ( !errenums.isEmpty() )
   {
-    mIgnoredSslErrorsCache.insert( shahostport, QSet<QSslError::SslError>::fromList( errenums ) );
-    QgsDebugMsg( QString( "Update of ignored SSL errors cache SUCCEEDED for sha:host:port = %1" ).arg( shahostport ) );
+    mIgnoredSslErrorsCache.insert( shahostport, qgis::listToSet( errenums ) );
+    QgsDebugMsgLevel( QStringLiteral( "Update of ignored SSL errors cache SUCCEEDED for sha:host:port = %1" ).arg( shahostport ), 2 );
     dumpIgnoredSslErrorsCache_();
     return true;
   }
 
-  QgsDebugMsg( QString( "No ignored SSL errors to cache for sha:host:port = %1" ).arg( shahostport ) );
+  QgsDebugMsgLevel( QStringLiteral( "No ignored SSL errors to cache for sha:host:port = %1" ).arg( shahostport ), 2 );
   return true;
 }
 
 bool QgsAuthManager::updateIgnoredSslErrorsCache( const QString &shahostport, const QList<QSslError> &errors )
 {
+  QMutexLocker locker( mMutex.get() );
   QRegExp rx( "\\S+:\\S+:\\d+" );
   if ( !rx.exactMatch( shahostport ) )
   {
@@ -2184,7 +2312,7 @@ bool QgsAuthManager::updateIgnoredSslErrorsCache( const QString &shahostport, co
 
   if ( errors.isEmpty() )
   {
-    QgsDebugMsg( "Passed errors list empty" );
+    QgsDebugMsg( QStringLiteral( "Passed errors list empty" ) );
     return false;
   }
 
@@ -2199,19 +2327,20 @@ bool QgsAuthManager::updateIgnoredSslErrorsCache( const QString &shahostport, co
 
   if ( errs.isEmpty() )
   {
-    QgsDebugMsg( "Passed errors list does not contain errors" );
+    QgsDebugMsg( QStringLiteral( "Passed errors list does not contain errors" ) );
     return false;
   }
 
   mIgnoredSslErrorsCache.insert( shahostport, errs );
 
-  QgsDebugMsg( QString( "Update of ignored SSL errors cache SUCCEEDED for sha:host:port = %1" ).arg( shahostport ) );
+  QgsDebugMsgLevel( QStringLiteral( "Update of ignored SSL errors cache SUCCEEDED for sha:host:port = %1" ).arg( shahostport ), 2 );
   dumpIgnoredSslErrorsCache_();
   return true;
 }
 
 bool QgsAuthManager::rebuildIgnoredSslErrorCache()
 {
+  QMutexLocker locker( mMutex.get() );
   QHash<QString, QSet<QSslError::SslError> > prevcache( mIgnoredSslErrorsCache );
   QHash<QString, QSet<QSslError::SslError> > nextcache;
 
@@ -2220,7 +2349,7 @@ bool QgsAuthManager::rebuildIgnoredSslErrorCache()
 
   if ( !authDbQuery( &query ) )
   {
-    QgsDebugMsg( "Rebuild of ignored SSL errors cache FAILED" );
+    QgsDebugMsg( QStringLiteral( "Rebuild of ignored SSL errors cache FAILED" ) );
     return false;
   }
 
@@ -2236,7 +2365,7 @@ bool QgsAuthManager::rebuildIgnoredSslErrorCache()
       QList<QSslError::SslError> errenums( config.sslIgnoredErrorEnums() );
       if ( !errenums.isEmpty() )
       {
-        nextcache.insert( shahostport, QSet<QSslError::SslError>::fromList( errenums ) );
+        nextcache.insert( shahostport, qgis::listToSet( errenums ) );
       }
       if ( prevcache.contains( shahostport ) )
       {
@@ -2260,12 +2389,12 @@ bool QgsAuthManager::rebuildIgnoredSslErrorCache()
   {
     mIgnoredSslErrorsCache.clear();
     mIgnoredSslErrorsCache = nextcache;
-    QgsDebugMsg( "Rebuild of ignored SSL errors cache SUCCEEDED" );
+    QgsDebugMsgLevel( QStringLiteral( "Rebuild of ignored SSL errors cache SUCCEEDED" ), 2 );
     dumpIgnoredSslErrorsCache_();
     return true;
   }
 
-  QgsDebugMsg( "Rebuild of ignored SSL errors cache SAME AS BEFORE" );
+  QgsDebugMsgLevel( QStringLiteral( "Rebuild of ignored SSL errors cache SAME AS BEFORE" ), 2 );
   dumpIgnoredSslErrorsCache_();
   return true;
 }
@@ -2273,9 +2402,10 @@ bool QgsAuthManager::rebuildIgnoredSslErrorCache()
 
 bool QgsAuthManager::storeCertAuthorities( const QList<QSslCertificate> &certs )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( certs.isEmpty() )
   {
-    QgsDebugMsg( "Passed certificate list has no certs" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate list has no certs" ) );
     return false;
   }
 
@@ -2289,11 +2419,12 @@ bool QgsAuthManager::storeCertAuthorities( const QList<QSslCertificate> &certs )
 
 bool QgsAuthManager::storeCertAuthority( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   // don't refuse !cert.isValid() (actually just expired) CAs,
   // as user may want to ignore that SSL connection error
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
 
@@ -2303,8 +2434,8 @@ bool QgsAuthManager::storeCertAuthority( const QSslCertificate &cert )
   QString pem( cert.toPem() );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (id, cert) "
-                          "VALUES (:id, :cert)" ).arg( authDbAuthoritiesTable() ) );
+  query.prepare( QStringLiteral( "INSERT INTO %1 (id, cert) "
+                                 "VALUES (:id, :cert)" ).arg( authDbAuthoritiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":cert" ), pem );
@@ -2318,20 +2449,21 @@ bool QgsAuthManager::storeCertAuthority( const QSslCertificate &cert )
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "Store certificate authority SUCCESS for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store certificate authority SUCCESS for id: %1" ).arg( id ), 2 );
   return true;
 }
 
 const QSslCertificate QgsAuthManager::certAuthority( const QString &id )
 {
+  QMutexLocker locker( mMutex.get() );
   QSslCertificate emptycert;
   QSslCertificate cert;
   if ( id.isEmpty() )
     return emptycert;
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT cert FROM %1 "
-                          "WHERE id = :id" ).arg( authDbAuthoritiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT cert FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbAuthoritiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -2343,11 +2475,11 @@ const QSslCertificate QgsAuthManager::certAuthority( const QString &id )
     if ( query.first() )
     {
       cert = QSslCertificate( query.value( 0 ).toByteArray(), QSsl::Pem );
-      QgsDebugMsg( QString( "Certificate authority retrieved for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Certificate authority retrieved for id: %1" ).arg( id ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one certificate authority for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one certificate authority for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate certificate authorities" ), authManTag(), WARNING );
       return emptycert;
     }
@@ -2357,17 +2489,18 @@ const QSslCertificate QgsAuthManager::certAuthority( const QString &id )
 
 bool QgsAuthManager::existsCertAuthority( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
 
   QString id( QgsAuthCertUtils::shaHexForCert( cert ) );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT value FROM %1 "
-                          "WHERE id = :id" ).arg( authDbAuthoritiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT value FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbAuthoritiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -2379,12 +2512,12 @@ bool QgsAuthManager::existsCertAuthority( const QSslCertificate &cert )
   {
     if ( query.first() )
     {
-      QgsDebugMsg( QString( "Certificate authority exists for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Certificate authority exists for id: %1" ).arg( id ), 2 );
       res = true;
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one certificate authority for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one certificate authority for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate certificate authorities" ), authManTag(), WARNING );
       return false;
     }
@@ -2394,9 +2527,10 @@ bool QgsAuthManager::existsCertAuthority( const QSslCertificate &cert )
 
 bool QgsAuthManager::removeCertAuthority( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
 
@@ -2417,22 +2551,18 @@ bool QgsAuthManager::removeCertAuthority( const QSslCertificate &cert )
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "REMOVED authority for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED authority for id: %1" ).arg( id ), 2 );
   return true;
 }
 
 const QList<QSslCertificate> QgsAuthManager::systemRootCAs()
 {
-#ifndef Q_OS_MAC
-  return QSslSocket::systemCaCertificates();
-#else
-  QNetworkRequest req;
-  return req.sslConfiguration().caCertificates();
-#endif
+  return QSslConfiguration::systemCaCertificates();
 }
 
 const QList<QSslCertificate> QgsAuthManager::extraFileCAs()
 {
+  QMutexLocker locker( mMutex.get() );
   QList<QSslCertificate> certs;
   QList<QSslCertificate> filecerts;
   QVariant cafileval = QgsAuthManager::instance()->authSetting( QStringLiteral( "cafile" ) );
@@ -2451,7 +2581,10 @@ const QList<QSslCertificate> QgsAuthManager::extraFileCAs()
   // only CAs or certs capable of signing other certs are allowed
   for ( const auto &cert : qgis::as_const( filecerts ) )
   {
-    if ( !allowinvalid.toBool() && !cert.isValid() )
+    if ( !allowinvalid.toBool() && ( cert.isBlacklisted()
+                                     || cert.isNull()
+                                     || cert.expiryDate() <= QDateTime::currentDateTime()
+                                     || cert.effectiveDate() > QDateTime::currentDateTime() ) )
     {
       continue;
     }
@@ -2466,6 +2599,7 @@ const QList<QSslCertificate> QgsAuthManager::extraFileCAs()
 
 const QList<QSslCertificate> QgsAuthManager::databaseCAs()
 {
+  QMutexLocker locker( mMutex.get() );
   QList<QSslCertificate> certs;
 
   QSqlQuery query( authDatabaseConnection() );
@@ -2487,11 +2621,13 @@ const QList<QSslCertificate> QgsAuthManager::databaseCAs()
 
 const QMap<QString, QSslCertificate> QgsAuthManager::mappedDatabaseCAs()
 {
+  QMutexLocker locker( mMutex.get() );
   return QgsAuthCertUtils::mapDigestToCerts( databaseCAs() );
 }
 
 bool QgsAuthManager::rebuildCaCertsCache()
 {
+  QMutexLocker locker( mMutex.get() );
   mCaCertsCache.clear();
   // in reverse order of precedence, with regards to duplicates, so QMap inserts overwrite
   insertCaCertInCache( QgsAuthCertUtils::SystemRoot, systemRootCAs() );
@@ -2499,15 +2635,17 @@ bool QgsAuthManager::rebuildCaCertsCache()
   insertCaCertInCache( QgsAuthCertUtils::InDatabase, databaseCAs() );
 
   bool res = !mCaCertsCache.isEmpty(); // should at least contain system root CAs
-  QgsDebugMsg( QString( "Rebuild of CA certs cache %1" ).arg( res ? "SUCCEEDED" : "FAILED" ) );
+  if ( !res )
+    QgsDebugMsg( QStringLiteral( "Rebuild of CA certs cache FAILED" ) );
   return res;
 }
 
 bool QgsAuthManager::storeCertTrustPolicy( const QSslCertificate &cert, QgsAuthCertUtils::CertTrustPolicy policy )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
 
@@ -2517,13 +2655,13 @@ bool QgsAuthManager::storeCertTrustPolicy( const QSslCertificate &cert, QgsAuthC
 
   if ( policy == QgsAuthCertUtils::DefaultTrust )
   {
-    QgsDebugMsg( QString( "Passed policy was default, all cert records in database were removed for id: %1" ).arg( id ) );
+    QgsDebugMsg( QStringLiteral( "Passed policy was default, all cert records in database were removed for id: %1" ).arg( id ) );
     return true;
   }
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "INSERT INTO %1 (id, policy) "
-                          "VALUES (:id, :policy)" ).arg( authDbTrustTable() ) );
+  query.prepare( QStringLiteral( "INSERT INTO %1 (id, policy) "
+                                 "VALUES (:id, :policy)" ).arg( authDbTrustTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
   query.bindValue( QStringLiteral( ":policy" ), static_cast< int >( policy ) );
@@ -2537,23 +2675,24 @@ bool QgsAuthManager::storeCertTrustPolicy( const QSslCertificate &cert, QgsAuthC
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "Store certificate trust policy SUCCESS for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "Store certificate trust policy SUCCESS for id: %1" ).arg( id ), 2 );
   return true;
 }
 
 QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::certTrustPolicy( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return QgsAuthCertUtils::DefaultTrust;
   }
 
   QString id( QgsAuthCertUtils::shaHexForCert( cert ) );
 
   QSqlQuery query( authDatabaseConnection() );
-  query.prepare( QString( "SELECT policy FROM %1 "
-                          "WHERE id = :id" ).arg( authDbTrustTable() ) );
+  query.prepare( QStringLiteral( "SELECT policy FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbTrustTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), id );
 
@@ -2566,11 +2705,11 @@ QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::certTrustPolicy( const QSslCer
     if ( query.first() )
     {
       policy = static_cast< QgsAuthCertUtils::CertTrustPolicy >( query.value( 0 ).toInt() );
-      QgsDebugMsg( QString( "Authentication cert trust policy retrieved for id: %1" ).arg( id ) );
+      QgsDebugMsgLevel( QStringLiteral( "Authentication cert trust policy retrieved for id: %1" ).arg( id ), 2 );
     }
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one cert trust policy for id: %1" ).arg( id ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one cert trust policy for id: %1" ).arg( id ) );
       emit messageOut( tr( "Authentication database contains duplicate cert trust policies" ), authManTag(), WARNING );
       return QgsAuthCertUtils::DefaultTrust;
     }
@@ -2580,9 +2719,10 @@ QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::certTrustPolicy( const QSslCer
 
 bool QgsAuthManager::removeCertTrustPolicies( const QList<QSslCertificate> &certs )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( certs.empty() )
   {
-    QgsDebugMsg( "Passed certificate list has no certs" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate list has no certs" ) );
     return false;
   }
 
@@ -2596,9 +2736,10 @@ bool QgsAuthManager::removeCertTrustPolicies( const QList<QSslCertificate> &cert
 
 bool QgsAuthManager::removeCertTrustPolicy( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
-    QgsDebugMsg( "Passed certificate is null" );
+    QgsDebugMsg( QStringLiteral( "Passed certificate is null" ) );
     return false;
   }
 
@@ -2619,13 +2760,14 @@ bool QgsAuthManager::removeCertTrustPolicy( const QSslCertificate &cert )
   if ( !authDbCommit() )
     return false;
 
-  QgsDebugMsg( QString( "REMOVED cert trust policy for id: %1" ).arg( id ) );
+  QgsDebugMsgLevel( QStringLiteral( "REMOVED cert trust policy for id: %1" ).arg( id ), 2 );
 
   return true;
 }
 
 QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::certificateTrustPolicy( const QSslCertificate &cert )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( cert.isNull() )
   {
     return QgsAuthCertUtils::NoPolicy;
@@ -2649,6 +2791,7 @@ QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::certificateTrustPolicy( const 
 
 bool QgsAuthManager::setDefaultCertTrustPolicy( QgsAuthCertUtils::CertTrustPolicy policy )
 {
+
   if ( policy == QgsAuthCertUtils::DefaultTrust )
   {
     // set default trust policy to Trusted by removing setting
@@ -2659,6 +2802,7 @@ bool QgsAuthManager::setDefaultCertTrustPolicy( QgsAuthCertUtils::CertTrustPolic
 
 QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::defaultCertTrustPolicy()
 {
+  QMutexLocker locker( mMutex.get() );
   QVariant policy( authSetting( QStringLiteral( "certdefaulttrust" ) ) );
   if ( policy.isNull() )
   {
@@ -2669,6 +2813,7 @@ QgsAuthCertUtils::CertTrustPolicy QgsAuthManager::defaultCertTrustPolicy()
 
 bool QgsAuthManager::rebuildCertTrustCache()
 {
+  QMutexLocker locker( mMutex.get() );
   mCertTrustCache.clear();
 
   QSqlQuery query( authDatabaseConnection() );
@@ -2676,7 +2821,7 @@ bool QgsAuthManager::rebuildCertTrustCache()
 
   if ( !authDbQuery( &query ) )
   {
-    QgsDebugMsg( "Rebuild of cert trust policy cache FAILED" );
+    QgsDebugMsg( QStringLiteral( "Rebuild of cert trust policy cache FAILED" ) );
     return false;
   }
 
@@ -2696,12 +2841,13 @@ bool QgsAuthManager::rebuildCertTrustCache()
     }
   }
 
-  QgsDebugMsg( "Rebuild of cert trust policy cache SUCCEEDED" );
+  QgsDebugMsgLevel( QStringLiteral( "Rebuild of cert trust policy cache SUCCEEDED" ), 2 );
   return true;
 }
 
 const QList<QSslCertificate> QgsAuthManager::trustedCaCerts( bool includeinvalid )
 {
+  QMutexLocker locker( mMutex.get() );
   QgsAuthCertUtils::CertTrustPolicy defaultpolicy( defaultCertTrustPolicy() );
   QStringList trustedids = mCertTrustCache.value( QgsAuthCertUtils::Trusted );
   QStringList untrustedids = mCertTrustCache.value( QgsAuthCertUtils::Untrusted );
@@ -2735,6 +2881,7 @@ const QList<QSslCertificate> QgsAuthManager::trustedCaCerts( bool includeinvalid
 
 const QList<QSslCertificate> QgsAuthManager::untrustedCaCerts( QList<QSslCertificate> trustedCAs )
 {
+  QMutexLocker locker( mMutex.get() );
   if ( trustedCAs.isEmpty() )
   {
     if ( mTrustedCaCertsCache.isEmpty() )
@@ -2760,19 +2907,22 @@ const QList<QSslCertificate> QgsAuthManager::untrustedCaCerts( QList<QSslCertifi
 
 bool QgsAuthManager::rebuildTrustedCaCertsCache()
 {
+  QMutexLocker locker( mMutex.get() );
   mTrustedCaCertsCache = trustedCaCerts();
-  QgsDebugMsg( "Rebuilt trusted cert authorities cache" );
+  QgsDebugMsgLevel( QStringLiteral( "Rebuilt trusted cert authorities cache" ), 2 );
   // TODO: add some error trapping for the operation
   return true;
 }
 
 const QByteArray QgsAuthManager::trustedCaCertsPemText()
 {
+  QMutexLocker locker( mMutex.get() );
   return QgsAuthCertUtils::certsToPemText( trustedCaCertsCache() );
 }
 
 bool QgsAuthManager::passwordHelperSync()
 {
+  QMutexLocker locker( mMutex.get() );
   if ( masterPasswordIsSet() )
   {
     return passwordHelperWrite( mMasterPass );
@@ -2813,7 +2963,7 @@ void QgsAuthManager::writeToConsole( const QString &message,
                                      const QString &tag,
                                      QgsAuthManager::MessageLevel level )
 {
-  Q_UNUSED( tag );
+  Q_UNUSED( tag )
 
   // only output WARNING and CRITICAL messages
   if ( level == QgsAuthManager::INFO )
@@ -2834,7 +2984,11 @@ void QgsAuthManager::writeToConsole( const QString &message,
   msg += message;
 
   QTextStream out( stdout, QIODevice::WriteOnly );
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
   out << msg << endl;
+#else
+  out << msg << Qt::endl;
+#endif
 }
 
 void QgsAuthManager::tryToStartDbErase()
@@ -2845,13 +2999,13 @@ void QgsAuthManager::tryToStartDbErase()
   if ( mScheduledDbEraseRequestCount >= trycutoff )
   {
     setScheduledAuthDatabaseErase( false );
-    QgsDebugMsg( "authDatabaseEraseRequest emitting/scheduling canceled" );
+    QgsDebugMsgLevel( QStringLiteral( "authDatabaseEraseRequest emitting/scheduling canceled" ), 2 );
     return;
   }
   else
   {
-    QgsDebugMsg( QString( "authDatabaseEraseRequest attempt (%1 of %2)" )
-                 .arg( mScheduledDbEraseRequestCount ).arg( trycutoff ) );
+    QgsDebugMsgLevel( QStringLiteral( "authDatabaseEraseRequest attempt (%1 of %2)" )
+                      .arg( mScheduledDbEraseRequestCount ).arg( trycutoff ), 2 );
   }
 
   if ( scheduledAuthDatabaseErase() && !mScheduledDbEraseRequestEmitted && mMutex->tryLock() )
@@ -2862,15 +3016,24 @@ void QgsAuthManager::tryToStartDbErase()
 
     mMutex->unlock();
 
-    QgsDebugMsg( "authDatabaseEraseRequest emitted" );
+    QgsDebugMsgLevel( QStringLiteral( "authDatabaseEraseRequest emitted" ), 2 );
     return;
   }
-  QgsDebugMsg( "authDatabaseEraseRequest emit skipped" );
+  QgsDebugMsgLevel( QStringLiteral( "authDatabaseEraseRequest emit skipped" ), 2 );
 }
 
 
 QgsAuthManager::~QgsAuthManager()
 {
+  QMutexLocker locker( mMutex.get() );
+  QMapIterator<QThread *, QMetaObject::Connection> iterator( mConnectedThreads );
+  while ( iterator.hasNext() )
+  {
+    iterator.next();
+    iterator.key()->disconnect( iterator.value() );
+  }
+  locker.unlock();
+
   if ( !isDisabled() )
   {
     delete QgsAuthMethodRegistry::instance();
@@ -2880,12 +3043,8 @@ QgsAuthManager::~QgsAuthManager()
     if ( authConn.isValid() && authConn.isOpen() )
       authConn.close();
   }
-  delete mMutex;
-  mMutex = nullptr;
   delete mScheduledDbEraseTimer;
   mScheduledDbEraseTimer = nullptr;
-  delete mQcaInitializer;
-  mQcaInitializer = nullptr;
   QSqlDatabase::removeDatabase( QStringLiteral( "authentication.configs" ) );
 }
 
@@ -2906,7 +3065,7 @@ void QgsAuthManager::passwordHelperLog( const QString &msg ) const
 
 bool QgsAuthManager::passwordHelperDelete()
 {
-  passwordHelperLog( tr( "Opening %1 for DELETE  ..." ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
+  passwordHelperLog( tr( "Opening %1 for DELETE…" ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
   bool result;
   QKeychain::DeletePasswordJob job( AUTH_PASSWORD_HELPER_FOLDER_NAME );
   QgsSettings settings;
@@ -2938,8 +3097,8 @@ bool QgsAuthManager::passwordHelperDelete()
 QString QgsAuthManager::passwordHelperRead()
 {
   // Retrieve it!
-  QString password( QLatin1String( "" ) );
-  passwordHelperLog( tr( "Opening %1 for READ ..." ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
+  QString password;
+  passwordHelperLog( tr( "Opening %1 for READ…" ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
   QKeychain::ReadPasswordJob job( AUTH_PASSWORD_HELPER_FOLDER_NAME );
   QgsSettings settings;
   job.setInsecureFallback( settings.value( QStringLiteral( "password_helper_insecure_fallback" ), false, QgsSettings::Section::Auth ).toBool() );
@@ -2981,7 +3140,7 @@ bool QgsAuthManager::passwordHelperWrite( const QString &password )
 {
   Q_ASSERT( !password.isEmpty() );
   bool result;
-  passwordHelperLog( tr( "Opening %1 for WRITE ..." ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
+  passwordHelperLog( tr( "Opening %1 for WRITE…" ).arg( AUTH_PASSWORD_HELPER_DISPLAY_NAME ) );
   QKeychain::WritePasswordJob job( AUTH_PASSWORD_HELPER_FOLDER_NAME );
   QgsSettings settings;
   job.setInsecureFallback( settings.value( QStringLiteral( "password_helper_insecure_fallback" ), false, QgsSettings::Section::Auth ).toBool() );
@@ -3104,11 +3263,8 @@ bool QgsAuthManager::masterPasswordInput()
 
   if ( ! ok )
   {
-    QgsCredentials *creds = QgsCredentials::instance();
-    creds->lock();
     pass.clear();
-    ok = creds->getMasterPassword( pass, masterPasswordHashInDatabase() );
-    creds->unlock();
+    ok = QgsCredentials::instance()->getMasterPassword( pass, masterPasswordHashInDatabase() );
   }
 
   if ( ok && !pass.isEmpty() && mMasterPass != pass )
@@ -3282,7 +3438,7 @@ bool QgsAuthManager::verifyPasswordCanDecryptConfigs() const
 
   if ( !query.isActive() || !query.isSelect() )
   {
-    QgsDebugMsg( QString( "Verify password can decrypt configs FAILED, query not active or a select operation" ) );
+    QgsDebugMsg( QStringLiteral( "Verify password can decrypt configs FAILED, query not active or a select operation" ) );
     return false;
   }
 
@@ -3293,13 +3449,13 @@ bool QgsAuthManager::verifyPasswordCanDecryptConfigs() const
     QString configstring( QgsAuthCrypto::decrypt( mMasterPass, masterPasswordCiv(), query.value( 1 ).toString() ) );
     if ( configstring.isEmpty() )
     {
-      QgsDebugMsg( QString( "Verify password can decrypt configs FAILED, could not decrypt a config (id: %1)" )
+      QgsDebugMsg( QStringLiteral( "Verify password can decrypt configs FAILED, could not decrypt a config (id: %1)" )
                    .arg( query.value( 0 ).toString() ) );
       return false;
     }
   }
 
-  QgsDebugMsg( QString( "Verify password can decrypt configs SUCCESS (checked %1 configs)" ).arg( checked ) );
+  QgsDebugMsgLevel( QStringLiteral( "Verify password can decrypt configs SUCCESS (checked %1 configs)" ).arg( checked ), 2 );
   return true;
 }
 
@@ -3326,8 +3482,8 @@ bool QgsAuthManager::reencryptAuthenticationConfig( const QString &authcfg, cons
 
   QSqlQuery query( authDatabaseConnection() );
 
-  query.prepare( QString( "SELECT config FROM %1 "
-                          "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
+  query.prepare( QStringLiteral( "SELECT config FROM %1 "
+                                 "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), authcfg );
 
@@ -3336,7 +3492,7 @@ bool QgsAuthManager::reencryptAuthenticationConfig( const QString &authcfg, cons
 
   if ( !query.isActive() || !query.isSelect() )
   {
-    QgsDebugMsg( QString( "Reencrypt FAILED, query not active or a select operation for authcfg: %2" ).arg( authcfg ) );
+    QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, query not active or a select operation for authcfg: %2" ).arg( authcfg ) );
     return false;
   }
 
@@ -3346,16 +3502,16 @@ bool QgsAuthManager::reencryptAuthenticationConfig( const QString &authcfg, cons
 
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for authcfg: %1" ).arg( authcfg ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for authcfg: %1" ).arg( authcfg ) );
       emit messageOut( tr( "Authentication database contains duplicate configuration IDs" ), authManTag(), WARNING );
       return false;
     }
 
     query.clear();
 
-    query.prepare( QString( "UPDATE %1 "
-                            "SET config = :config "
-                            "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
+    query.prepare( QStringLiteral( "UPDATE %1 "
+                                   "SET config = :config "
+                                   "WHERE id = :id" ).arg( authDatabaseConfigTable() ) );
 
     query.bindValue( QStringLiteral( ":id" ), authcfg );
     query.bindValue( QStringLiteral( ":config" ), QgsAuthCrypto::encrypt( mMasterPass, masterPasswordCiv(), configstring ) );
@@ -3369,12 +3525,12 @@ bool QgsAuthManager::reencryptAuthenticationConfig( const QString &authcfg, cons
     if ( !authDbCommit() )
       return false;
 
-    QgsDebugMsg( QString( "Reencrypt SUCCESS for authcfg: %2" ).arg( authcfg ) );
+    QgsDebugMsgLevel( QStringLiteral( "Reencrypt SUCCESS for authcfg: %2" ).arg( authcfg ), 2 );
     return true;
   }
   else
   {
-    QgsDebugMsg( QString( "Reencrypt FAILED, could not find in db authcfg: %2" ).arg( authcfg ) );
+    QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, could not find in db authcfg: %2" ).arg( authcfg ) );
     return false;
   }
 }
@@ -3382,8 +3538,8 @@ bool QgsAuthManager::reencryptAuthenticationConfig( const QString &authcfg, cons
 bool QgsAuthManager::reencryptAllAuthenticationSettings( const QString &prevpass, const QString &prevciv )
 {
   // TODO: start remove (when function is actually used)
-  Q_UNUSED( prevpass );
-  Q_UNUSED( prevciv );
+  Q_UNUSED( prevpass )
+  Q_UNUSED( prevciv )
   return true;
   // end remove
 
@@ -3407,8 +3563,8 @@ bool QgsAuthManager::reencryptAllAuthenticationSettings( const QString &prevpass
 
     QSqlQuery query( authDbConnection() );
 
-    query.prepare( QString( "SELECT value FROM %1 "
-                            "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
+    query.prepare( QStringLiteral( "SELECT value FROM %1 "
+                                   "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
 
     query.bindValue( ":setting", sett );
 
@@ -3417,7 +3573,7 @@ bool QgsAuthManager::reencryptAllAuthenticationSettings( const QString &prevpass
 
     if ( !query.isActive() || !query.isSelect() )
     {
-      QgsDebugMsg( QString( "Reencrypt FAILED, query not active or a select operation for setting: %2" ).arg( sett ) );
+      QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, query not active or a select operation for setting: %2" ).arg( sett ) );
       return false;
     }
 
@@ -3427,9 +3583,9 @@ bool QgsAuthManager::reencryptAllAuthenticationSettings( const QString &prevpass
 
       query.clear();
 
-      query.prepare( QString( "UPDATE %1 "
-                              "SET value = :value "
-                              "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
+      query.prepare( QStringLiteral( "UPDATE %1 "
+                                     "SET value = :value "
+                                     "WHERE setting = :setting" ).arg( authDbSettingsTable() ) );
 
       query.bindValue( ":setting", sett );
       query.bindValue( ":value", QgsAuthCrypto::encrypt( mMasterPass, masterPasswordCiv(), settvalue ) );
@@ -3443,18 +3599,18 @@ bool QgsAuthManager::reencryptAllAuthenticationSettings( const QString &prevpass
       if ( !authDbCommit() )
         return false;
 
-      QgsDebugMsg( QString( "Reencrypt SUCCESS for setting: %2" ).arg( sett ) );
+      QgsDebugMsg( QStringLiteral( "Reencrypt SUCCESS for setting: %2" ).arg( sett ) );
       return true;
     }
     else
     {
-      QgsDebugMsg( QString( "Reencrypt FAILED, could not find in db setting: %2" ).arg( sett ) );
+      QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, could not find in db setting: %2" ).arg( sett ) );
       return false;
     }
 
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for setting: %1" ).arg( sett ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for setting: %1" ).arg( sett ) );
       emit messageOut( tr( "Authentication database contains duplicate setting keys" ), authManTag(), WARNING );
     }
 
@@ -3491,8 +3647,8 @@ bool QgsAuthManager::reencryptAuthenticationIdentity(
 
   QSqlQuery query( authDatabaseConnection() );
 
-  query.prepare( QString( "SELECT key FROM %1 "
-                          "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
+  query.prepare( QStringLiteral( "SELECT key FROM %1 "
+                                 "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
 
   query.bindValue( QStringLiteral( ":id" ), identid );
 
@@ -3501,7 +3657,7 @@ bool QgsAuthManager::reencryptAuthenticationIdentity(
 
   if ( !query.isActive() || !query.isSelect() )
   {
-    QgsDebugMsg( QString( "Reencrypt FAILED, query not active or a select operation for identity id: %2" ).arg( identid ) );
+    QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, query not active or a select operation for identity id: %2" ).arg( identid ) );
     return false;
   }
 
@@ -3511,16 +3667,16 @@ bool QgsAuthManager::reencryptAuthenticationIdentity(
 
     if ( query.next() )
     {
-      QgsDebugMsg( QString( "Select contains more than one for identity id: %1" ).arg( identid ) );
+      QgsDebugMsg( QStringLiteral( "Select contains more than one for identity id: %1" ).arg( identid ) );
       emit messageOut( tr( "Authentication database contains duplicate identity IDs" ), authManTag(), WARNING );
       return false;
     }
 
     query.clear();
 
-    query.prepare( QString( "UPDATE %1 "
-                            "SET key = :key "
-                            "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
+    query.prepare( QStringLiteral( "UPDATE %1 "
+                                   "SET key = :key "
+                                   "WHERE id = :id" ).arg( authDbIdentitiesTable() ) );
 
     query.bindValue( QStringLiteral( ":id" ), identid );
     query.bindValue( QStringLiteral( ":key" ), QgsAuthCrypto::encrypt( mMasterPass, masterPasswordCiv(), keystring ) );
@@ -3534,12 +3690,12 @@ bool QgsAuthManager::reencryptAuthenticationIdentity(
     if ( !authDbCommit() )
       return false;
 
-    QgsDebugMsg( QString( "Reencrypt SUCCESS for identity id: %2" ).arg( identid ) );
+    QgsDebugMsgLevel( QStringLiteral( "Reencrypt SUCCESS for identity id: %2" ).arg( identid ), 2 );
     return true;
   }
   else
   {
-    QgsDebugMsg( QString( "Reencrypt FAILED, could not find in db identity id: %2" ).arg( identid ) );
+    QgsDebugMsg( QStringLiteral( "Reencrypt FAILED, could not find in db identity id: %2" ).arg( identid ) );
     return false;
   }
 }
@@ -3554,7 +3710,7 @@ bool QgsAuthManager::authDbOpen() const
   {
     if ( !authdb.open() )
     {
-      QgsDebugMsg( QString( "Unable to establish database connection\nDatabase: %1\nDriver error: %2\nDatabase error: %3" )
+      QgsDebugMsg( QStringLiteral( "Unable to establish database connection\nDatabase: %1\nDriver error: %2\nDatabase error: %3" )
                    .arg( authenticationDatabasePath(),
                          authdb.lastError().driverText(),
                          authdb.lastError().databaseText() ) );
@@ -3581,7 +3737,7 @@ bool QgsAuthManager::authDbQuery( QSqlQuery *query ) const
 
   if ( query->lastError().isValid() )
   {
-    QgsDebugMsg( QString( "Auth db query FAILED: %1\nError: %2" )
+    QgsDebugMsg( QStringLiteral( "Auth db query FAILED: %1\nError: %2" )
                  .arg( query->executedQuery(),
                        query->lastError().text() ) );
     emit messageOut( tr( "Auth db query FAILED" ), authManTag(), WARNING );

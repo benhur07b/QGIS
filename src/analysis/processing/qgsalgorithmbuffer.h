@@ -20,8 +20,9 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
+#include "qgsapplication.h"
 
 ///@cond PRIVATE
 
@@ -35,23 +36,31 @@ class QgsBufferAlgorithm : public QgsProcessingAlgorithm
 
     QgsBufferAlgorithm() = default;
     void initAlgorithm( const QVariantMap &configuration = QVariantMap() ) override;
-
+    QIcon icon() const override { return QgsApplication::getThemeIcon( QStringLiteral( "/algorithms/mAlgorithmBuffer.svg" ) ); }
+    QString svgIconPath() const override { return QgsApplication::iconPath( QStringLiteral( "/algorithms/mAlgorithmBuffer.svg" ) ); }
     QString name() const override;
     QString displayName() const override;
-    virtual QStringList tags() const override;
+    QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsBufferAlgorithm *createInstance() const override SIP_FACTORY;
+    bool supportInPlaceEdit( const QgsMapLayer *layer ) const override;
+    QgsProcessingAlgorithm::Flags flags() const override;
+
+    QgsProcessingAlgorithm::VectorProperties sinkProperties( const QString &sink,
+        const QVariantMap &parameters,
+        QgsProcessingContext &context,
+        const QMap< QString, QgsProcessingAlgorithm::VectorProperties > &sourceProperties ) const override;
 
   protected:
 
-    virtual QVariantMap processAlgorithm( const QVariantMap &parameters,
-                                          QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+    QVariantMap processAlgorithm( const QVariantMap &parameters,
+                                  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+
 
 };
 
 ///@endcond PRIVATE
 
 #endif // QGSALGORITHMBUFFER_H
-
-

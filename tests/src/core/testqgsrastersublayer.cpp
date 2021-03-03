@@ -84,7 +84,7 @@ void TestQgsRasterSubLayer::initTestCase()
   GDALAllRegister();
   QString format = QStringLiteral( "netCDF" );
   GDALDriverH myGdalDriver = GDALGetDriverByName( format.toLocal8Bit().constData() );
-  mHasNetCDF = myGdalDriver != 0;
+  mHasNetCDF = myGdalDriver != nullptr;
 
   mFileName = mTestDataDir + "landsat2.nc";
 
@@ -96,8 +96,8 @@ void TestQgsRasterSubLayer::initTestCase()
     QFileInfo myRasterFileInfo( mFileName );
     mpRasterLayer = new QgsRasterLayer( myRasterFileInfo.filePath(),
                                         myRasterFileInfo.completeBaseName() );
-    qDebug() << "raster metadata: " << mpRasterLayer->dataProvider()->metadata();
-    mReport += "raster metadata: " + mpRasterLayer->dataProvider()->metadata();
+    qDebug() << "raster metadata: " << mpRasterLayer->dataProvider()->htmlMetadata();
+    mReport += "raster metadata: " + mpRasterLayer->dataProvider()->htmlMetadata();
   }
   else
   {
@@ -128,22 +128,27 @@ void TestQgsRasterSubLayer::subLayersList()
     // Layer with sublayers is not valid
     //QVERIFY( mpRasterLayer->isValid() );
     QStringList expected;
-    // Sublayer format: NETCDF:"/path/to/landsat2.nc":Band1
-    //                  NETCDF:"c:/path/to/landsat2.nc":Band1
-    // File path is delicate on Windows -> compare only sublayers
-    expected << QStringLiteral( "Band1" );
-    expected << QStringLiteral( "Band2" );
+    // Sublayer format: NETCDF:"/path/to/landsat2.nc":Band1!!::!![200x200] Band1 (8-bit integer)
+    //                  NETCDF:"c:/path/to/landsat2.nc":Band1!!::!![200x200] Band1 (8-bit integer)
+    // File path is delicate on Windows -> compare only end of string
+
+    expected << QStringLiteral( ":Band1!!::!![200x200] Band1 (8-bit integer)" );
+    expected << QStringLiteral( ":Band2!!::!![200x200] Band2 (8-bit integer)" );
 
     QStringList sublayers;
     Q_FOREACH ( const QString &s, mpRasterLayer->subLayers() )
     {
       qDebug() << "sublayer: " << s;
-      sublayers << s.split( ':' ).last();
+      int pos = s.indexOf( QLatin1String( ":Band" ) );
+      if ( pos > 0 )
+        sublayers << s.mid( pos );
+      else
+        sublayers << s;
     }
-    qDebug() << "sublayers: " << sublayers.join( QStringLiteral( "," ) );
-    mReport += QStringLiteral( "sublayers:<br>%1<br>\n" ).arg( sublayers.join( QStringLiteral( "<br>" ) ) );
-    mReport += QStringLiteral( "expected:<br>%1<br>\n" ).arg( expected.join( QStringLiteral( "<br>" ) ) );
-    QVERIFY( sublayers == expected );
+    qDebug() << "sublayers: " << sublayers.join( QLatin1Char( ',' ) );
+    mReport += QStringLiteral( "sublayers:<br>%1<br>\n" ).arg( sublayers.join( QLatin1String( "<br>" ) ) );
+    mReport += QStringLiteral( "expected:<br>%1<br>\n" ).arg( expected.join( QLatin1String( "<br>" ) ) );
+    QCOMPARE( sublayers, expected );
     mReport += QLatin1String( "<p>Passed</p>" );
   }
 }
@@ -156,6 +161,7 @@ void TestQgsRasterSubLayer::checkStats()
     QString sublayerUri = mpRasterLayer->subLayers().value( 0 );
     mReport += "sublayer: " + sublayerUri + "<br>\n";
 
+    sublayerUri = sublayerUri.split( QgsDataProvider::sublayerSeparator() )[0];
     QgsRasterLayer *sublayer = new QgsRasterLayer( sublayerUri, QStringLiteral( "Sublayer 1" ) );
 
     QgsRasterBandStats myStatistics = sublayer->dataProvider()->bandStatistics( 1,
@@ -171,8 +177,8 @@ void TestQgsRasterSubLayer::checkStats()
 
     QVERIFY( sublayer->width() == width );
     QVERIFY( sublayer->height() == height );
-    QGSCOMPARENEAR( myStatistics.minimumValue, min, 4 * DBL_EPSILON );
-    QGSCOMPARENEAR( myStatistics.maximumValue, max, 4 * DBL_EPSILON );
+    QGSCOMPARENEAR( myStatistics.minimumValue, min, 4 * std::numeric_limits<double>::epsilon() );
+    QGSCOMPARENEAR( myStatistics.maximumValue, max, 4 * std::numeric_limits<double>::epsilon() );
     mReport += QLatin1String( "<p>Passed</p>" );
     delete sublayer;
   }

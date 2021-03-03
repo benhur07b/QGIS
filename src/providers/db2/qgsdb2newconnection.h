@@ -31,7 +31,7 @@ class QgsDb2NewConnection : public QDialog, private Ui::QgsDb2NewConnectionBase
     Q_OBJECT
   public:
     //! Constructor
-    QgsDb2NewConnection( QWidget *parent = 0, const QString &connName = QString(), Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
+    QgsDb2NewConnection( QWidget *parent = nullptr, const QString &connName = QString(), Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
     //! Tests the connection using the parameters supplied
     bool testConnection();
@@ -42,9 +42,12 @@ class QgsDb2NewConnection : public QDialog, private Ui::QgsDb2NewConnectionBase
     void listDatabases();
   public slots:
     void accept() override;
-    void on_btnListDatabase_clicked();
+    void btnListDatabase_clicked();
     void btnConnect_clicked();
     void on_cb_trustedConnection_clicked();
+  private slots:
+    //! Updates state of the OK button depending of the filled fields
+    void updateOkButtonState();
   private:
     QString mOriginalConnName; //store initial name to delete entry in case of rename
     void showHelp();

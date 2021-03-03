@@ -21,11 +21,8 @@ __author__ = 'Victor Olaya'
 __date__ = 'November 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsProcessing,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterString,
                        QgsProcessingParameterFeatureSource,
@@ -35,7 +32,6 @@ from processing.algs.gdal.GdalUtils import GdalUtils
 
 
 class ClipVectorByMask(GdalAlgorithm):
-
     INPUT = 'INPUT'
     MASK = 'MASK'
     OPTIONS = 'OPTIONS'
@@ -43,6 +39,9 @@ class ClipVectorByMask(GdalAlgorithm):
 
     def __init__(self):
         super().__init__()
+
+    def flags(self):
+        return QgsProcessingAlgorithm.FlagSupportsBatch | QgsProcessingAlgorithm.FlagRequiresMatchingCrs  # cannot cancel!
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT,
@@ -70,26 +69,31 @@ class ClipVectorByMask(GdalAlgorithm):
     def group(self):
         return self.tr('Vector geoprocessing')
 
+    def groupId(self):
+        return 'vectorgeoprocessing'
+
     def commandName(self):
         return 'ogr2ogr'
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        inLayer, inLayerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback)
-        maskLayer, maskLayerName = self.getOgrCompatibleSource(self.MASK, parameters, context, feedback)
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        inLayer, inLayerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback, executing)
+        maskLayer, maskLayerName = self.getOgrCompatibleSource(self.MASK, parameters, context, feedback, executing)
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
 
         output, outputFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
 
-        arguments = []
-        arguments.append('-clipsrc')
-        arguments.append(maskLayer)
-        arguments.append('-clipsrclayer')
-        arguments.append(maskLayerName)
+        arguments = [
+            '-clipsrc',
+            maskLayer,
+            '-clipsrclayer',
+            maskLayerName,
 
-        arguments.append(output)
-        arguments.append(inLayer)
-        arguments.append(inLayerName)
+            output,
+            inLayer,
+            inLayerName,
+        ]
 
         if options:
             arguments.append(options)
@@ -97,4 +101,4 @@ class ClipVectorByMask(GdalAlgorithm):
         if outputFormat:
             arguments.append('-f {}'.format(outputFormat))
 
-        return ['ogr2ogr', GdalUtils.escapeAndJoin(arguments)]
+        return [self.commandName(), GdalUtils.escapeAndJoin(arguments)]

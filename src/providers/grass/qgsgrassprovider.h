@@ -49,8 +49,8 @@ class QgsGrassFeatureIterator;
  */
 
 /**
-  \class QgsGrassProvider
-  \brief Data provider for GRASS vectors
+ * \class QgsGrassProvider
+ * \brief Data provider for GRASS vectors
 */
 class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
 {
@@ -61,18 +61,18 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
 
     QgsGrassProvider( const QString &uri = QString() );
 
-    virtual ~QgsGrassProvider();
+    ~QgsGrassProvider() override;
 
-    virtual QgsVectorDataProvider::Capabilities capabilities() const override;
-    virtual QgsAbstractFeatureSource *featureSource() const override;
-    virtual QString storageType() const override;
-    virtual QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) const override;
+    QgsVectorDataProvider::Capabilities capabilities() const override;
+    QgsAbstractFeatureSource *featureSource() const override;
+    QString storageType() const override;
+    QgsFeatureIterator getFeatures( const QgsFeatureRequest &request ) const override;
     QgsWkbTypes::Type wkbType() const override;
     long featureCount() const override;
-    virtual QgsRectangle extent() const override;
+    QgsRectangle extent() const override;
     QgsFields fields() const override;
 
-    // ! Key (category) field index
+    //! Key (category) field index
     int keyField();
 
     //! Restart reading features from previous select operation
@@ -82,7 +82,8 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
 
     /**
      * Returns the maximum value of an attribute
-     *  \param index the index of the attribute */
+     *  \param index the index of the attribute
+    */
     QVariant maxValue( int index );
 
     /**
@@ -102,12 +103,12 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     // ----------------------------------- New edit --------------------------------
     // Changes are written during editing.
     // TODO: implement also these functions but disable during manual layer editing
-    virtual bool addFeatures( QgsFeatureList &flist, QgsFeatureSink::Flags flags = 0 ) override { Q_UNUSED( flist ); Q_UNUSED( flags ); return true; }
-    virtual bool deleteFeatures( const QgsFeatureIds &id ) override { Q_UNUSED( id ); return true; }
-    virtual bool addAttributes( const QList<QgsField> &attributes ) override;
-    virtual bool deleteAttributes( const QgsAttributeIds &attributes ) override;
-    virtual bool changeAttributeValues( const QgsChangedAttributesMap &attr_map ) override  { Q_UNUSED( attr_map ); return true; }
-    virtual bool changeGeometryValues( const QgsGeometryMap &geometry_map ) override { Q_UNUSED( geometry_map ); return true; }
+    bool addFeatures( QgsFeatureList &flist, QgsFeatureSink::Flags flags = QgsFeatureSink::Flags() ) override { Q_UNUSED( flist ) Q_UNUSED( flags ); return true; }
+    bool deleteFeatures( const QgsFeatureIds &id ) override { Q_UNUSED( id ) return true; }
+    bool addAttributes( const QList<QgsField> &attributes ) override;
+    bool deleteAttributes( const QgsAttributeIds &attributes ) override;
+    bool changeAttributeValues( const QgsChangedAttributesMap &attr_map ) override  { Q_UNUSED( attr_map ) return true; }
+    bool changeGeometryValues( const QgsGeometryMap &geometry_map ) override { Q_UNUSED( geometry_map ) return true; }
 
 
     //----------------------------------------------------------------------------
@@ -155,16 +156,16 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
      *   \returns true success
      *   \returns false failed to close vector or vector was not in update mode
      */
-    bool closeEdit( bool newMap = false, QgsVectorLayer *vectorLayer = 0 );
+    bool closeEdit( bool newMap = false, QgsVectorLayer *vectorLayer = nullptr );
 
     /**
-     * Get current number of lines.
+     * Gets current number of lines.
      *   \returns number of lines
      */
     int numLines( void );
 
     /**
-     * Get current number of nodes.
+     * Gets current number of nodes.
      *   \returns number of nodes
      */
     int numNodes( void );
@@ -204,28 +205,28 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     bool lineAreas( int line, int *left, int *right );
 
     /**
-     * Get isle area
+     * Gets isle area
      *   \param isle number
      *   \returns area number
      */
     int isleArea( int isle );
 
     /**
-     * Get centroid area
+     * Gets centroid area
      *   \param centroid line number
      *   \returns area number (negative for island)
      */
     int centroidArea( int centroid );
 
     /**
-     * Get number of lines at node
+     * Gets number of lines at node
      *   \param node node number
      *   \returns number of lines at node (including dead lines)
      */
     int nodeNLines( int node );
 
     /**
-     * Get line number of line at node for given line index
+     * Gets line number of line at node for given line index
      *   \param node node number
      *   \param idx line index
      *   \returns line number
@@ -280,12 +281,12 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     int numUpdatedNodes( void );
 
     /**
-     * Get updated line
+     * Gets updated line
      */
     int updatedLine( int idx );
 
     /**
-     * Get updated node
+     * Gets updated node
      */
     int updatedNode( int idx );
 
@@ -323,13 +324,13 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     QString key( int field );
 
     /**
-     * Get number of db links
+     * Gets number of db links
      *   \returns number of links
      */
     int numDbLinks( void );
 
     /**
-     * Get db link field
+     * Gets db link field
      *  \param link
      *   \returns field number or 0
      */
@@ -338,13 +339,13 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
 
     /* Following functions work only until first edit operation! (category index used) */
 
-    //! Get number of fields in category index
+    //! Gets number of fields in category index
     int cidxGetNumFields( void );
 
-    //! Get field number for index
+    //! Gets field number for index
     int cidxGetFieldNumber( int idx );
 
-    //! Get maximum category for field index
+    //! Gets maximum category for field index
     int cidxGetMaxCat( int idx );
 
     //! Returns GRASS layer number
@@ -438,7 +439,7 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     static QgsFeatureId makeFeatureId( int grassId, int cat );
 
     /**
-     * Get attribute by category(key) and attribute number.
+     * Gets attribute by category(key) and attribute number.
      *  \param layerId
      *  \param category (key)
      *  \param column column number ( < nColumns )
@@ -479,8 +480,8 @@ class GRASS_LIB_EXPORT QgsGrassProvider : public QgsVectorDataProvider
     QList<QgsGrassVectorMapLayer *> mOtherEditLayers;
 
     // points and cats used only for editing
-    struct line_pnts *mPoints = 0;
-    struct line_cats *mCats = 0;
+    struct line_pnts *mPoints = nullptr;
+    struct line_cats *mCats = nullptr;
 
     // last geometry GV_* type, used e.g. for splitting features
     int mLastType = 0;

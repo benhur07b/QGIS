@@ -18,7 +18,7 @@
 #define QGSAUTHCONFIGEDITOR_H
 
 #include <QSqlTableModel>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QWidget>
 
 #include "ui_qgsauthconfigeditor.h"
@@ -29,7 +29,7 @@ class QgsMessageBar;
 
 /**
  * \ingroup gui
- * Widget for editing authentication configuration database
+ * \brief Widget for editing authentication configuration database
  */
 class GUI_EXPORT QgsAuthConfigEditor : public QWidget, private Ui::QgsAuthConfigEditor
 {
@@ -43,16 +43,16 @@ class GUI_EXPORT QgsAuthConfigEditor : public QWidget, private Ui::QgsAuthConfig
      * \param showUtilities Whether to show the widget's utilities button
      * \param relayMessages Whether to relay auth manager messages to internal message bar
      */
-    explicit QgsAuthConfigEditor( QWidget *parent SIP_TRANSFERTHIS = 0, bool showUtilities = true, bool relayMessages = true );
+    explicit QgsAuthConfigEditor( QWidget *parent SIP_TRANSFERTHIS = nullptr, bool showUtilities = true, bool relayMessages = true );
 
     //! Hide the widget's title, e.g. when embedding
     void toggleTitleVisibility( bool visible );
 
   public slots:
-    //! Set whether to show the widget's utilities button, e.g. when embedding
+    //! Sets whether to show the widget's utilities button, e.g. when embedding
     void setShowUtilitiesButton( bool show = true );
 
-    //! Set whether to relay auth manager messages to internal message bar, e.g. when embedding
+    //! Sets whether to relay auth manager messages to internal message bar, e.g. when embedding
     void setRelayMessages( bool relay = true );
 
   private slots:
@@ -95,7 +95,6 @@ class GUI_EXPORT QgsAuthConfigEditor : public QWidget, private Ui::QgsAuthConfig
   private:
     bool mRelayMessages;
     QgsMessageBar *messageBar();
-    int messageTimeout();
     QString selectedConfigId();
 
     QSqlTableModel *mConfigModel = nullptr;

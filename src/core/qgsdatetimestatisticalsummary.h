@@ -17,7 +17,7 @@
 #define QGSDATETIMESTATISTICALSUMMARY_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsinterval.h"
 #include <QSet>
 #include <QDateTime>
@@ -55,7 +55,7 @@ class CORE_EXPORT QgsDateTimeStatisticalSummary
       Min = 8, //!< Minimum (earliest) datetime value
       Max = 16, //!< Maximum (latest) datetime value
       Range = 32, //!< Interval between earliest and latest datetime value
-      All = Count | CountDistinct | CountMissing | Min | Max | Range, //! All statistics
+      All = Count | CountDistinct | CountMissing | Min | Max | Range, //!< All statistics
     };
     Q_DECLARE_FLAGS( Statistics, Statistic )
 
@@ -174,7 +174,7 @@ class CORE_EXPORT QgsDateTimeStatisticalSummary
     QDateTime mMax;
     bool mIsTimes;
 
-    void testDateTime( const QDateTime &dateTime );
+    void testDateTime( const QDateTime &dateTime, bool isNull );
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS( QgsDateTimeStatisticalSummary::Statistics )

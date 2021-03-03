@@ -21,7 +21,8 @@
 
 /**
  * \ingroup core
- * Field formatter for a key value field.
+ * \brief Field formatter for a key value field.
+ *
  * This represents a list type value.
  * Values will be represented as a colon-delimited and
  * comma-separated list.
@@ -38,8 +39,8 @@ class CORE_EXPORT QgsKeyValueFieldFormatter : public QgsFieldFormatter
       * Default constructor of field formatter for a key value field.
       */
     QgsKeyValueFieldFormatter() = default;
-    virtual QString id() const override;
-    virtual QString representValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
+    QString id() const override;
+    QString representValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
 };
 
 #endif // QGSKEYVALUEFIELDKIT_H

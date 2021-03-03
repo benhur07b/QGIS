@@ -22,11 +22,14 @@
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
+#include <QDateTime>
+#include <QTimer>
+
 #include "qgis_server.h"
 
 /**
  * \ingroup server
- * A cache for capabilities xml documents (by configuration file path)
+ * \brief A cache for capabilities xml documents (by configuration file path)
  */
 class SERVER_EXPORT QgsCapabilitiesCache : public QObject
 {
@@ -58,11 +61,15 @@ class SERVER_EXPORT QgsCapabilitiesCache : public QObject
 
   private:
     QHash< QString, QHash< QString, QDomDocument > > mCachedCapabilities;
+    QHash< QString, QDateTime> mCachedCapabilitiesTimestamps;
     QFileSystemWatcher mFileSystemWatcher;
+    QTimer mTimer;
 
   private slots:
     //! Removes changed entry from this cache
     void removeChangedEntry( const QString &path );
+    //! Remove outdated enties
+    void removeOutdatedEntries();
 };
 
 #endif // QGSCAPABILITIESCACHE_H

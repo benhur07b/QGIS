@@ -2,7 +2,7 @@
 ########################################################
 # Files
 
-SET (geometrychecker_SRCS
+set (geometrychecker_SRCS
     qgsgeometrycheckerplugin.cpp
     qgsgeometrycheckfactory.cpp
     qgsgeometrycheckerdialog.cpp
@@ -12,27 +12,18 @@ SET (geometrychecker_SRCS
     qgsgeometrycheckerfixsummarydialog.cpp
 )
 
-SET (geometrychecker_HDRS
+set (geometrychecker_HDRS
     qgsgeometrycheckerplugin.h
     qgsgeometrycheckfactory.h
 )
 
-SET (geometrychecker_MOC_HDRS
-    qgsgeometrycheckerplugin.h
-    qgsgeometrycheckerdialog.h
-    qgsgeometrycheckersetuptab.h
-    qgsgeometrycheckerresulttab.h
-    qgsgeometrycheckfixdialog.h
-    qgsgeometrycheckerfixsummarydialog.h
-)
-
-SET (geometrychecker_UIS
+set (geometrychecker_UIS
     qgsgeometrycheckersetuptab.ui
     qgsgeometrycheckerresulttab.ui
     qgsgeometrycheckerfixsummarydialog.ui
 )
 
-SET (geometrychecker_RCCS
+set (geometrychecker_RCCS
     pluginres.qrc
 )
 
@@ -41,35 +32,24 @@ SET (geometrychecker_RCCS
 
 QT5_WRAP_UI (geometrychecker_UIS_H  ${geometrychecker_UIS})
 
-QT5_WRAP_CPP (geometrychecker_MOC_SRCS  ${geometrychecker_MOC_HDRS})
+add_library (geometrycheckerplugin   MODULE ${geometrychecker_HDRS} ${geometrychecker_SRCS}  ${geometrychecker_RCC_SRCS} ${geometrychecker_UIS_H})
 
-QT5_ADD_RESOURCES(geometrychecker_RCC_SRCS ${geometrychecker_RCCS})
+# require c++17
+target_compile_features(geometrycheckerplugin PRIVATE cxx_std_17)
 
-ADD_LIBRARY (geometrycheckerplugin   MODULE ${geometrychecker_HDRS} ${geometrychecker_MOC_HDRS} ${geometrychecker_SRCS} ${geometrychecker_MOC_SRCS} ${geometrychecker_RCC_SRCS} ${geometrychecker_UIS_H})
-
-INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/core/symbology
-  ${CMAKE_SOURCE_DIR}/src/gui
-  ${CMAKE_SOURCE_DIR}/src/analysis/vector/geometry_checker
+include_directories(
   ${CMAKE_SOURCE_DIR}/src/plugins
 
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/analysis
 
   ${CMAKE_CURRENT_BINARY_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
-INCLUDE_DIRECTORIES(SYSTEM
-  ${GEOS_INCLUDE_DIR}
+include_directories(SYSTEM
   ${GDAL_INCLUDE_DIR}
 )
 
-TARGET_LINK_LIBRARIES(geometrycheckerplugin
+target_link_libraries(geometrycheckerplugin
   qgis_core
   qgis_gui
   qgis_analysis
@@ -78,7 +58,7 @@ TARGET_LINK_LIBRARIES(geometrycheckerplugin
 ########################################################
 # Install
 
-INSTALL(TARGETS geometrycheckerplugin
+install(TARGETS geometrycheckerplugin
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})
 

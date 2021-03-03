@@ -33,13 +33,14 @@ class QgsRenderContext;
 /**
  * \ingroup core
  * \class QgsPieDiagram
+ * \brief A pie chart diagram.
  */
-class CORE_EXPORT QgsPieDiagram: public QgsDiagram
+class CORE_EXPORT QgsPieDiagram: public QgsDiagram SIP_NODEFAULTCTORS
 {
   public:
     QgsPieDiagram();
 
-    virtual QgsPieDiagram *clone() const override SIP_FACTORY;
+    QgsPieDiagram *clone() const override SIP_FACTORY;
 
     void renderDiagram( const QgsFeature &feature, QgsRenderContext &c, const QgsDiagramSettings &s, QPointF position ) override;
 

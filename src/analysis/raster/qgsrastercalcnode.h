@@ -31,6 +31,7 @@ class QgsRasterMatrix;
 /**
  * \ingroup analysis
  * \class QgsRasterCalcNode
+ * \brief Represents a node in a raster calculator.
  */
 class ANALYSIS_EXPORT QgsRasterCalcNode
 {
@@ -70,6 +71,9 @@ class ANALYSIS_EXPORT QgsRasterCalcNode
       opSIGN,       // change sign
       opLOG,
       opLOG10,
+      opABS,
+      opMAX,
+      opMIN,
       opNONE,
     };
 
@@ -101,10 +105,23 @@ class ANALYSIS_EXPORT QgsRasterCalcNode
      * \param result destination raster matrix for calculation results
      * \param row optional row number to calculate for calculating result by rows, or -1 to
      * calculate entire result
-     * \since QGIS 2.10
      * \note not available in Python bindings
+     * \since QGIS 2.10
      */
     bool calculate( QMap<QString, QgsRasterBlock * > &rasterData, QgsRasterMatrix &result, int row = -1 ) const SIP_SKIP;
+
+    /**
+     * Returns a string representation of the expression
+     * \param cStyle if TRUE operators will follow C syntax
+     * \since QGIS 3.6
+     */
+    QString toString( bool cStyle = false ) const;
+
+    /**
+     * Returns a list of nodes of a specific \a type
+     * \since QGIS 3.6
+     */
+    QList<const QgsRasterCalcNode *> findNodes( const QgsRasterCalcNode::Type type ) const;
 
     static QgsRasterCalcNode *parseRasterCalcString( const QString &str, QString &parserErrorMsg ) SIP_FACTORY;
 

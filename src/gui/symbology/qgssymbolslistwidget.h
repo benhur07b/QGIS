@@ -20,7 +20,7 @@
 
 #include "qgssymbolwidgetcontext.h"
 #include "qgssymbollayer.h"
-
+#include "qgsstylemodel.h"
 #include <QWidget>
 #include "qgis_gui.h"
 
@@ -50,7 +50,7 @@ class GUI_EXPORT QgsSymbolsListWidget : public QWidget, private Ui::SymbolsListW
     QgsSymbolsListWidget( QgsSymbol *symbol, QgsStyle *style, QMenu *menu, QWidget *parent SIP_TRANSFERTHIS, QgsVectorLayer *layer = nullptr );
 
 
-    virtual ~QgsSymbolsListWidget();
+    ~QgsSymbolsListWidget() override;
 
     /**
      * Sets the context in which the symbol widget is shown, e.g., the associated map canvas and expression contexts.
@@ -75,20 +75,11 @@ class GUI_EXPORT QgsSymbolsListWidget : public QWidget, private Ui::SymbolsListW
 
   public slots:
 
-    void setSymbolFromStyle( const QModelIndex &index );
     void setSymbolColor( const QColor &color );
     void setMarkerAngle( double angle );
     void setMarkerSize( double size );
     void setLineWidth( double width );
-    void addSymbolToStyle();
-    void saveSymbol();
 
-    void symbolAddedToStyle( const QString &name, QgsSymbol *symbol );
-
-    //! Pupulates the groups combo box with available tags and smartgroups
-    void populateGroups();
-
-    void openStyleManager();
     void clipFeaturesToggled( bool checked );
 
     void updateDataDefinedMarkerSize();
@@ -99,23 +90,33 @@ class GUI_EXPORT QgsSymbolsListWidget : public QWidget, private Ui::SymbolsListW
     void changed();
 
   private slots:
+    void setSymbolFromStyle( const QString &name, QgsStyle::StyleEntity type );
     void mSymbolUnitWidget_changed();
-    void groupsCombo_currentIndexChanged( int index );
     void updateAssistantSymbol();
     void opacityChanged( double value );
     void createAuxiliaryField();
+    void createSymbolAuxiliaryField();
+    void forceRHRToggled( bool checked );
+    void saveSymbol();
+    void updateSymbolDataDefinedProperty();
 
   private:
+
+    void registerSymbolDataDefinedButton( QgsPropertyOverrideButton *button, QgsSymbol::Property key );
+
     QgsSymbol *mSymbol = nullptr;
     std::shared_ptr< QgsSymbol > mAssistantSymbol;
     QgsStyle *mStyle = nullptr;
     QMenu *mAdvancedMenu = nullptr;
     QAction *mClipFeaturesAction = nullptr;
+    QAction *mStandardizeRingsAction = nullptr;
     QgsVectorLayer *mLayer = nullptr;
     QgsMapCanvas *mMapCanvas = nullptr;
 
-    void populateSymbolView();
-    void populateSymbols( const QStringList &symbols );
+    QgsColorButton *mSymbolColorButton = nullptr;
+    QgsOpacityWidget *mSymbolOpacityWidget = nullptr;
+    QgsUnitSelectionWidget *mSymbolUnitWidget = nullptr;
+
     void updateSymbolColor();
     void updateSymbolInfo();
     QgsSymbolWidgetContext mContext;

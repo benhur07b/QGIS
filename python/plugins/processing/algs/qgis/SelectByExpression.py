@@ -20,12 +20,10 @@ __author__ = 'Michael Douchin'
 __date__ = 'July 2014'
 __copyright__ = '(C) 2014, Michael Douchin'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsExpression,
+                       QgsProcessing,
                        QgsVectorLayer,
+                       QgsProcessingAlgorithm,
                        QgsProcessingException,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterExpression,
@@ -35,7 +33,6 @@ from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 
 
 class SelectByExpression(QgisAlgorithm):
-
     INPUT = 'INPUT'
     EXPRESSION = 'EXPRESSION'
     OUTPUT = 'OUTPUT'
@@ -44,8 +41,14 @@ class SelectByExpression(QgisAlgorithm):
     def group(self):
         return self.tr('Vector selection')
 
+    def groupId(self):
+        return 'vectorselection'
+
     def __init__(self):
         super().__init__()
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading | QgsProcessingAlgorithm.FlagNotAvailableInStandaloneTool
 
     def initAlgorithm(self, config=None):
         self.methods = [self.tr('creating new selection'),
@@ -53,12 +56,12 @@ class SelectByExpression(QgisAlgorithm):
                         self.tr('removing from current selection'),
                         self.tr('selecting within current selection')]
 
-        self.addParameter(QgsProcessingParameterVectorLayer(self.INPUT, self.tr('Input layer')))
+        self.addParameter(QgsProcessingParameterVectorLayer(self.INPUT, self.tr('Input layer'), types=[QgsProcessing.TypeVector]))
 
         self.addParameter(QgsProcessingParameterExpression(self.EXPRESSION,
                                                            self.tr('Expression'), parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterEnum(self.METHOD,
-                                                     self.tr('Modify current selection by'), self.methods, 0))
+                                                     self.tr('Modify current selection by'), self.methods, defaultValue=0))
 
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Selected (attribute)')))
 
@@ -72,7 +75,6 @@ class SelectByExpression(QgisAlgorithm):
         layer = self.parameterAsVectorLayer(parameters, self.INPUT, context)
 
         method = self.parameterAsEnum(parameters, self.METHOD, context)
-
         if method == 0:
             behavior = QgsVectorLayer.SetSelection
         elif method == 1:
@@ -88,4 +90,5 @@ class SelectByExpression(QgisAlgorithm):
             raise QgsProcessingException(qExp.parserErrorString())
 
         layer.selectByExpression(expression, behavior)
+
         return {self.OUTPUT: parameters[self.INPUT]}

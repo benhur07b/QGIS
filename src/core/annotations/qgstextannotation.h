@@ -25,7 +25,7 @@
 /**
  * \class QgsTextAnnotation
  * \ingroup core
- * An annotation item that displays formatted text from a QTextDocument document.
+ * \brief An annotation item that displays formatted text from a QTextDocument document.
  * \since QGIS 3.0
 */
 class CORE_EXPORT QgsTextAnnotation: public QgsAnnotation
@@ -55,8 +55,8 @@ class CORE_EXPORT QgsTextAnnotation: public QgsAnnotation
      */
     void setDocument( const QTextDocument *doc );
 
-    virtual void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
-    virtual void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
+    void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
+    void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
 
     /**
      * Returns a new QgsTextAnnotation object.

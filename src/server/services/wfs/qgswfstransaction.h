@@ -35,7 +35,7 @@ namespace QgsWfs
 
     QStringList insertFeatureIds;
 
-    bool error;
+    bool error = false;
 
     QString errorMsg;
   };
@@ -52,9 +52,11 @@ namespace QgsWfs
 
     QgsFeatureRequest featureRequest;
 
+    QStringList serverFids;
+
     int totalUpdated = 0;
 
-    bool error;
+    bool error = false;
 
     QString errorMsg;
   };
@@ -67,9 +69,11 @@ namespace QgsWfs
 
     QgsFeatureRequest featureRequest;
 
+    QStringList serverFids;
+
     int totalDeleted = 0;
 
-    bool error;
+    bool error = false;
 
     QString errorMsg;
   };
@@ -91,24 +95,24 @@ namespace QgsWfs
   /**
    * Transform Update element to transactionUpdate
    */
-  transactionUpdate parseUpdateActionElement( QDomElement &actionElem );
+  transactionUpdate parseUpdateActionElement( QDomElement &actionElem, const QgsProject *project );
 
   /**
    * Transform Delete element to transactionDelete
    */
-  transactionDelete parseDeleteActionElement( QDomElement &actionElem );
+  transactionDelete parseDeleteActionElement( QDomElement &actionElem, const QgsProject *project );
 
   /**
    * Transform RequestBody root element to getFeatureRequest
    */
-  transactionRequest parseTransactionRequestBody( QDomElement &docElem );
+  transactionRequest parseTransactionRequestBody( QDomElement &docElem, const QgsProject *project );
 
-  transactionRequest parseTransactionParameters( QgsServerRequest::Parameters parameters );
+  transactionRequest parseTransactionParameters( QgsServerRequest::Parameters parameters, const QgsProject *project );
 
   /**
    * Transform GML feature nodes to features
    */
-  QgsFeatureList featuresFromGML( QDomNodeList featureNodeList, QgsVectorDataProvider *provider );
+  QgsFeatureList featuresFromGML( QDomNodeList featureNodeList, QgsVectorLayer *layer );
 
   /**
    * Perform the transaction
@@ -129,7 +133,7 @@ namespace QgsWfs
   QDomDocument createTransactionDocument( QgsServerInterface *serverIface, const QgsProject *project,
                                           const QString &version, const QgsServerRequest &request );
 
-} // samespace QgsWfs
+} // namespace QgsWfs
 
 #endif
 

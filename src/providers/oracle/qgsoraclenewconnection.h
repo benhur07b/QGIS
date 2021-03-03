@@ -30,16 +30,19 @@ class QgsOracleNewConnection : public QDialog, private Ui::QgsOracleNewConnectio
     Q_OBJECT
   public:
     //! Constructor
-    QgsOracleNewConnection( QWidget *parent = 0, const QString &connName = QString(), Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
-    //! Destructor
-    ~QgsOracleNewConnection();
+    QgsOracleNewConnection( QWidget *parent = nullptr, const QString &connName = QString(), Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
     QString originalConnName() const { return mOriginalConnName; }
     QString connName() const { return txtName->text(); }
 
   public slots:
-    void accept();
-    void on_btnConnect_clicked();
+    void accept() override;
+
+  private slots:
+    void testConnection();
+    //! Updates state of the OK button depending of the filled fields
+    void updateOkButtonState();
+
   private:
     QString mOriginalConnName; //store initial name to delete entry in case of rename
     void showHelp();

@@ -28,7 +28,7 @@ class QgsProject;
 
 /**
  * \ingroup server
- * QgsService
+ * \brief QgsService
  * Class defining interfaces for QGIS server services
  *
  * This class provides methods for executing server requests
@@ -60,12 +60,6 @@ class SERVER_EXPORT QgsService
      * \returns the version of the service
      */
     virtual QString version() const = 0;
-
-    /**
-     * Return true if the given method is supported for that
-     * service.
-     */
-    virtual bool allowMethod( QgsServerRequest::Method ) const = 0;
 
     /**
      * Execute the requests and set result in QgsServerRequest

@@ -18,7 +18,7 @@
 
 #include "qgis_app.h"
 #include "qgserror.h"
-
+#include <memory>
 #include <QSettings>
 
 class QgsSettings;
@@ -30,20 +30,23 @@ class QgsSettings;
 class APP_EXPORT QgsVersionMigration
 {
   public:
-    QgsVersionMigration();
-    virtual ~QgsVersionMigration();
+    QgsVersionMigration() = default;
+    virtual ~QgsVersionMigration() = default;
+
+    QgsVersionMigration( const QgsVersionMigration &other ) = delete;
+    QgsVersionMigration &operator=( const QgsVersionMigration &other ) = delete;
 
     /**
      * Check if two version has a migration options.
-     * @param fromVersion The version migrating from.
-     * @param toVersion The version migrating to.
-     * @return
+     * \param fromVersion The version migrating from.
+     * \param toVersion The version migrating to.
+     * \returns new migration object
      */
-    static QgsVersionMigration *canMigrate( int fromVersion, int toVersion );
+    static std::unique_ptr< QgsVersionMigration > canMigrate( int fromVersion, int toVersion );
 
     /**
      * Run the version migration to convert between versions.
-     * @return QgsError containing any error messages when running the conversion.
+     * \return QgsError containing any error messages when running the conversion.
      */
     virtual QgsError runMigration() = 0;
     virtual bool requiresMigration() = 0;
@@ -53,20 +56,21 @@ class APP_EXPORT QgsVersionMigration
 class Qgs2To3Migration : public QgsVersionMigration
 {
   public:
-    virtual QgsError runMigration() override;
-    virtual bool requiresMigration() override;
+    QgsError runMigration() override;
+    bool requiresMigration() override;
   private:
     QgsError migrateStyles();
     QgsError migrateSettings();
+    QgsError migrateAuthDb();
 
     QList<QPair<QString, QString>> walk( QString group, QString newkey );
     QPair<QString, QString> transformKey( QString fullOldKey, QString newKeyPart );
 
     QString migrationFilePath();
 
-    int mMigrationFileVersion;
+    int mMigrationFileVersion = 0;
 
-    QSettings *mOldSettings;
+    QSettings *mOldSettings = nullptr;
 
 };
 

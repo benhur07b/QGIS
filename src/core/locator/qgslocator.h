@@ -18,20 +18,23 @@
 #ifndef QGSLOCATOR_H
 #define QGSLOCATOR_H
 
+#include <QObject>
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QMap>
+#include <memory>
+
 #include "qgis_core.h"
 #include "qgis_sip.h"
 #include "qgslocatorfilter.h"
 #include "qgsfeedback.h"
 #include "qgslocatorcontext.h"
-#include <QObject>
-#include <QFuture>
-#include <QFutureWatcher>
-#include <memory>
+
 
 /**
  * \class QgsLocator
  * \ingroup core
- * Handles the management of QgsLocatorFilter objects and async collection of search results from them.
+ * \brief Handles the management of QgsLocatorFilter objects and async collection of search results from them.
  *
  * QgsLocator acts as both a registry for QgsLocatorFilter objects and a means of firing up
  * asynchronous queries against these filter objects.
@@ -57,6 +60,9 @@ class CORE_EXPORT QgsLocator : public QObject
 
   public:
 
+    //! List of core filters (i.e. not plugin filters)
+    static const QList<QString> CORE_FILTERS;
+
     /**
      * Constructor for QgsLocator.
      */
@@ -65,7 +71,7 @@ class CORE_EXPORT QgsLocator : public QObject
     /**
      * Destructor for QgsLocator. Destruction will block while any currently running query is terminated.
      */
-    ~QgsLocator();
+    ~QgsLocator() override;
 
     /**
      * Registers a \a filter within the locator. Ownership of the filter is transferred to the
@@ -89,16 +95,18 @@ class CORE_EXPORT QgsLocator : public QObject
 
     /**
      * Returns the list of filters registered in the locator.
+     * \param prefix If prefix is not empty, the list returned corresponds to the filter with the given active prefix
      * \see prefixedFilters()
      */
-    QList< QgsLocatorFilter *> filters();
+    QList< QgsLocatorFilter *> filters( const QString &prefix = QString() );
 
     /**
      * Returns a map of prefix to filter, for all registered filters
      * with valid prefixes.
      * \see filters()
+     * \deprecated since QGIS 3.2 use filters() instead
      */
-    QMap< QString, QgsLocatorFilter *> prefixedFilters() const;
+    Q_DECL_DEPRECATED QMap<QString, QgsLocatorFilter *> prefixedFilters() const;
 
     /**
      * Triggers the background fetching of filter results for a specified search \a string.
@@ -120,16 +128,29 @@ class CORE_EXPORT QgsLocator : public QObject
     void cancel();
 
     /**
-     * Triggers cancelation of any current running query without blocking. The query may
+     * Triggers cancellation of any current running query without blocking. The query may
      * take some time to cancel after calling this.
      * \see cancel()
      */
     void cancelWithoutBlocking();
 
     /**
-     * Returns true if a query is currently being executed by the locator.
+     * Returns TRUE if a query is currently being executed by the locator.
      */
     bool isRunning() const;
+
+    /**
+     * Will call clearPreviousResults on all filters
+     * \since QGIS 3.2
+     */
+    void clearPreviousResults();
+
+    /**
+     * Returns the list for auto completion
+     * This list is updated when preparing the search
+     * \since QGIS 3.16
+     */
+    QStringList completionList() const {return mAutocompletionList;}
 
   signals:
 
@@ -140,8 +161,15 @@ class CORE_EXPORT QgsLocator : public QObject
     void foundResult( const QgsLocatorResult &result );
 
     /**
+     * Emitted when locator has prepared the search (\see QgsLocatorFilter::prepare)
+     * before the search is actually performed
+     * \since QGIS 3.16
+     */
+    void searchPrepared();
+
+    /**
      * Emitted when locator has finished a query, either as a result
-     * of successful completion or early cancelation.
+     * of successful completion or early cancellation.
      */
     void finished();
 
@@ -155,10 +183,9 @@ class CORE_EXPORT QgsLocator : public QObject
     std::unique_ptr< QgsFeedback > mOwnedFeedback;
 
     QList< QgsLocatorFilter * > mFilters;
-    QList< QgsLocatorFilter * > mActiveFilters;
-    QMap< QString, QgsLocatorFilter *> mPrefixedFilters;
-    QFuture< void > mFuture;
-    QFutureWatcher< void > mFutureWatcher;
+    QList< QThread * > mActiveThreads;
+
+    QStringList mAutocompletionList;
 
     void cancelRunningQuery();
 

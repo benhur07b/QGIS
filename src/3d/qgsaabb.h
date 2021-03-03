@@ -18,20 +18,23 @@
 
 #include "qgis_3d.h"
 
-#include <math.h>
+#include <cmath>
 #include <QList>
 #include <QVector3D>
 
+#define SIP_NO_FILE
+
 /**
  * \ingroup 3d
- * Axis-aligned bounding box - in world coords.
+ * \brief Axis-aligned bounding box - in world coords.
+ * \note Not available in Python bindings
  * \since QGIS 3.0
  */
 class _3D_EXPORT QgsAABB
 {
   public:
     //! Constructs bounding box with null coordinates
-    QgsAABB();
+    QgsAABB() = default;
 
     //! Constructs bounding box
     QgsAABB( float xMin, float yMin, float zMin, float xMax, float yMax, float zMax );
@@ -67,13 +70,20 @@ class _3D_EXPORT QgsAABB
     float distanceFromPoint( float x, float y, float z ) const;
 
     //! Returns shortest distance from the box to a point
-    float distanceFromPoint( const QVector3D &v ) const;
+    float distanceFromPoint( QVector3D v ) const;
 
     //! Returns a list of pairs of vertices (useful for display of bounding boxes)
     QList<QVector3D> verticesForLines() const;
 
-    float xMin, yMin, zMin;
-    float xMax, yMax, zMax;
+    //! Returns text representation of the bounding box
+    QString toString() const;
+
+    float xMin = 0.0f;
+    float yMin = 0.0f;
+    float zMin = 0.0f;
+    float xMax = 0.0f;
+    float yMax = 0.0f;
+    float zMax = 0.0f;
 };
 
 #endif // QGSAABB_H

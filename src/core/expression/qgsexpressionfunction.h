@@ -21,6 +21,8 @@
 #include <QString>
 #include <QVariant>
 #include <QSet>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include "qgis.h"
 #include "qgis_core.h"
@@ -33,8 +35,8 @@ class QgsExpressionContextScope;
 
 /**
  * \ingroup core
-  * A abstract base class for defining QgsExpression functions.
-  */
+ * \brief A abstract base class for defining QgsExpression functions.
+ */
 class CORE_EXPORT QgsExpressionFunction
 {
   public:
@@ -46,7 +48,7 @@ class CORE_EXPORT QgsExpressionFunction
 
     /**
      * \ingroup core
-      * Represents a single parameter passed to a function.
+      * \brief Represents a single parameter passed to a function.
       * \since QGIS 2.16
       */
     class CORE_EXPORT Parameter
@@ -56,25 +58,35 @@ class CORE_EXPORT QgsExpressionFunction
         /**
          * Constructor for Parameter.
          * \param name parameter name, used when named parameter are specified in an expression
-         * \param optional set to true if parameter should be optional
+         * \param optional set to TRUE if parameter should be optional
          * \param defaultValue default value to use for optional parameters
+         * \param isSubExpression set to TRUE if this parameter is a sub-expression
          */
         Parameter( const QString &name,
                    bool optional = false,
-                   const QVariant &defaultValue = QVariant() )
+                   const QVariant &defaultValue = QVariant(),
+                   bool isSubExpression = false )
           : mName( name )
           , mOptional( optional )
           , mDefaultValue( defaultValue )
+          , mIsSubExpression( isSubExpression )
         {}
 
         //! Returns the name of the parameter.
         QString name() const { return mName; }
 
-        //! Returns true if the parameter is optional.
+        //! Returns TRUE if the parameter is optional.
         bool optional() const { return mOptional; }
 
         //! Returns the default value for the parameter.
         QVariant defaultValue() const { return mDefaultValue; }
+
+        /**
+         * Returns TRUE if parameter argument is a separate sub-expression, and
+         * should not be checked while determining referenced columns for the expression.
+         * \since QGIS 3.2
+         */
+        bool isSubExpression() const { return mIsSubExpression; }
 
         bool operator==( const QgsExpressionFunction::Parameter &other ) const
         {
@@ -83,8 +95,9 @@ class CORE_EXPORT QgsExpressionFunction
 
       private:
         QString mName;
-        bool mOptional;
+        bool mOptional = false;
         QVariant mDefaultValue;
+        bool mIsSubExpression = false;
     };
 
     //! List of parameters, used for function definition
@@ -212,7 +225,7 @@ class CORE_EXPORT QgsExpressionFunction
     virtual QStringList aliases() const;
 
     /**
-     * True if this function should use lazy evaluation.  Lazy evaluation functions take QgsExpression::Node objects
+     * TRUE if this function should use lazy evaluation.  Lazy evaluation functions take QgsExpression::Node objects
      * rather than the node results when called.  You can use node->eval(parent, feature) to evaluate the node and return the result
      * Functions are non lazy default and will be given the node return value when called.
      */
@@ -223,7 +236,7 @@ class CORE_EXPORT QgsExpressionFunction
      * A function is static if it will return the same value for every feature with different
      * attributes and/or geometry.
      *
-     * By default this will return true, if all arguments that have been passed to the function
+     * By default this will return TRUE, if all arguments that have been passed to the function
      * are also static.
      *
      * \since QGIS 3.0
@@ -257,7 +270,7 @@ class CORE_EXPORT QgsExpressionFunction
     bool isContextual() const { return mIsContextual; }
 
     /**
-     * Returns true if the function is deprecated and should not be presented as a valid option
+     * Returns TRUE if the function is deprecated and should not be presented as a valid option
      * to users in expression builders.
      * \since QGIS 3.0
      */
@@ -271,8 +284,8 @@ class CORE_EXPORT QgsExpressionFunction
 
     /**
      * Returns a list of the groups the function belongs to.
-     * \since QGIS 3.0
      * \see group()
+     * \since QGIS 3.0
     */
     QStringList groups() const { return mGroups; }
 
@@ -289,16 +302,24 @@ class CORE_EXPORT QgsExpressionFunction
      */
     virtual QVariant func( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) = 0;
 
+    /**
+     * Evaluates the function, first evaluating all required arguments before passing them to the
+     * function's func() method.
+     */
     virtual QVariant run( QgsExpressionNode::NodeList *args, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node );
 
     bool operator==( const QgsExpressionFunction &other ) const;
 
+    /**
+     * Returns TRUE if the function handles NULL values in arguments by itself, and the default
+     * NULL value handling should be skipped.
+     */
     virtual bool handlesNull() const;
 
   protected:
 
     /**
-     * This will return true if all the params for the provided function \a node are static within the
+     * This will return TRUE if all the params for the provided function \a node are static within the
      * constraints imposed by the \a context within the given \a parent.
      *
      * This can be used as callback for custom implementations of subclasses. It is the default for implementation
@@ -321,7 +342,7 @@ class CORE_EXPORT QgsExpressionFunction
 
 /**
  * \ingroup core
-  * c++ helper class for defining QgsExpression functions.
+  * \brief c++ helper class for defining QgsExpression functions.
   * \note not available in Python bindings
   */
 #ifndef SIP_RUN
@@ -343,6 +364,28 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
                                  const QStringList &aliases = QStringList(),
                                  bool handlesNull = false )
       : QgsExpressionFunction( fnname, params, group, helpText, lazyEval, handlesNull )
+      , mFnc( fcn )
+      , mAliases( aliases )
+      , mUsesGeometry( usesGeometry )
+      , mReferencedColumns( referencedColumns )
+    {
+    }
+
+    /**
+     * Static function for evaluation against a QgsExpressionContext, using an unnamed list of parameter values and list
+     * of groups.
+     */
+    QgsStaticExpressionFunction( const QString &fnname,
+                                 int params,
+                                 FcnEval fcn,
+                                 const QStringList &groups,
+                                 const QString &helpText = QString(),
+                                 bool usesGeometry = false,
+                                 const QSet<QString> &referencedColumns = QSet<QString>(),
+                                 bool lazyEval = false,
+                                 const QStringList &aliases = QStringList(),
+                                 bool handlesNull = false )
+      : QgsExpressionFunction( fnname, params, groups, helpText, lazyEval, handlesNull )
       , mFnc( fcn )
       , mAliases( aliases )
       , mUsesGeometry( usesGeometry )
@@ -378,7 +421,7 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
      * This is only required if this cannot be determined by calling each parameter node's usesGeometry() or
      * referencedColumns() method. For example, an aggregate expression requires the geometry and all columns
      * if the parent variable is used.
-     * If a nullptr is passed as a node to these functions, they should stay on the safe side and return if they
+     * If NULLPTR is passed as a node to these functions, they should stay on the safe side and return if they
      * could potentially require a geometry or columns.
      */
     QgsStaticExpressionFunction( const QString &fnname,
@@ -386,12 +429,11 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
                                  FcnEval fcn,
                                  const QString &group,
                                  const QString &helpText,
-                                 const std::function< bool( const QgsExpressionNodeFunction * )> &usesGeometry,
-                                 const std::function< QSet<QString>( const QgsExpressionNodeFunction * )> &referencedColumns,
+                                 const std::function< bool( const QgsExpressionNodeFunction *node )> &usesGeometry,
+                                 const std::function< QSet<QString>( const QgsExpressionNodeFunction *node )> &referencedColumns,
                                  bool lazyEval = false,
                                  const QStringList &aliases = QStringList(),
                                  bool handlesNull = false );
-
 
     /**
      * Static function for evaluation against a QgsExpressionContext, using a named list of parameter values and list
@@ -419,22 +461,23 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
      * \param values list of values passed to the function
      * \param context context expression is being evaluated against
      * \param parent parent expression
+     * \param node function node
      * \returns result of function
      */
-    virtual QVariant func( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override
+    QVariant func( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override
     {
       return mFnc ? mFnc( values, context, parent, node ) : QVariant();
     }
 
-    virtual QStringList aliases() const override;
+    QStringList aliases() const override;
 
-    virtual bool usesGeometry( const QgsExpressionNodeFunction *node ) const override;
+    bool usesGeometry( const QgsExpressionNodeFunction *node ) const override;
 
-    virtual QSet<QString> referencedColumns( const QgsExpressionNodeFunction *node ) const override;
+    QSet<QString> referencedColumns( const QgsExpressionNodeFunction *node ) const override;
 
-    virtual bool isStatic( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    bool isStatic( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
-    virtual bool prepare( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+    bool prepare( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
 
     /**
      * Set a function that will be called in the prepare step to determine if the function is
@@ -447,7 +490,7 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
     /**
      * Tag this function as either static or not static.
      * This will indicate that the function is always expected to return the same value for
-     * an iteration (or explicitly request that it's going to be called for every feature, if false).
+     * an iteration (or explicitly request that it's going to be called for every feature, if FALSE).
      *
      * \see setIsStaticFunction
      */
@@ -461,6 +504,9 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
      */
     void setPrepareFunction( const std::function< bool( const QgsExpressionNodeFunction *, QgsExpression *, const QgsExpressionContext * )> &prepareFunc );
 
+    /**
+     * Returns a list of all registered expression functions.
+     */
     static const QList<QgsExpressionFunction *> &functions();
 
   private:
@@ -476,10 +522,57 @@ class QgsStaticExpressionFunction : public QgsExpressionFunction
 };
 
 /**
- * Handles the ``with_variable(name, value, node)`` expression function.
+ * \brief Handles the ``array_foreach(array, expression)`` expression function.
+ * It temporarily appends a new scope to the expression context.
+ *
+ * \ingroup core
+ * \note Not available in Python bindings
+ * \since QGIS 3.4
+ */
+class QgsArrayForeachExpressionFunction : public QgsExpressionFunction
+{
+  public:
+    QgsArrayForeachExpressionFunction();
+
+    bool isStatic( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+    QVariant run( QgsExpressionNode::NodeList *args, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override;
+
+    QVariant func( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override;
+
+    bool prepare( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+};
+
+/**
+ * \brief Handles the ``array_filter(array, expression)`` expression function.
+ * It temporarily appends a new scope to the expression context.
+ *
+ * \ingroup core
+ * \note Not available in Python bindings
+ * \since QGIS 3.4
+ */
+class QgsArrayFilterExpressionFunction : public QgsExpressionFunction
+{
+  public:
+    QgsArrayFilterExpressionFunction();
+
+    bool isStatic( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+    QVariant run( QgsExpressionNode::NodeList *args, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override;
+
+    QVariant func( const QVariantList &values, const QgsExpressionContext *context, QgsExpression *parent, const QgsExpressionNodeFunction *node ) override;
+
+    bool prepare( const QgsExpressionNodeFunction *node, QgsExpression *parent, const QgsExpressionContext *context ) const override;
+
+};
+
+/**
+ * \brief Handles the ``with_variable(name, value, node)`` expression function.
  * It temporarily appends a new scope to the expression context for all nested
  * nodes.
  *
+ * \ingroup core
  * \note Not available in Python bindings
  * \since QGIS 3.0
  */

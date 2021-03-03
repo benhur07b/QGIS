@@ -35,7 +35,7 @@ typedef QPointF QwtDoublePoint SIP_SKIP;
 
 /**
  * \ingroup gui
- * Histogram widget
+ * \brief Histogram widget
   */
 
 class GUI_EXPORT QgsRasterHistogramWidget : public QgsMapLayerConfigWidget, private Ui::QgsRasterHistogramWidgetBase
@@ -43,12 +43,16 @@ class GUI_EXPORT QgsRasterHistogramWidget : public QgsMapLayerConfigWidget, priv
     Q_OBJECT
 
   public:
-    QgsRasterHistogramWidget( QgsRasterLayer *lyr, QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    /**
+     * Constructor for QgsRasterHistogramWidget, for the specified raster \a layer.
+     */
+    QgsRasterHistogramWidget( QgsRasterLayer *layer, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     //! Save the histogram as an image to disk
     bool histoSaveAsImage( const QString &filename, int width = 600, int height = 600, int quality = -1 );
 
-    //! Set the renderer widget (or just its name if there is no widget)
+    //! Sets the renderer widget (or just its name if there is no widget)
     void setRendererWidget( const QString &name, QgsRasterRendererWidget *rendererWidget = nullptr );
 
     //! Activate the histogram widget
@@ -85,7 +89,7 @@ class GUI_EXPORT QgsRasterHistogramWidget : public QgsMapLayerConfigWidget, priv
 
     /**
      * Called when a selection has been made using the plot picker (for qwt5 only).
-      \note not available in Python bindings
+     * \note not available in Python bindings
       */
     void histoPickerSelectedQwt5( QwtDoublePoint ) SIP_SKIP;
     //! Various actions that are stored in btnHistoActions.

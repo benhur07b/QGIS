@@ -20,14 +20,14 @@
 #define QGSTREEWIDGETITEM_H
 
 #include <QTreeWidgetItem>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QObject>
 #include "qgis_gui.h"
 
 /**
  * \ingroup gui
  * \class QgsTreeWidgetItem
- * QTreeWidgetItem subclass with custom handling for item sorting.
+ * \brief QTreeWidgetItem subclass with custom handling for item sorting.
  *
  * QgsTreeWidgetItem allows for items to be sorted using a specified user role, and
  * also correctly handles sorting numeric or mixed text and numeric values.
@@ -132,13 +132,13 @@ class GUI_EXPORT QgsTreeWidgetItem : public QTreeWidgetItem
     int alwaysOnTopPriority() const;
 
     /**
-     * Returns true if this item should appear before another item when sorting
+     * Returns TRUE if this item should appear before another item when sorting
      * a list of items.
      */
-    virtual bool operator<( const QTreeWidgetItem &other ) const override;
+    bool operator<( const QTreeWidgetItem &other ) const override;
 
     /**
-     * Returns true if this item should appear after another item when sorting
+     * Returns TRUE if this item should appear after another item when sorting
      * a list of items.
      */
     bool operator>=( const QTreeWidgetItem &other ) const { return !( *this < other ); }
@@ -156,7 +156,7 @@ class GUI_EXPORT QgsTreeWidgetItem : public QTreeWidgetItem
 /**
  * \ingroup gui
  * \class QgsTreeWidgetItemObject
- * Custom QgsTreeWidgetItem with extra signals when item is edited.
+ * \brief Custom QgsTreeWidgetItem with extra signals when item is edited.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsTreeWidgetItemObject: public QObject, public QgsTreeWidgetItem
@@ -175,10 +175,10 @@ class GUI_EXPORT QgsTreeWidgetItemObject: public QObject, public QgsTreeWidgetIt
     explicit QgsTreeWidgetItemObject( QTreeWidget *parent SIP_TRANSFERTHIS, int type = Type );
 
     //! Sets the value for the item's column and role to the given value.
-    virtual void setData( int column, int role, const QVariant &value );
+    void setData( int column, int role, const QVariant &value ) override;
 
   signals:
-    //! This signal is emitted when the contents of the column in the specified item has been edited by the user.
+    //! Emitted when the contents of the column in the specified item has been edited by the user.
     void itemEdited( QTreeWidgetItem *item, int column );
 };
 

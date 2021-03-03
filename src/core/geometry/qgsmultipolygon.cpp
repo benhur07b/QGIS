@@ -22,9 +22,22 @@ email                : marco.hugentobler at sourcepole dot com
 #include "qgscurvepolygon.h"
 #include "qgsmultilinestring.h"
 
+#include <QJsonObject>
+#include <nlohmann/json.hpp>
+
 QgsMultiPolygon::QgsMultiPolygon()
 {
   mWkbType = QgsWkbTypes::MultiPolygon;
+}
+
+QgsPolygon *QgsMultiPolygon::polygonN( int index )
+{
+  return qgsgeometry_cast< QgsPolygon * >( geometryN( index ) );
+}
+
+const QgsPolygon *QgsMultiPolygon::polygonN( int index ) const
+{
+  return qgsgeometry_cast< const QgsPolygon * >( geometryN( index ) );
 }
 
 QString QgsMultiPolygon::geometryType() const
@@ -40,7 +53,7 @@ void QgsMultiPolygon::clear()
 
 QgsMultiPolygon *QgsMultiPolygon::createEmptyWithSameType() const
 {
-  auto result = qgis::make_unique< QgsMultiPolygon >();
+  auto result = std::make_unique< QgsMultiPolygon >();
   result->mWkbType = mWkbType;
   return result.release();
 }
@@ -52,10 +65,10 @@ QgsMultiPolygon *QgsMultiPolygon::clone() const
 
 bool QgsMultiPolygon::fromWkt( const QString &wkt )
 {
-  return fromCollectionWkt( wkt, QList<QgsAbstractGeometry *>() << new QgsPolygon, QStringLiteral( "Polygon" ) );
+  return fromCollectionWkt( wkt, QVector<QgsAbstractGeometry *>() << new QgsPolygon, QStringLiteral( "Polygon" ) );
 }
 
-QDomElement QgsMultiPolygon::asGML2( QDomDocument &doc, int precision, const QString &ns ) const
+QDomElement QgsMultiPolygon::asGml2( QDomDocument &doc, int precision, const QString &ns, const AxisOrder axisOrder ) const
 {
   // GML2 does not support curves
   QDomElement elemMultiPolygon = doc.createElementNS( ns, QStringLiteral( "MultiPolygon" ) );
@@ -68,7 +81,7 @@ QDomElement QgsMultiPolygon::asGML2( QDomDocument &doc, int precision, const QSt
     if ( qgsgeometry_cast<const QgsPolygon *>( geom ) )
     {
       QDomElement elemPolygonMember = doc.createElementNS( ns, QStringLiteral( "polygonMember" ) );
-      elemPolygonMember.appendChild( geom->asGML2( doc, precision, ns ) );
+      elemPolygonMember.appendChild( geom->asGml2( doc, precision, ns, axisOrder ) );
       elemMultiPolygon.appendChild( elemPolygonMember );
     }
   }
@@ -76,7 +89,7 @@ QDomElement QgsMultiPolygon::asGML2( QDomDocument &doc, int precision, const QSt
   return elemMultiPolygon;
 }
 
-QDomElement QgsMultiPolygon::asGML3( QDomDocument &doc, int precision, const QString &ns ) const
+QDomElement QgsMultiPolygon::asGml3( QDomDocument &doc, int precision, const QString &ns, const QgsAbstractGeometry::AxisOrder axisOrder ) const
 {
   QDomElement elemMultiSurface = doc.createElementNS( ns, QStringLiteral( "MultiPolygon" ) );
 
@@ -88,7 +101,7 @@ QDomElement QgsMultiPolygon::asGML3( QDomDocument &doc, int precision, const QSt
     if ( qgsgeometry_cast<const QgsPolygon *>( geom ) )
     {
       QDomElement elemSurfaceMember = doc.createElementNS( ns, QStringLiteral( "polygonMember" ) );
-      elemSurfaceMember.appendChild( geom->asGML3( doc, precision, ns ) );
+      elemSurfaceMember.appendChild( geom->asGml3( doc, precision, ns, axisOrder ) );
       elemMultiSurface.appendChild( elemSurfaceMember );
     }
   }
@@ -96,22 +109,20 @@ QDomElement QgsMultiPolygon::asGML3( QDomDocument &doc, int precision, const QSt
   return elemMultiSurface;
 }
 
-QString QgsMultiPolygon::asJSON( int precision ) const
+json QgsMultiPolygon::asJsonObject( int precision ) const
 {
-  // GeoJSON does not support curves
-  QString json = QStringLiteral( "{\"type\": \"MultiPolygon\", \"coordinates\": [" );
-  for ( const QgsAbstractGeometry *geom : mGeometries )
+  json polygons( json::array( ) );
+  for ( const QgsAbstractGeometry *geom : qgis::as_const( mGeometries ) )
   {
     if ( qgsgeometry_cast<const QgsPolygon *>( geom ) )
     {
-      json += '[';
-
+      json coordinates( json::array( ) );
       const QgsPolygon *polygon = static_cast<const QgsPolygon *>( geom );
 
       std::unique_ptr< QgsLineString > exteriorLineString( polygon->exteriorRing()->curveToLine() );
       QgsPointSequence exteriorPts;
       exteriorLineString->points( exteriorPts );
-      json += QgsGeometryUtils::pointsToJSON( exteriorPts, precision ) + ", ";
+      coordinates.push_back( QgsGeometryUtils::pointsToJson( exteriorPts, precision ) );
 
       std::unique_ptr< QgsLineString > interiorLineString;
       for ( int i = 0, n = polygon->numInteriorRings(); i < n; ++i )
@@ -119,22 +130,16 @@ QString QgsMultiPolygon::asJSON( int precision ) const
         interiorLineString.reset( polygon->interiorRing( i )->curveToLine() );
         QgsPointSequence interiorPts;
         interiorLineString->points( interiorPts );
-        json += QgsGeometryUtils::pointsToJSON( interiorPts, precision ) + ", ";
+        coordinates.push_back( QgsGeometryUtils::pointsToJson( interiorPts, precision ) );
       }
-      if ( json.endsWith( QLatin1String( ", " ) ) )
-      {
-        json.chop( 2 ); // Remove last ", "
-      }
-
-      json += QLatin1String( "], " );
+      polygons.push_back( coordinates );
     }
   }
-  if ( json.endsWith( QLatin1String( ", " ) ) )
+  return
   {
-    json.chop( 2 ); // Remove last ", "
-  }
-  json += QLatin1String( "] }" );
-  return json;
+    { "type", "MultiPolygon" },
+    { "coordinates", polygons }
+  };
 }
 
 bool QgsMultiPolygon::addGeometry( QgsAbstractGeometry *g )
@@ -158,7 +163,7 @@ bool QgsMultiPolygon::addGeometry( QgsAbstractGeometry *g )
   else if ( !isMeasure() && g->isMeasure() )
     g->dropMValue();
 
-  return QgsGeometryCollection::addGeometry( g );
+  return QgsGeometryCollection::addGeometry( g ); // clazy:exclude=skipped-base-method
 }
 
 bool QgsMultiPolygon::insertGeometry( QgsAbstractGeometry *g, int index )
@@ -175,6 +180,7 @@ bool QgsMultiPolygon::insertGeometry( QgsAbstractGeometry *g, int index )
 QgsMultiSurface *QgsMultiPolygon::toCurveType() const
 {
   QgsMultiSurface *multiSurface = new QgsMultiSurface();
+  multiSurface->reserve( mGeometries.size() );
   for ( int i = 0; i < mGeometries.size(); ++i )
   {
     multiSurface->addGeometry( mGeometries.at( i )->clone() );
@@ -185,6 +191,7 @@ QgsMultiSurface *QgsMultiPolygon::toCurveType() const
 QgsAbstractGeometry *QgsMultiPolygon::boundary() const
 {
   std::unique_ptr< QgsMultiLineString > multiLine( new QgsMultiLineString() );
+  multiLine->reserve( mGeometries.size() );
   for ( int i = 0; i < mGeometries.size(); ++i )
   {
     if ( QgsPolygon *polygon = qgsgeometry_cast<QgsPolygon *>( mGeometries.at( i ) ) )

@@ -13,8 +13,8 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
-#define QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
+#ifndef QGSGEOMETRYGENERATORSYMBOLLAYER_H
+#define QGSGEOMETRYGENERATORSYMBOLLAYER_H
 
 #include "qgis_core.h"
 #include "qgssymbollayer.h"
@@ -26,9 +26,10 @@
 class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
 {
   public:
-    ~QgsGeometryGeneratorSymbolLayer();
+    ~QgsGeometryGeneratorSymbolLayer() override;
 
-    static QgsSymbolLayer *create( const QgsStringMap &properties ) SIP_FACTORY;
+    //! Creates the symbol layer
+    static QgsSymbolLayer *create( const QVariantMap &properties ) SIP_FACTORY;
 
     QString layerType() const override;
 
@@ -49,12 +50,14 @@ class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
     QgsSymbol::SymbolType symbolType() const { return mSymbolType; }
 
     void startRender( QgsSymbolRenderContext &context ) override;
-
     void stopRender( QgsSymbolRenderContext &context ) override;
+    void startFeatureRender( const QgsFeature &feature, QgsRenderContext &context ) override;
+    void stopFeatureRender( const QgsFeature &feature, QgsRenderContext &context ) override;
+    bool usesMapUnits() const override;
 
     QgsSymbolLayer *clone() const override SIP_FACTORY;
 
-    QgsStringMap properties() const override;
+    QVariantMap properties() const override;
 
     void drawPreviewIcon( QgsSymbolRenderContext &context, QSize size ) override;
 
@@ -64,18 +67,19 @@ class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
     void setGeometryExpression( const QString &exp );
 
     /**
-     * Get the expression to generate this geometry.
+     * Gets the expression to generate this geometry.
      */
     QString geometryExpression() const { return mExpression->expression(); }
 
-    virtual QgsSymbol *subSymbol() override { return mSymbol; }
+    QgsSymbol *subSymbol() override { return mSymbol; }
 
-    virtual bool setSubSymbol( QgsSymbol *symbol SIP_TRANSFER ) override;
+    bool setSubSymbol( QgsSymbol *symbol SIP_TRANSFER ) override;
 
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool hasDataDefinedProperties() const override;
 
     /**
-     * Will always return true.
+     * Will always return TRUE.
      * This is a hybrid layer, it constructs its own geometry so it does not
      * care about the geometry of its parents.
      */
@@ -103,15 +107,18 @@ class CORE_EXPORT QgsGeometryGeneratorSymbolLayer : public QgsSymbolLayer
 #endif
 
     std::unique_ptr<QgsExpression> mExpression;
-    QgsFillSymbol *mFillSymbol = nullptr;
-    QgsLineSymbol *mLineSymbol = nullptr;
-    QgsMarkerSymbol *mMarkerSymbol = nullptr;
+    std::unique_ptr<QgsFillSymbol> mFillSymbol;
+    std::unique_ptr<QgsLineSymbol> mLineSymbol;
+    std::unique_ptr<QgsMarkerSymbol> mMarkerSymbol;
     QgsSymbol *mSymbol = nullptr;
 
     /**
      * The type of the sub symbol.
      */
     QgsSymbol::SymbolType mSymbolType;
+
+    bool mRenderingFeature = false;
+    bool mHasRenderedFeature = false;
 };
 
-#endif // QGSGEOMETRYGENERATORSYMBOLLAYERV2_H
+#endif // QGSGEOMETRYGENERATORSYMBOLLAYER_H

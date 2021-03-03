@@ -24,15 +24,18 @@
 #include "qgssymbollayer.h"
 #include "qgisapp.h"
 #include "qgsproperty.h"
+#include "qgssymbollayerutils.h"
+#include "qgsmapmouseevent.h"
 
 #include <QGraphicsPixmapItem>
-#include <QMouseEvent>
 
 QgsMapToolOffsetPointSymbol::QgsMapToolOffsetPointSymbol( QgsMapCanvas *canvas )
   : QgsMapToolPointSymbol( canvas )
   , mOffsetting( false )
   , mSymbolRotation( 0.0 )
-{}
+{
+  mToolName = tr( "Map tool offset point symbol" );
+}
 
 QgsMapToolOffsetPointSymbol::~QgsMapToolOffsetPointSymbol()
 {
@@ -66,15 +69,57 @@ bool QgsMapToolOffsetPointSymbol::layerIsOffsetable( QgsMapLayer *ml )
 
 void QgsMapToolOffsetPointSymbol::canvasPressEvent( QgsMapMouseEvent *e )
 {
-  mMarkerSymbol.reset( nullptr );
-  mClickedPoint = e->mapPoint();
-  mSymbolRotation = 0.0;
-  QgsMapToolPointSymbol::canvasPressEvent( e );
+  if ( !mOffsetting )
+  {
+    if ( e->button() != Qt::LeftButton )
+      return;
+
+    // first click -- starts offsetting
+    mMarkerSymbol.reset( nullptr );
+    mClickedPoint = e->mapPoint();
+    mSymbolRotation = 0.0;
+    QgsMapToolPointSymbol::canvasPressEvent( e );
+  }
+  else
+  {
+    // second click stops it.
+    // only left clicks "save" edits - right clicks discard them
+    if ( e->button() == Qt::LeftButton && mActiveLayer )
+    {
+      QMap<int, QVariant> attrs = calculateNewOffsetAttributes( mClickedPoint, e->mapPoint() );
+      mActiveLayer->beginEditCommand( tr( "Offset symbol" ) );
+      bool offsetSuccess = true;
+
+      //write offset to attributes
+      QMap<int, QVariant>::const_iterator it = attrs.constBegin();
+      for ( ; it != attrs.constEnd(); ++it )
+      {
+        if ( !mActiveLayer->changeAttributeValue( mFeatureNumber, it.key(), it.value() ) )
+        {
+          offsetSuccess = false;
+        }
+      }
+
+      if ( offsetSuccess )
+      {
+        mActiveLayer->endEditCommand();
+      }
+      else
+      {
+        mActiveLayer->destroyEditCommand();
+      }
+    }
+    mOffsetting = false;
+    delete mOffsetItem;
+    mOffsetItem = nullptr;
+    if ( mActiveLayer )
+      mActiveLayer->triggerRepaint();
+  }
 }
 
 void QgsMapToolOffsetPointSymbol::canvasPressOnFeature( QgsMapMouseEvent *e, const QgsFeature &feature, const QgsPointXY &snappedPoint )
 {
-  Q_UNUSED( e );
+  Q_UNUSED( e )
   mClickedFeature = feature;
   createPreviewItem( mMarkerSymbol.get() );
   mOffsetItem->setPointLocation( snappedPoint );
@@ -86,7 +131,8 @@ bool QgsMapToolOffsetPointSymbol::checkSymbolCompatibility( QgsMarkerSymbol *mar
 {
   bool ok = false;
 
-  Q_FOREACH ( QgsSymbolLayer *layer, markerSymbol->symbolLayers() )
+  const auto constSymbolLayers = markerSymbol->symbolLayers();
+  for ( QgsSymbolLayer *layer : constSymbolLayers )
   {
     if ( !layer->dataDefinedProperties().isActive( QgsSymbolLayer::PropertyOffset ) )
       continue;
@@ -113,7 +159,7 @@ bool QgsMapToolOffsetPointSymbol::checkSymbolCompatibility( QgsMarkerSymbol *mar
 
 void QgsMapToolOffsetPointSymbol::noCompatibleSymbols()
 {
-  emit messageEmitted( tr( "The selected point does not have an offset attribute set." ), QgsMessageBar::CRITICAL );
+  emit messageEmitted( tr( "The selected point does not have an offset attribute set." ), Qgis::Critical );
 }
 
 void QgsMapToolOffsetPointSymbol::canvasMoveEvent( QgsMapMouseEvent *e )
@@ -126,40 +172,18 @@ void QgsMapToolOffsetPointSymbol::canvasMoveEvent( QgsMapMouseEvent *e )
   updateOffsetPreviewItem( mClickedPoint, e->mapPoint() );
 }
 
-void QgsMapToolOffsetPointSymbol::canvasReleaseEvent( QgsMapMouseEvent *e )
+void QgsMapToolOffsetPointSymbol::keyPressEvent( QKeyEvent *e )
 {
-  Q_UNUSED( e );
-
-  if ( mOffsetting && mActiveLayer )
+  if ( mOffsetting && e && e->key() == Qt::Key_Escape && !e->isAutoRepeat() )
   {
-    QMap<int, QVariant> attrs = calculateNewOffsetAttributes( mClickedPoint, e->mapPoint() );
-    mActiveLayer->beginEditCommand( tr( "Offset symbol" ) );
-    bool offsetSuccess = true;
-
-    //write offset to attributes
-    QMap<int, QVariant>::const_iterator it = attrs.constBegin();
-    for ( ; it != attrs.constEnd(); ++it )
-    {
-      if ( !mActiveLayer->changeAttributeValue( mFeatureNumber, it.key(), it.value() ) )
-      {
-        offsetSuccess = false;
-      }
-    }
-
-    if ( offsetSuccess )
-    {
-      mActiveLayer->endEditCommand();
-    }
-    else
-    {
-      mActiveLayer->destroyEditCommand();
-    }
+    mOffsetting = false;
+    delete mOffsetItem;
+    mOffsetItem = nullptr;
   }
-  mOffsetting = false;
-  delete mOffsetItem;
-  mOffsetItem = nullptr;
-  if ( mActiveLayer )
-    mActiveLayer->triggerRepaint();
+  else
+  {
+    QgsMapToolPointSymbol::keyPressEvent( e );
+  }
 }
 
 void QgsMapToolOffsetPointSymbol::createPreviewItem( QgsMarkerSymbol *markerSymbol )
@@ -172,15 +196,16 @@ void QgsMapToolOffsetPointSymbol::createPreviewItem( QgsMarkerSymbol *markerSymb
     return;
   }
 
-  mOffsetItem = new QgsPointMarkerItem( mCanvas );
+  mOffsetItem = new QgsMapCanvasMarkerSymbolItem( mCanvas );
   mOffsetItem->setOpacity( 0.7 );
-  mOffsetItem->setSymbol( markerSymbol->clone() );
+  mOffsetItem->setSymbol( std::unique_ptr< QgsSymbol >( markerSymbol->clone() ) );
 }
 
 QMap<int, QVariant> QgsMapToolOffsetPointSymbol::calculateNewOffsetAttributes( const QgsPointXY &startPoint, const QgsPointXY &endPoint ) const
 {
   QMap<int, QVariant> newAttrValues;
-  Q_FOREACH ( QgsSymbolLayer *layer, mMarkerSymbol->symbolLayers() )
+  const auto constSymbolLayers = mMarkerSymbol->symbolLayers();
+  for ( QgsSymbolLayer *layer : constSymbolLayers )
   {
     if ( !layer->dataDefinedProperties().isActive( QgsSymbolLayer::PropertyOffset ) )
       continue;
@@ -250,7 +275,7 @@ QPointF QgsMapToolOffsetPointSymbol::calculateOffset( const QgsPointXY &startPoi
     case QgsUnitTypes::RenderMetersInMapUnits:
     {
       QgsDistanceArea distanceArea;
-      distanceArea.setSourceCrs( mCanvas->mapSettings().destinationCrs() );
+      distanceArea.setSourceCrs( mCanvas->mapSettings().destinationCrs(), QgsProject::instance()->transformContext() );
       distanceArea.setEllipsoid( mCanvas->mapSettings().ellipsoid() );
       // factor=1.0 / 1 meter in MapUnits
       factor = 1.0 / distanceArea.measureLineProjected( startPoint );

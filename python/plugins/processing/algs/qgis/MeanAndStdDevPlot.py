@@ -21,32 +21,30 @@ __author__ = 'Victor Olaya'
 __date__ = 'January 2013'
 __copyright__ = '(C) 2013, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-import plotly as plt
-import plotly.graph_objs as go
+import warnings
 
 from qgis.core import (QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
-                       QgsProcessingUtils,
-                       QgsProcessingParameterFileDestination,
-                       QgsProcessingOutputHtml)
+                       QgsProcessingException,
+                       QgsProcessingParameterFileDestination)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 
 from processing.tools import vector
 
+from qgis.PyQt.QtCore import QCoreApplication
+
 
 class MeanAndStdDevPlot(QgisAlgorithm):
-
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     NAME_FIELD = 'NAME_FIELD'
     VALUE_FIELD = 'VALUE_FIELD'
 
     def group(self):
-        return self.tr('Graphics')
+        return self.tr('Plots')
+
+    def groupId(self):
+        return 'plots'
 
     def __init__(self):
         super().__init__()
@@ -61,7 +59,6 @@ class MeanAndStdDevPlot(QgisAlgorithm):
                                                       self.tr('Value field'), parentLayerParameterName=self.INPUT))
 
         self.addParameter(QgsProcessingParameterFileDestination(self.OUTPUT, self.tr('Plot'), self.tr('HTML files (*.html)')))
-        self.addOutput(QgsProcessingOutputHtml(self.OUTPUT, self.tr('Plot')))
 
     def name(self):
         return 'meanandstandarddeviationplot'
@@ -70,7 +67,20 @@ class MeanAndStdDevPlot(QgisAlgorithm):
         return self.tr('Mean and standard deviation plot')
 
     def processAlgorithm(self, parameters, context, feedback):
+        try:
+            # importing plotly throws Python warnings from within the library - filter these out
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=ResourceWarning)
+                warnings.filterwarnings("ignore", category=ImportWarning)
+                import plotly as plt
+                import plotly.graph_objs as go
+        except ImportError:
+            raise QgsProcessingException(QCoreApplication.translate('MeanAndStdDevPlot', 'This algorithm requires the Python “plotly” library. Please install this library and try again.'))
+
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         namefieldname = self.parameterAsString(parameters, self.NAME_FIELD, context)
         valuefieldname = self.parameterAsString(parameters, self.VALUE_FIELD, context)
 
@@ -86,12 +96,12 @@ class MeanAndStdDevPlot(QgisAlgorithm):
             else:
                 d[v].append(values[valuefieldname][i])
 
-        data = []
-        for k, v in d.items():
-            data.append(go.Box(y=list(v),
-                               boxmean='sd',
-                               name=k
-                               ))
+        data = [
+            go.Box(y=list(v),
+                   boxmean='sd',
+                   name=k)
+            for k, v in d.items()
+        ]
         plt.offline.plot(data, filename=output, auto_open=False)
 
         return {self.OUTPUT: output}

@@ -28,7 +28,7 @@ class QToolButton;
 
 /**
  * \ingroup gui
- * A delegate item class for QgsAttributeTable (see Qt documentation for
+ * \brief A delegate item class for QgsAttributeTable (see Qt documentation for
  * QItemDelegate).
  */
 
@@ -45,7 +45,7 @@ class GUI_EXPORT QgsAttributeTableDelegate : public QItemDelegate
      * Constructor
      * \param parent parent object
      */
-    QgsAttributeTableDelegate( QObject *parent SIP_TRANSFERTHIS = 0 )
+    QgsAttributeTableDelegate( QObject *parent SIP_TRANSFERTHIS = nullptr )
       : QItemDelegate( parent )
     {
     }
@@ -81,7 +81,7 @@ class GUI_EXPORT QgsAttributeTableDelegate : public QItemDelegate
   signals:
 
     /**
-     * Is emitted when an action column item is painted.
+     * Emitted when an action column item is painted.
      * The consumer of this signal can initialize the index widget.
      *
      * \note This signal is emitted repeatedly whenever the item is being painted.

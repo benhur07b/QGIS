@@ -77,6 +77,11 @@ QgsGeoNodeSourceSelect::~QgsGeoNodeSourceSelect()
   emit abortRequests();
 }
 
+void QgsGeoNodeSourceSelect::reset()
+{
+  treeView->clearSelection();
+}
+
 void QgsGeoNodeSourceSelect::addConnectionsEntryList()
 {
   QgsGeoNodeNewConnection nc( this );
@@ -387,7 +392,7 @@ void QgsGeoNodeSourceSelect::addButtonClicked()
       layerName = titleName;
     }
 
-    if ( webServiceType == QStringLiteral( "WMS" ) )
+    if ( webServiceType == QLatin1String( "WMS" ) )
     {
       QgsDataSourceUri uri;
       uri.setParam( QStringLiteral( "url" ), serviceURL );
@@ -409,7 +414,7 @@ void QgsGeoNodeSourceSelect::addButtonClicked()
       QgsDebugMsg( "Add WMS from GeoNode : " + uri.encodedUri() );
       emit addRasterLayer( uri.encodedUri(), layerName, QStringLiteral( "wms" ) );
     }
-    else if ( webServiceType == QStringLiteral( "WFS" ) )
+    else if ( webServiceType == QLatin1String( "WFS" ) )
     {
       // Set static first, to see that it works. Need to think about the UI also.
       QString typeName = mModel->item( row, 0 )->data( Qt::UserRole + 3 ).toString();
@@ -441,7 +446,7 @@ void QgsGeoNodeSourceSelect::addButtonClicked()
       QgsDebugMsg( "Add WFS from GeoNode : " + uri.uri() + " and typename: " + typeName );
       emit addVectorLayer( uri.uri(), typeName, QStringLiteral( "WFS" ) );
     }
-    else if ( webServiceType == QStringLiteral( "XYZ" ) )
+    else if ( webServiceType == QLatin1String( "XYZ" ) )
     {
       QgsDebugMsg( "XYZ Url: " + serviceURL );
       QgsDebugMsg( "Add XYZ from GeoNode : " + serviceURL );
@@ -469,14 +474,4 @@ void QgsGeoNodeSourceSelect::updateButtonStateForAvailableConnections()
 QgsGeoNodeConnection QgsGeoNodeSourceSelect::currentConnection() const
 {
   return QgsGeoNodeConnection( cmbConnections->currentText() );
-}
-
-QGISEXTERN QList<QgsSourceSelectProvider *> *sourceSelectProviders()
-{
-  QList<QgsSourceSelectProvider *> *providers = new QList<QgsSourceSelectProvider *>();
-
-  *providers
-      << new QgsGeoNodeSourceSelectProvider;
-
-  return providers;
 }

@@ -21,18 +21,17 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
 from qgis.core import (QgsRasterFileWriter,
+                       QgsProcessingException,
+                       QgsProcessingParameterDefinition,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterBoolean,
+                       QgsProcessingParameterString,
                        QgsProcessingParameterRasterDestination)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
 from processing.tools.system import isWindows
@@ -42,12 +41,12 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class sieve(GdalAlgorithm):
-
     INPUT = 'INPUT'
     THRESHOLD = 'THRESHOLD'
     EIGHT_CONNECTEDNESS = 'EIGHT_CONNECTEDNESS'
     NO_MASK = 'NO_MASK'
     MASK_LAYER = 'MASK_LAYER'
+    EXTRA = 'EXTRA'
     OUTPUT = 'OUTPUT'
 
     def __init__(self):
@@ -70,6 +69,13 @@ class sieve(GdalAlgorithm):
                                                             self.tr('Validity mask'),
                                                             optional=True))
 
+        extra_param = QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True)
+        extra_param.setFlags(extra_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(extra_param)
+
         self.addParameter(QgsProcessingParameterRasterDestination(self.OUTPUT, self.tr('Sieved')))
 
     def name(self):
@@ -81,38 +87,48 @@ class sieve(GdalAlgorithm):
     def group(self):
         return self.tr('Raster analysis')
 
+    def groupId(self):
+        return 'rasteranalysis'
+
     def icon(self):
         return QIcon(os.path.join(pluginPath, 'images', 'gdaltools', 'sieve.png'))
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        arguments = []
-        arguments.append('-st')
-        arguments.append(str(self.parameterAsInt(parameters, self.THRESHOLD, context)))
+    def commandName(self):
+        return 'gdal_sieve'
 
-        if self.parameterAsBool(parameters, self.EIGHT_CONNECTEDNESS, context):
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        arguments = [
+            '-st',
+            str(self.parameterAsInt(parameters, self.THRESHOLD, context)),
+        ]
+
+        if self.parameterAsBoolean(parameters, self.EIGHT_CONNECTEDNESS, context):
             arguments.append('-8')
         else:
             arguments.append('-4')
 
-        if self.parameterAsBool(parameters, self.NO_MASK, context):
+        if self.parameterAsBoolean(parameters, self.NO_MASK, context):
             arguments.append('-nomask')
 
-        mask = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        mask = self.parameterAsRasterLayer(parameters, self.MASK_LAYER, context)
         if mask:
-            arguments.append('-mask {}'.format(mask.source()))
+            arguments.append('-mask')
+            arguments.append(mask.source())
 
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
         arguments.append('-of')
         arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
 
-        arguments.append(self.parameterAsRasterLayer(parameters, self.INPUT, context).source())
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
+
+        raster = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if raster is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
+        arguments.append(raster.source())
         arguments.append(out)
 
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal_sieve.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal_sieve.py', GdalUtils.escapeAndJoin(arguments)]
-
-        return commands
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

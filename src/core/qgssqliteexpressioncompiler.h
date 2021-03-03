@@ -29,9 +29,9 @@
  * \brief Expression compiler for translation to SQlite SQL WHERE clauses.
  *
  * This class is designed to be used by SpatiaLite and OGR providers.
- * \since QGIS 2.16
  * \note Not part of stable API, may change in future versions of QGIS
  * \note Not available in Python bindings
+ * \since QGIS 2.16
  */
 
 class CORE_EXPORT QgsSQLiteExpressionCompiler : public QgsSqlExpressionCompiler
@@ -41,17 +41,22 @@ class CORE_EXPORT QgsSQLiteExpressionCompiler : public QgsSqlExpressionCompiler
     /**
      * Constructor for expression compiler.
      * \param fields fields from provider
+     * \param ignoreStaticNodes If an expression has been partially precalculated due to static nodes in the expression, setting this argument to FALSE
+     * will prevent these precalculated values from being utilized during compilation of the expression. This flag significantly limits the effectiveness
+     * of compilation and should be used for debugging purposes only. (Since QGIS 3.18)
      */
-    explicit QgsSQLiteExpressionCompiler( const QgsFields &fields );
+    explicit QgsSQLiteExpressionCompiler( const QgsFields &fields, bool ignoreStaticNodes = false );
 
   protected:
 
-    virtual Result compileNode( const QgsExpressionNode *node, QString &str ) override;
-    virtual QString quotedIdentifier( const QString &identifier ) override;
-    virtual QString quotedValue( const QVariant &value, bool &ok ) override;
-    virtual QString sqlFunctionFromFunctionName( const QString &fnName ) const override;
-    virtual QString castToReal( const QString &value ) const override;
-    virtual QString castToInt( const QString &value ) const override;
+    Result compileNode( const QgsExpressionNode *node, QString &str ) override;
+    QString quotedIdentifier( const QString &identifier ) override;
+    QString quotedValue( const QVariant &value, bool &ok ) override;
+    QString sqlFunctionFromFunctionName( const QString &fnName ) const override;
+    QStringList sqlArgumentsFromFunctionName( const QString &fnName, const QStringList &fnArgs ) const override;
+    QString castToReal( const QString &value ) const override;
+    QString castToInt( const QString &value ) const override;
+    QString castToText( const QString &value ) const override;
 
 };
 

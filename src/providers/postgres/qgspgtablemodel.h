@@ -18,7 +18,7 @@
 #define QGSPGTABLEMODEL_H
 #include <QStandardItemModel>
 
-#include "qgis.h"
+#include "qgswkbtypes.h"
 #include "qgspostgresconn.h"
 
 class QIcon;
@@ -53,6 +53,7 @@ class QgsPgTableModel : public QStandardItemModel
       DbtmSrid,
       DbtmPkCol,
       DbtmSelectAtId,
+      DbtmCheckPkUnicity,
       DbtmSql,
       DbtmColumns
     };
@@ -61,11 +62,13 @@ class QgsPgTableModel : public QStandardItemModel
 
     QString layerURI( const QModelIndex &index, const QString &connInfo, bool useEstimatedMetadata );
 
-    static QIcon iconForWkbType( QgsWkbTypes::Type type );
+    void setConnectionName( const QString &connName ) { mConnName = connName;  }
 
   private:
     //! Number of tables in the model
     int mTableCount = 0;
+    //! connection name
+    QString mConnName;
 };
 
 #endif // QGSPGTABLEMODEL_H

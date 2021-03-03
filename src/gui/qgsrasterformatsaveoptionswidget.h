@@ -26,7 +26,7 @@ class QgsRasterLayer;
 
 /**
  * \ingroup gui
- * A widget to select format-specific raster saving options
+ * \brief A widget to select format-specific raster saving options
  */
 class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::QgsRasterFormatSaveOptionsWidgetBase
 {
@@ -100,7 +100,7 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     void apply();
 
     /**
-     * Opens window with options desctiption for given provider
+     * Opens window with options description for given provider
      * and output format
      */
     void helpOptions();
@@ -130,7 +130,7 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     void updateControls() SIP_FORCE;
 
   protected:
-    virtual void showEvent( QShowEvent *event ) override;
+    void showEvent( QShowEvent *event ) override;
 
   signals:
     void optionsChanged();
@@ -145,6 +145,7 @@ class GUI_EXPORT QgsRasterFormatSaveOptionsWidget: public QWidget, private Ui::Q
     static QMap< QString, QStringList > sBuiltinProfiles;
     bool mPyramids = false;
     QgsRaster::RasterPyramidsFormat mPyramidsFormat = QgsRaster::PyramidsGTiff;
+    int mBlockOptionUpdates = 0;
 
     QString settingsKey( QString profile ) const SIP_FORCE;
     QString currentProfileKey() const SIP_FORCE;

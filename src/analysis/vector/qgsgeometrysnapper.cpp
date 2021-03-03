@@ -23,6 +23,7 @@
 #include "qgsgeometryutils.h"
 #include "qgsmapsettings.h"
 #include "qgssurface.h"
+#include "qgsmultisurface.h"
 #include "qgscurve.h"
 
 ///@cond PRIVATE
@@ -45,7 +46,7 @@ QgsSnapIndex::SegmentSnapItem::SegmentSnapItem( const QgsSnapIndex::CoordIdx *_i
 
 QgsPoint QgsSnapIndex::SegmentSnapItem::getSnapPoint( const QgsPoint &p ) const
 {
-  return QgsGeometryUtils::projPointOnSegment( p, idxFrom->point(), idxTo->point() );
+  return QgsGeometryUtils::projectPointOnSegment( p, idxFrom->point(), idxTo->point() );
 }
 
 bool QgsSnapIndex::SegmentSnapItem::getIntersection( const QgsPoint &p1, const QgsPoint &p2, QgsPoint &inter ) const
@@ -185,7 +186,8 @@ class Raytracer
 
 QgsSnapIndex::GridRow::~GridRow()
 {
-  Q_FOREACH ( const QgsSnapIndex::Cell &cell, mCells )
+  const auto constMCells = mCells;
+  for ( const QgsSnapIndex::Cell &cell : constMCells )
   {
     qDeleteAll( cell );
   }
@@ -372,7 +374,7 @@ QgsPoint QgsSnapIndex::getClosestSnapToPoint( const QgsPoint &p, const QgsPoint 
     {
       continue;
     }
-    Q_FOREACH ( const SnapItem *item, *cell )
+    for ( const SnapItem *item : *cell )
     {
       if ( item->type == SnapSegment )
       {
@@ -414,7 +416,8 @@ QgsSnapIndex::SnapItem *QgsSnapIndex::getSnapItem( const QgsPoint &pos, double t
   QgsSnapIndex::SegmentSnapItem *snapSegment = nullptr;
   QgsSnapIndex::PointSnapItem *snapPoint = nullptr;
 
-  Q_FOREACH ( QgsSnapIndex::SnapItem *item, items )
+  const auto constItems = items;
+  for ( QgsSnapIndex::SnapItem *item : constItems )
   {
     if ( ( ! endPointOnly && item->type == SnapPoint ) || item->type == SnapEndPoint )
     {
@@ -482,10 +485,10 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
   mIndexMutex.lock();
   QgsRectangle searchBounds = geometry.boundingBox();
   searchBounds.grow( snapTolerance );
-  QgsFeatureIds refFeatureIds = mIndex.intersects( searchBounds ).toSet();
+  QgsFeatureIds refFeatureIds = qgis::listToSet( mIndex.intersects( searchBounds ) );
   mIndexMutex.unlock();
 
-  QgsFeatureRequest refFeatureRequest = QgsFeatureRequest().setFilterFids( refFeatureIds ).setSubsetOfAttributes( QgsAttributeList() );
+  QgsFeatureRequest refFeatureRequest = QgsFeatureRequest().setFilterFids( refFeatureIds ).setNoAttributes();
   mReferenceLayerMutex.lock();
   QgsFeature refFeature;
   QgsFeatureIterator refFeatureIt = mReferenceSource->getFeatures( refFeatureRequest );
@@ -509,7 +512,7 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
                     QgsPoint( geometry.constGet()->boundingBox().center() );
 
   QgsSnapIndex refSnapIndex( center, 10 * snapTolerance );
-  Q_FOREACH ( const QgsGeometry &geom, referenceGeometries )
+  for ( const QgsGeometry &geom : referenceGeometries )
   {
     refSnapIndex.addGeometry( geom.constGet() );
   }
@@ -550,6 +553,7 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
           switch ( mode )
           {
             case PreferNodes:
+            case PreferNodesNoExtraVertices:
             case EndPointPreferNodes:
             case EndPointToEndPoint:
             {
@@ -568,11 +572,12 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
             }
 
             case PreferClosest:
+            case PreferClosestNoExtraVertices:
             case EndPointPreferClosest:
             {
               QgsPoint nodeSnap, segmentSnap;
-              double distanceNode = DBL_MAX;
-              double distanceSegment = DBL_MAX;
+              double distanceNode = std::numeric_limits<double>::max();
+              double distanceSegment = std::numeric_limits<double>::max();
               if ( snapPoint )
               {
                 nodeSnap = snapPoint->getSnapPoint( p );
@@ -605,8 +610,12 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
   if ( qgsgeometry_cast< const QgsPoint * >( subjGeom ) )
     return QgsGeometry( subjGeom );
   //or for end point snapping
-  if ( mode == EndPointPreferClosest || mode == EndPointPreferNodes || mode == EndPointToEndPoint )
-    return QgsGeometry( subjGeom );
+  if ( mode == PreferClosestNoExtraVertices || mode == PreferNodesNoExtraVertices || mode == EndPointPreferClosest || mode == EndPointPreferNodes || mode == EndPointToEndPoint )
+  {
+    QgsGeometry result( subjGeom );
+    result.removeDuplicateNodes();
+    return result;
+  }
 
   // SnapIndex for subject feature
   std::unique_ptr< QgsSnapIndex > subjSnapIndex( new QgsSnapIndex( center, 10 * snapTolerance ) );
@@ -617,7 +626,7 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
   origSubjSnapIndex->addGeometry( origSubjGeom.get() );
 
   // Pass 2: add missing vertices to subject geometry
-  Q_FOREACH ( const QgsGeometry &refGeom, referenceGeometries )
+  for ( const QgsGeometry &refGeom : referenceGeometries )
   {
     for ( int iPart = 0, nParts = refGeom.constGet()->partCount(); iPart < nParts; ++iPart )
     {
@@ -684,7 +693,7 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
         if ( subjPointFlags[iPart][iRing][iVert] == SnappedToRefSegment &&
              subjPointFlags[iPart][iRing][iPrev] != Unsnapped &&
              subjPointFlags[iPart][iRing][iNext] != Unsnapped &&
-             QgsGeometryUtils::sqrDistance2D( QgsGeometryUtils::projPointOnSegment( pMid, pPrev, pNext ), pMid ) < 1E-12 )
+             QgsGeometryUtils::sqrDistance2D( QgsGeometryUtils::projectPointOnSegment( pMid, pPrev, pNext ), pMid ) < 1E-12 )
         {
           if ( ( ringIsClosed && nVerts > 3 ) || ( !ringIsClosed && nVerts > 2 ) )
           {
@@ -703,14 +712,16 @@ QgsGeometry QgsGeometrySnapper::snapGeometry( const QgsGeometry &geometry, doubl
     }
   }
 
-  return QgsGeometry( subjGeom );
+  QgsGeometry result( subjGeom );
+  result.removeDuplicateNodes();
+  return result;
 }
 
 int QgsGeometrySnapper::polyLineSize( const QgsAbstractGeometry *geom, int iPart, int iRing )
 {
   int nVerts = geom->vertexCount( iPart, iRing );
 
-  if ( qgsgeometry_cast< const QgsSurface * >( geom ) )
+  if ( qgsgeometry_cast< const QgsSurface * >( geom ) || qgsgeometry_cast< const QgsMultiSurface * >( geom ) )
   {
     QgsPoint front = geom->vertexAt( QgsVertexId( iPart, iRing, 0 ) );
     QgsPoint back = geom->vertexAt( QgsVertexId( iPart, iRing, nVerts - 1 ) );
@@ -747,11 +758,12 @@ QgsGeometry QgsInternalGeometrySnapper::snapFeature( const QgsFeature &feature )
     // Get potential reference features and construct snap index
     QgsRectangle searchBounds = geometry.boundingBox();
     searchBounds.grow( mSnapTolerance );
-    QgsFeatureIds refFeatureIds = mProcessedIndex.intersects( searchBounds ).toSet();
+    QgsFeatureIds refFeatureIds = qgis::listToSet( mProcessedIndex.intersects( searchBounds ) );
     if ( !refFeatureIds.isEmpty() )
     {
       QList< QgsGeometry > refGeometries;
-      Q_FOREACH ( QgsFeatureId id, refFeatureIds )
+      const auto constRefFeatureIds = refFeatureIds;
+      for ( QgsFeatureId id : constRefFeatureIds )
       {
         refGeometries << mProcessedGeometries.value( id );
       }
@@ -760,7 +772,7 @@ QgsGeometry QgsInternalGeometrySnapper::snapFeature( const QgsFeature &feature )
     }
   }
   mProcessedGeometries.insert( feat.id(), geometry );
-  mProcessedIndex.insertFeature( feat );
+  mProcessedIndex.addFeature( feat );
   mFirstFeature = false;
   return geometry;
 }

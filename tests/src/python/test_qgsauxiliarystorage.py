@@ -9,14 +9,12 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Paul Blottiere'
 __date__ = '06/09/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
 import os
 
-from qgis.PyQt.QtCore import QTemporaryFile
+from qgis.PyQt.QtCore import QTemporaryFile, QVariant
 from qgis.core import (QgsAuxiliaryStorage,
                        QgsAuxiliaryLayer,
                        QgsVectorLayer,
@@ -31,6 +29,7 @@ from qgis.core import (QgsAuxiliaryStorage,
                        NULL)
 from qgis.testing import start_app, unittest
 from utilities import unitTestDataPath, writeShape
+
 start_app()
 
 
@@ -40,12 +39,13 @@ def tmpPath():
     f.close()
     os.remove(f.fileName())
 
-    return f.fileName()
+    return f.fileName().replace('.', '_')
 
 
 def createLayer():
     vl = QgsVectorLayer(
-        'Point?crs=epsg:4326&field=pk:integer&field=cnt:integer&field=name:string(0)&field=name2:string(0)&field=num_char:string&key=pk', 'test', 'memory')
+        'Point?crs=epsg:4326&field=pk:integer&field=cnt:integer&field=name:string(0)&field=name2:string(0)&field=num_char:string&key=pk',
+        'test', 'memory')
     assert (vl.isValid())
 
     f1 = QgsFeature()
@@ -243,7 +243,7 @@ class TestQgsAuxiliaryStorage(unittest.TestCase):
                 vl.getFeatures(req).nextFeature(f)
                 self.assertTrue(f.isValid())
                 self.assertEqual(f.attributes()[index0], 333.0)
-            else: # num_char
+            else:  # num_char
                 self.assertEqual(al.featureCount(), 2)
                 self.assertEqual(afPropDef.name(), 'propname1')
 
@@ -361,6 +361,26 @@ class TestQgsAuxiliaryStorage(unittest.TestCase):
         al.clear()
         self.assertEqual(al.featureCount(), 0)
 
+    def testSetAuxiliaryLayer(self):
+        s = QgsAuxiliaryStorage()
+        self.assertTrue(s.isValid())
+
+        # Create a new auxiliary layer with 'pk' as key
+        vl = createLayer()
+        pkf = vl.fields().field(vl.fields().indexOf('pk'))
+        al = s.createAuxiliaryLayer(pkf, vl)
+        self.assertTrue(al.isValid())
+        vl.setAuxiliaryLayer(al)
+
+        self.assertIsNotNone(vl.auxiliaryLayer())
+
+        # Clear auxiliary layer
+        al.clear()
+        # Remove auxiliary layer
+        vl.setAuxiliaryLayer()
+
+        self.assertIsNone(vl.auxiliaryLayer())
+
     def testCreateProperty(self):
         s = QgsAuxiliaryStorage()
         self.assertTrue(s.isValid())
@@ -384,6 +404,78 @@ class TestQgsAuxiliaryStorage(unittest.TestCase):
         afName = QgsAuxiliaryLayer.nameFromProperty(p, True)
         afIndex = vl.fields().indexOf(afName)
         self.assertEqual(index, afIndex)
+
+    def testCreateField(self):
+        s = QgsAuxiliaryStorage()
+        self.assertTrue(s.isValid())
+
+        # Create a new auxiliary layer with 'pk' as key
+        vl = createLayer()
+        pkf = vl.fields().field(vl.fields().indexOf('pk'))
+        al = s.createAuxiliaryLayer(pkf, vl)
+        self.assertTrue(al.isValid())
+        vl.setAuxiliaryLayer(al)
+
+        prop = QgsPropertyDefinition()
+        prop.setComment('test_field')
+        prop.setDataType(QgsPropertyDefinition.DataTypeNumeric)
+        prop.setOrigin('user')
+        prop.setName('custom')
+        self.assertTrue(al.addAuxiliaryField(prop))
+
+        prop = QgsPropertyDefinition()
+        prop.setComment('test_field_string')
+        prop.setDataType(QgsPropertyDefinition.DataTypeString)
+        prop.setOrigin('user')
+        prop.setName('custom')
+        self.assertTrue(al.addAuxiliaryField(prop))
+
+        self.assertEqual(len(al.auxiliaryFields()), 2)
+        self.assertEqual(al.auxiliaryFields()[0].name(), 'user_custom_test_field')
+        self.assertEqual(al.auxiliaryFields()[0].type(), QVariant.Double)
+        self.assertEqual(al.auxiliaryFields()[0].typeName(), 'Real')
+        self.assertEqual(al.auxiliaryFields()[1].name(), 'user_custom_test_field_string')
+        self.assertEqual(al.auxiliaryFields()[1].type(), QVariant.String)
+        self.assertEqual(al.auxiliaryFields()[1].typeName(), 'String')
+
+    def testQgdCreation(self):
+        # New project
+        p = QgsProject()
+        self.assertTrue(p.auxiliaryStorage().isValid())
+
+        # Save the project
+        path = tmpPath()
+        qgs = path + '.qgs'
+        self.assertTrue(p.write(qgs))
+        self.assertTrue(os.path.exists(qgs))
+
+        # Auxiliary storage is empty so .qgd file should not be saved
+        qgd = path + '.qgd'
+        self.assertFalse(os.path.exists(qgd))
+
+        # Add a vector layer and an auxiliary layer in the project
+        vl = createLayer()
+        self.assertTrue(vl.isValid())
+        p.addMapLayers([vl])
+
+        pkf = vl.fields().field(vl.fields().indexOf('pk'))
+        al = p.auxiliaryStorage().createAuxiliaryLayer(pkf, vl)
+        self.assertTrue(al.isValid())
+        vl.setAuxiliaryLayer(al)
+
+        # Add an auxiliary field to have a non empty auxiliary storage
+        pdef = QgsPropertyDefinition('propname', QgsPropertyDefinition.DataTypeNumeric, '', '', 'ut')
+        self.assertTrue(al.addAuxiliaryField(pdef))
+
+        # Save the project
+        newpath = tmpPath()
+        qgs = newpath + '.qgs'
+        self.assertTrue(p.write(qgs))
+        self.assertTrue(os.path.exists(qgs))
+
+        # Auxiliary storage is NOT empty so .qgd file should be saved now
+        qgd = newpath + '.qgd'
+        self.assertTrue(os.path.exists(qgd))
 
 
 if __name__ == '__main__':

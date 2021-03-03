@@ -19,7 +19,7 @@
 #define QGSFEATURESOURCE_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsfeaturerequest.h"
 
 class QgsFeatureIterator;
@@ -30,13 +30,29 @@ class QgsFeedback;
 /**
  * \class QgsFeatureSource
  * \ingroup core
- * An interface for objects which provide features via a getFeatures method.
+ * \brief An interface for objects which provide features via a getFeatures method.
  *
  * \since QGIS 3.0
  */
 class CORE_EXPORT QgsFeatureSource
 {
   public:
+
+    /**
+     * Possible return value for hasFeatures() to determine if a source is empty.
+     * It is implemented as a three-value logic, so it can return if
+     * there are features available for sure, if there are no features
+     * available for sure or if there might be features available but
+     * there is no guarantee for this.
+     *
+     * \since QGIS 3.4
+     */
+    enum FeatureAvailability
+    {
+      NoFeaturesAvailable, //!< There are certainly no features available in this source
+      FeaturesAvailable, //!< There is at least one feature available in this source
+      FeaturesMaybeAvailable //!< There may be features available in this source
+    };
 
     virtual ~QgsFeatureSource() = default;
 
@@ -77,6 +93,12 @@ class CORE_EXPORT QgsFeatureSource
     % MethodCode
     sipRes = sipCpp->featureCount();
     % End
+
+    //! Ensures that bool(obj) returns TRUE (otherwise __len__() would be used)
+    int __bool__() const;
+    % MethodCode
+    sipRes = true;
+    % End
 #endif
 
     /**
@@ -84,6 +106,13 @@ class CORE_EXPORT QgsFeatureSource
      * if the feature count is unknown.
      */
     virtual long featureCount() const = 0;
+
+    /**
+     * Determines if there are any features available in the source.
+     *
+     * \since QGIS 3.2
+     */
+    virtual FeatureAvailability hasFeatures() const;
 
     /**
      * Returns the set of unique values contained within the specified \a fieldIndex from this source.
@@ -151,6 +180,27 @@ class CORE_EXPORT QgsFeatureSource
     QgsVectorLayer *materialize( const QgsFeatureRequest &request,
                                  QgsFeedback *feedback = nullptr ) SIP_FACTORY;
 
+    /**
+     * Enumeration of spatial index presence states.
+     * \since QGIS 3.10.1
+     */
+    enum SpatialIndexPresence
+    {
+      SpatialIndexUnknown = 0, //!< Spatial index presence cannot be determined, index may or may not exist
+      SpatialIndexNotPresent = 1, //!< No spatial index exists for the source
+      SpatialIndexPresent = 2, //!< A valid spatial index exists for the source
+    };
+
+    /**
+     * Returns an enum value representing the presence of a valid spatial index on the source,
+     * if it can be determined.
+     *
+     * If QgsFeatureSource::SpatialIndexUnknown is returned then the presence of an index cannot
+     * be determined.
+     *
+     * \since QGIS 3.10.1
+     */
+    virtual SpatialIndexPresence hasSpatialIndex() const;
 };
 
 Q_DECLARE_METATYPE( QgsFeatureSource * )

@@ -25,26 +25,29 @@ class QPainter;
 
 /**
  * \ingroup app
- * A class for marking the position of a gps pointer.
+ * \brief A class for marking the position of a gps pointer.
  */
 class QgsGpsMarker : public QgsMapCanvasItem
 {
   public:
     explicit QgsGpsMarker( QgsMapCanvas *mapCanvas );
 
-    void setCenter( const QgsPointXY &point );
+    /**
+     * Sets the current GPS \a position (in WGS84 coordinate reference system).
+     */
+    void setGpsPosition( const QgsPointXY &position );
 
     void paint( QPainter *p ) override;
 
     QRectF boundingRect() const override;
 
-    virtual void updatePosition() override;
+    void updatePosition() override;
 
     void setSize( int size );
 
   protected:
 
-    //! coordinates of the point in the center
+    //! Coordinates of the point in the center, in map CRS
     QgsPointXY mCenter;
     //! Size of the marker - e.g. 8 will draw it as 8x8
     int mSize;

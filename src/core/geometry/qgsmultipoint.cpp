@@ -19,9 +19,24 @@ email                : marco.hugentobler at sourcepole dot com
 #include "qgspoint.h"
 #include "qgswkbptr.h"
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QRegularExpression>
+#include <nlohmann/json.hpp>
+
 QgsMultiPoint::QgsMultiPoint()
 {
   mWkbType = QgsWkbTypes::MultiPoint;
+}
+
+QgsPoint *QgsMultiPoint::pointN( int index )
+{
+  return qgsgeometry_cast< QgsPoint * >( geometryN( index ) );
+}
+
+const QgsPoint *QgsMultiPoint::pointN( int index ) const
+{
+  return qgsgeometry_cast< const QgsPoint * >( geometryN( index ) );
 }
 
 QString QgsMultiPoint::geometryType() const
@@ -31,7 +46,7 @@ QString QgsMultiPoint::geometryType() const
 
 QgsMultiPoint *QgsMultiPoint::createEmptyWithSameType() const
 {
-  auto result = qgis::make_unique< QgsMultiPoint >();
+  auto result = std::make_unique< QgsMultiPoint >();
   result->mWkbType = mWkbType;
   return result.release();
 }
@@ -50,15 +65,15 @@ bool QgsMultiPoint::fromWkt( const QString &wkt )
 {
   QString collectionWkt( wkt );
   //test for non-standard MultiPoint(x1 y1, x2 y2) format
-  QRegExp regex( "^\\s*MultiPoint\\s*[ZM]*\\s*\\(\\s*[-\\d]" );
-  regex.setCaseSensitivity( Qt::CaseInsensitive );
-  if ( regex.indexIn( collectionWkt ) >= 0 )
+  const thread_local QRegularExpression regex( QStringLiteral( "^\\s*MultiPoint\\s*[ZM]*\\s*\\(\\s*[-\\d]" ), QRegularExpression::CaseInsensitiveOption );
+  const QRegularExpressionMatch match = regex.match( collectionWkt );
+  if ( match.hasMatch() )
   {
     //alternate style without extra brackets, upgrade to standard
     collectionWkt.replace( '(', QLatin1String( "((" ) ).replace( ')', QLatin1String( "))" ) ).replace( ',', QLatin1String( "),(" ) );
   }
 
-  return fromCollectionWkt( collectionWkt, QList<QgsAbstractGeometry *>() << new QgsPoint, QStringLiteral( "Point" ) );
+  return fromCollectionWkt( collectionWkt, QVector<QgsAbstractGeometry *>() << new QgsPoint, QStringLiteral( "Point" ) );
 }
 
 void QgsMultiPoint::clear()
@@ -67,7 +82,7 @@ void QgsMultiPoint::clear()
   mWkbType = QgsWkbTypes::MultiPoint;
 }
 
-QDomElement QgsMultiPoint::asGML2( QDomDocument &doc, int precision, const QString &ns ) const
+QDomElement QgsMultiPoint::asGml2( QDomDocument &doc, int precision, const QString &ns, const AxisOrder axisOrder ) const
 {
   QDomElement elemMultiPoint = doc.createElementNS( ns, QStringLiteral( "MultiPoint" ) );
 
@@ -79,7 +94,7 @@ QDomElement QgsMultiPoint::asGML2( QDomDocument &doc, int precision, const QStri
     if ( qgsgeometry_cast<const QgsPoint *>( geom ) )
     {
       QDomElement elemPointMember = doc.createElementNS( ns, QStringLiteral( "pointMember" ) );
-      elemPointMember.appendChild( geom->asGML2( doc, precision, ns ) );
+      elemPointMember.appendChild( geom->asGml2( doc, precision, ns, axisOrder ) );
       elemMultiPoint.appendChild( elemPointMember );
     }
   }
@@ -87,7 +102,7 @@ QDomElement QgsMultiPoint::asGML2( QDomDocument &doc, int precision, const QStri
   return elemMultiPoint;
 }
 
-QDomElement QgsMultiPoint::asGML3( QDomDocument &doc, int precision, const QString &ns ) const
+QDomElement QgsMultiPoint::asGml3( QDomDocument &doc, int precision, const QString &ns, const QgsAbstractGeometry::AxisOrder axisOrder ) const
 {
   QDomElement elemMultiPoint = doc.createElementNS( ns, QStringLiteral( "MultiPoint" ) );
 
@@ -99,7 +114,7 @@ QDomElement QgsMultiPoint::asGML3( QDomDocument &doc, int precision, const QStri
     if ( qgsgeometry_cast<const QgsPoint *>( geom ) )
     {
       QDomElement elemPointMember = doc.createElementNS( ns, QStringLiteral( "pointMember" ) );
-      elemPointMember.appendChild( geom->asGML3( doc, precision, ns ) );
+      elemPointMember.appendChild( geom->asGml3( doc, precision, ns, axisOrder ) );
       elemMultiPoint.appendChild( elemPointMember );
     }
   }
@@ -107,23 +122,24 @@ QDomElement QgsMultiPoint::asGML3( QDomDocument &doc, int precision, const QStri
   return elemMultiPoint;
 }
 
-QString QgsMultiPoint::asJSON( int precision ) const
+json QgsMultiPoint::asJsonObject( int precision ) const
 {
-  QString json = QStringLiteral( "{\"type\": \"MultiPoint\", \"coordinates\": " );
-
-  QgsPointSequence pts;
-  for ( const QgsAbstractGeometry *geom : mGeometries )
+  json j
   {
-    if ( qgsgeometry_cast<const QgsPoint *>( geom ) )
-    {
-      const QgsPoint *point = static_cast<const QgsPoint *>( geom );
-      pts << *point;
-    }
+    { "type", "MultiPoint" },
+    { "coordinates", json::array() },
+  };
+  for ( const QgsAbstractGeometry *geom : qgis::as_const( mGeometries ) )
+  {
+    const QgsPoint *point = static_cast<const QgsPoint *>( geom );
+    if ( point->is3D() )
+      j[ "coordinates" ].push_back( { qgsRound( point->x(), precision ), qgsRound( point->y(), precision ), qgsRound( point->z(), precision ) } );
+    else
+      j[ "coordinates" ].push_back( { qgsRound( point->x(), precision ), qgsRound( point->y(), precision ) } );
   }
-  json += QgsGeometryUtils::pointsToJSON( pts, precision );
-  json += QLatin1String( " }" );
-  return json;
+  return j;
 }
+
 
 int QgsMultiPoint::nCoordinates() const
 {
@@ -175,6 +191,41 @@ int QgsMultiPoint::vertexNumberFromVertexId( QgsVertexId id ) const
     return -1;
 
   return id.part; // can shortcut the calculation, since each part will have 1 vertex
+}
+
+double QgsMultiPoint::segmentLength( QgsVertexId ) const
+{
+  return 0.0;
+}
+
+bool QgsMultiPoint::isValid( QString &, int ) const
+{
+  return true;
+}
+
+void QgsMultiPoint::filterVertices( const std::function<bool ( const QgsPoint & )> &filter )
+{
+  mGeometries.erase( std::remove_if( mGeometries.begin(), mGeometries.end(), // clazy:exclude=detaching-member
+                                     [&filter]( const QgsAbstractGeometry * part )
+  {
+    if ( const QgsPoint *point = qgsgeometry_cast< const QgsPoint * >( part ) )
+    {
+      if ( !filter( *point ) )
+      {
+        delete point;
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+    else
+    {
+      delete part;
+      return true;
+    }
+  } ), mGeometries.end() ); // clazy:exclude=detaching-member
 }
 
 bool QgsMultiPoint::wktOmitChildType() const

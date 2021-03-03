@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsalgorithmmultiparttosinglepart.h"
+#include "qgsvectorlayer.h"
 
 ///@cond PRIVATE
 
@@ -29,6 +30,16 @@ QString QgsMultipartToSinglepartAlgorithm::displayName() const
   return QObject::tr( "Multipart to singleparts" );
 }
 
+QString QgsMultipartToSinglepartAlgorithm::outputName() const
+{
+  return QObject::tr( "Single parts" );
+}
+
+QgsWkbTypes::Type QgsMultipartToSinglepartAlgorithm::outputWkbType( QgsWkbTypes::Type inputWkbType ) const
+{
+  return QgsWkbTypes::singleType( inputWkbType );
+}
+
 QStringList QgsMultipartToSinglepartAlgorithm::tags() const
 {
   return QObject::tr( "multi,single,multiple,split,dump" ).split( ',' );
@@ -39,11 +50,9 @@ QString QgsMultipartToSinglepartAlgorithm::group() const
   return QObject::tr( "Vector geometry" );
 }
 
-void QgsMultipartToSinglepartAlgorithm::initAlgorithm( const QVariantMap & )
+QString QgsMultipartToSinglepartAlgorithm::groupId() const
 {
-  addParameter( new QgsProcessingParameterFeatureSource( QStringLiteral( "INPUT" ), QObject::tr( "Input layer" ) ) );
-
-  addParameter( new QgsProcessingParameterFeatureSink( QStringLiteral( "OUTPUT" ), QObject::tr( "Single parts" ) ) );
+  return QStringLiteral( "vectorgeometry" );
 }
 
 QString QgsMultipartToSinglepartAlgorithm::shortHelpString() const
@@ -58,63 +67,40 @@ QgsMultipartToSinglepartAlgorithm *QgsMultipartToSinglepartAlgorithm::createInst
   return new QgsMultipartToSinglepartAlgorithm();
 }
 
-QVariantMap QgsMultipartToSinglepartAlgorithm::processAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback )
+
+QgsProcessingFeatureSource::Flag QgsMultipartToSinglepartAlgorithm::sourceFlags() const
 {
-  std::unique_ptr< QgsFeatureSource > source( parameterAsSource( parameters, QStringLiteral( "INPUT" ), context ) );
-  if ( !source )
-    return QVariantMap();
+  // skip geometry checks - this algorithm can be used to repair geometries
+  return QgsProcessingFeatureSource::FlagSkipGeometryValidityChecks;
+}
 
-  QgsWkbTypes::Type sinkType = QgsWkbTypes::singleType( source->wkbType() );
+QgsFeatureSink::SinkFlags QgsMultipartToSinglepartAlgorithm::sinkFlags() const
+{
+  return QgsFeatureSink::RegeneratePrimaryKey;
+}
 
-  QString dest;
-  std::unique_ptr< QgsFeatureSink > sink( parameterAsSink( parameters, QStringLiteral( "OUTPUT" ), context, dest, source->fields(),
-                                          sinkType, source->sourceCrs() ) );
-  if ( !sink )
-    return QVariantMap();
+QgsFeatureList QgsMultipartToSinglepartAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingContext &, QgsProcessingFeedback * )
+{
+  if ( !feature.hasGeometry() )
+    return QgsFeatureList() << feature;
 
-  long count = source->featureCount();
-
-  QgsFeature f;
-  QgsFeatureIterator it = source->getFeatures();
-
-  double step = count > 0 ? 100.0 / count : 1;
-  int current = 0;
-  while ( it.nextFeature( f ) )
+  QgsGeometry inputGeometry = feature.geometry();
+  QgsFeatureList outputs;
+  if ( inputGeometry.isMultipart() )
   {
-    if ( feedback->isCanceled() )
+    const QVector<QgsGeometry> parts = inputGeometry.asGeometryCollection();
+    for ( const QgsGeometry &g : parts )
     {
-      break;
+      QgsFeature out;
+      out.setAttributes( feature.attributes() );
+      out.setGeometry( g );
+      outputs.append( out );
     }
-
-    QgsFeature out = f;
-    if ( out.hasGeometry() )
-    {
-      QgsGeometry inputGeometry = f.geometry();
-      if ( inputGeometry.isMultipart() )
-      {
-        Q_FOREACH ( const QgsGeometry &g, inputGeometry.asGeometryCollection() )
-        {
-          out.setGeometry( g );
-          sink->addFeature( out, QgsFeatureSink::FastInsert );
-        }
-      }
-      else
-      {
-        sink->addFeature( out, QgsFeatureSink::FastInsert );
-      }
-    }
-    else
-    {
-      // feature with null geometry
-      sink->addFeature( out, QgsFeatureSink::FastInsert );
-    }
-
-    feedback->setProgress( current * step );
-    current++;
   }
-
-  QVariantMap outputs;
-  outputs.insert( QStringLiteral( "OUTPUT" ), dest );
+  else
+  {
+    outputs.append( feature );
+  }
   return outputs;
 }
 

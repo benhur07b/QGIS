@@ -21,10 +21,6 @@ __author__ = 'Nyall Dawson'
 __date__ = 'February 2017'
 __copyright__ = '(C) 2017, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.core import (QgsGeometry,
@@ -34,11 +30,14 @@ from qgis.core import (QgsGeometry,
                        QgsFields,
                        QgsCoordinateReferenceSystem,
                        QgsCoordinateTransform,
+                       QgsCoordinateTransformContext,
                        QgsWkbTypes,
+                       QgsProcessingException,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterExtent,
                        QgsProcessingParameterCrs,
-                       QgsProcessingParameterFeatureSink)
+                       QgsProcessingParameterFeatureSink,
+                       QgsProcessingParameterDefinition)
 from qgis.PyQt.QtCore import QVariant
 
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
@@ -47,7 +46,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class FindProjection(QgisAlgorithm):
-
     INPUT = 'INPUT'
     TARGET_AREA = 'TARGET_AREA'
     TARGET_AREA_CRS = 'TARGET_AREA_CRS'
@@ -59,6 +57,9 @@ class FindProjection(QgisAlgorithm):
     def group(self):
         return self.tr('Vector general')
 
+    def groupId(self):
+        return 'vectorgeneral'
+
     def __init__(self):
         super().__init__()
 
@@ -67,9 +68,12 @@ class FindProjection(QgisAlgorithm):
                                                               self.tr('Input layer')))
         extent_parameter = QgsProcessingParameterExtent(self.TARGET_AREA,
                                                         self.tr('Target area for layer'))
-        #extent_parameter.skip_crs_check = True
         self.addParameter(extent_parameter)
-        self.addParameter(QgsProcessingParameterCrs(self.TARGET_AREA_CRS, 'Target area CRS'))
+
+        # deprecated
+        crs_param = QgsProcessingParameterCrs(self.TARGET_AREA_CRS, 'Target area CRS', optional=True)
+        crs_param.setFlags(crs_param.flags() | QgsProcessingParameterDefinition.FlagHidden)
+        self.addParameter(crs_param)
 
         self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT,
                                                             self.tr('CRS candidates')))
@@ -82,9 +86,15 @@ class FindProjection(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
         extent = self.parameterAsExtent(parameters, self.TARGET_AREA, context)
-        target_crs = self.parameterAsCrs(parameters, self.TARGET_AREA_CRS, context)
+        target_crs = self.parameterAsExtentCrs(parameters, self.TARGET_AREA, context)
+        if self.TARGET_AREA_CRS in parameters:
+            c = self.parameterAsCrs(parameters, self.TARGET_AREA_CRS, context)
+            if c.isValid():
+                target_crs = c
 
         target_geom = QgsGeometry.fromRect(extent)
 
@@ -93,6 +103,8 @@ class FindProjection(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, QgsWkbTypes.NoGeometry, QgsCoordinateReferenceSystem())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         # make intersection tests nice and fast
         engine = QgsGeometry.createGeometryEngine(target_geom.constGet())
@@ -105,6 +117,7 @@ class FindProjection(QgisAlgorithm):
 
         found_results = 0
 
+        transform_context = QgsCoordinateTransformContext()
         for current, srs_id in enumerate(crses_to_check):
             if feedback.isCanceled():
                 break
@@ -113,20 +126,25 @@ class FindProjection(QgisAlgorithm):
             if not candidate_crs.isValid():
                 continue
 
-            transform_candidate = QgsCoordinateTransform(candidate_crs, target_crs)
+            transform_candidate = QgsCoordinateTransform(candidate_crs, target_crs, transform_context)
+            transform_candidate.setBallparkTransformsAreAppropriate(True)
+            transform_candidate.disableFallbackOperationHandler(True)
             transformed_bounds = QgsGeometry(layer_bounds)
             try:
-                if not transformed_bounds.transform(transform_candidate) == 0:
+                if transformed_bounds.transform(transform_candidate) != 0:
                     continue
             except:
                 continue
 
-            if engine.intersects(transformed_bounds.constGet()):
-                feedback.pushInfo(self.tr('Found candidate CRS: {}').format(candidate_crs.authid()))
-                f = QgsFeature(fields)
-                f.setAttributes([candidate_crs.authid()])
-                sink.addFeature(f, QgsFeatureSink.FastInsert)
-                found_results += 1
+            try:
+                if engine.intersects(transformed_bounds.constGet()):
+                    feedback.pushInfo(self.tr('Found candidate CRS: {}').format(candidate_crs.authid()))
+                    f = QgsFeature(fields)
+                    f.setAttributes([candidate_crs.authid()])
+                    sink.addFeature(f, QgsFeatureSink.FastInsert)
+                    found_results += 1
+            except:
+                continue
 
             feedback.setProgress(int(current * total))
 

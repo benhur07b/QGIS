@@ -2,7 +2,7 @@
                           qgsactionmanager.h
 
  These classes store and control the management and execution of actions
- associated with a particular Qgis layer. Actions are defined to be
+ associated with a particular QGIS layer. Actions are defined to be
  external programs that are run with user-specified inputs that can
  depend on the contents of layer attributes.
 
@@ -42,7 +42,7 @@ class QgsExpressionContext;
 /**
  * \ingroup core
  * \class QgsActionManager
- * Storage and management of actions associated with a layer.
+ * \brief Storage and management of actions associated with a layer.
  *
  * Actions can trigger custom code or applications to be executed
  * based on attributes of a given feature.
@@ -61,7 +61,7 @@ class CORE_EXPORT QgsActionManager: public QObject
     /**
      * Add an action with the given name and action details.
      * Will happily have duplicate names and actions. If
-     * capture is true, when running the action using doAction(),
+     * capture is TRUE, when running the action using doAction(),
      * any stdout from the process will be captured and displayed in a
      * dialog box.
      */
@@ -70,7 +70,7 @@ class CORE_EXPORT QgsActionManager: public QObject
     /**
      * Add an action with the given name and action details.
      * Will happily have duplicate names and actions. If
-     * capture is true, when running the action using doAction(),
+     * capture is TRUE, when running the action using doAction(),
      * any stdout from the process will be captured and displayed in a
      * dialog box.
      */
@@ -86,14 +86,19 @@ class CORE_EXPORT QgsActionManager: public QObject
      *
      * \since QGIS 3.0
      */
-    void removeAction( const QUuid &actionId );
+    void removeAction( QUuid actionId );
 
     /**
-     * Does the given action. defaultValueIndex is the index of the
-     *  field to be used if the action has a $currfield placeholder.
-     *  \note available in Python bindings as doActionFeature
+     * Does the given action.
+     *
+     * \param actionId action id
+     * \param feature feature to run action for
+     * \param defaultValueIndex index of the field to be used if the action has a $currfield placeholder.
+     * \param scope expression context scope to add during expression evaluation
+     *
+     * \note available in Python bindings as doActionFeature
      */
-    void doAction( const QUuid &actionId, const QgsFeature &feature, int defaultValueIndex = 0 ) SIP_PYNAME( doActionFeature );
+    void doAction( QUuid actionId, const QgsFeature &feature, int defaultValueIndex = 0, const QgsExpressionContextScope &scope = QgsExpressionContextScope() ) SIP_PYNAME( doActionFeature );
 
     /**
      * Does the action using the expression engine to replace any embedded expressions
@@ -102,20 +107,20 @@ class CORE_EXPORT QgsActionManager: public QObject
      * \param feature feature to run action for
      * \param context expression context to evaluate expressions under
      */
-    void doAction( const QUuid &actionId, const QgsFeature &feature, const QgsExpressionContext &context );
+    void doAction( QUuid actionId, const QgsFeature &feature, const QgsExpressionContext &context );
 
     //! Removes all actions
     void clearActions();
 
     /**
-     * Return a list of actions that are available in the given action scope.
+     * Returns a list of actions that are available in the given action scope.
      * If no action scope is provided, all actions will be returned.
      *
      * \since QGIS 3.0
      */
     QList<QgsAction> actions( const QString &actionScope = QString() ) const;
 
-    //! Return the layer
+    //! Returns the layer
     QgsVectorLayer *layer() const { return mLayer; }
 
     //! Writes the actions out in XML format
@@ -125,11 +130,11 @@ class CORE_EXPORT QgsActionManager: public QObject
     bool readXml( const QDomNode &layer_node );
 
     /**
-     * Get an action by its id.
+     * Gets an action by its id.
      *
      * \since QGIS 3.0
      */
-    QgsAction action( const QUuid &id );
+    QgsAction action( QUuid id );
 
     /**
      * Each scope can have a default action. This will be saved in the project
@@ -137,7 +142,7 @@ class CORE_EXPORT QgsActionManager: public QObject
      *
      * \since QGIS 3.0
      */
-    void setDefaultAction( const QString &actionScope, const QUuid &actionId );
+    void setDefaultAction( const QString &actionScope, QUuid actionId );
 
     /**
      * Each scope can have a default action. This will be saved in the project

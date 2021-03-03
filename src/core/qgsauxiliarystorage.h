@@ -24,9 +24,8 @@
 #include "qgsdiagramrenderer.h"
 #include "qgsvectorlayerjoininfo.h"
 #include "qgsproperty.h"
-
-#include <sqlite3.h>
-
+#include "qgsspatialiteutils.h"
+#include "qgsvectorlayer.h"
 #include <QString>
 
 class QgsProject;
@@ -36,7 +35,7 @@ class QgsProject;
  *
  * \ingroup core
  *
- * Class allowing to manage the auxiliary storage for a vector layer.
+ * \brief Class allowing to manage the auxiliary storage for a vector layer.
  *
  * Such auxiliary data are data used mostly for the needs of QGIS (symbology)
  * and have no real interest in being stored with the native raw geospatial
@@ -75,16 +74,19 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
     QgsAuxiliaryLayer( const QString &pkField, const QString &filename, const QString &table, QgsVectorLayer *vlayer );
 
     /**
-     * Destructor
-     */
-    virtual ~QgsAuxiliaryLayer() = default;
-
-    /**
      * Copy constructor deactivated
      */
     QgsAuxiliaryLayer( const QgsAuxiliaryLayer &rhs ) = delete;
 
     QgsAuxiliaryLayer &operator=( QgsAuxiliaryLayer const &rhs ) = delete;
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsAuxiliaryLayer: '%1'>" ).arg( sipCpp->name() );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
 
     /**
      * Returns a new instance equivalent to this one. The underlying table
@@ -107,7 +109,7 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
      * Deletes all features from the layer. Changes are automatically committed
      * and the layer remains editable.
      *
-     * \returns true if changes are committed without error, false otherwise.
+     * \returns TRUE if changes are committed without error, FALSE otherwise.
      */
     bool clear();
 
@@ -117,23 +119,23 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
     QgsVectorLayerJoinInfo joinInfo() const;
 
     /**
-     * Returns true if the property is stored in the layer already, false
+     * Returns TRUE if the property is stored in the layer already, FALSE
      * otherwise.
      *
      * \param definition The property definition to check
      *
-     * \returns true if the property is stored, false otherwise
+     * \returns TRUE if the property is stored, FALSE otherwise
      */
     bool exists( const QgsPropertyDefinition &definition ) const;
 
     /**
-     * Add an an auxiliary field for the given property. Setup for widget
-     * editors are updated in the target layer as weel as the attribute
+     * Adds an auxiliary field for the given property. Setup for widget
+     * editors are updated in the target layer as well as the attribute
      * table config to hide auxiliary fields by default.
      *
      * \param definition The definition of the property to add
      *
-     * \returns true if the auxiliary field is well added, false otherwise
+     * \returns TRUE if the auxiliary field is well added, FALSE otherwise
      */
     bool addAuxiliaryField( const QgsPropertyDefinition &definition );
 
@@ -143,25 +145,25 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
     QgsFields auxiliaryFields() const;
 
     /**
-     * Commit changes and starts editing then.
+     * Commits changes and starts editing then.
      *
-     * \returns true if commit step passed, false otherwise
+     * \returns TRUE if commit step passed, FALSE otherwise
      */
     bool save();
 
     /**
-     * Remove attribute from the layer and commit changes. The layer remains
+     * Removes attribute from the layer and commits changes. The layer remains
      * editable.
      *
      * \param attr The index of the attribute to remove
      *
-     * \returns true if the attribute is well deleted, false otherwise
+     * \returns TRUE if the attribute is well deleted, FALSE otherwise
      */
-    virtual bool deleteAttribute( int attr ) override;
+    bool deleteAttribute( int attr ) override;
 
     /**
-     * Returns true if the underlying field have to be hidden from editing
-     * tools like attribute table, false otherwise.
+     * Returns TRUE if the underlying field has to be hidden from editing
+     * tools like attribute table, FALSE otherwise.
      *
      * \param index The index of the field for which visibility is checked
      */
@@ -188,7 +190,7 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
     int propertyFromIndex( int index ) const;
 
     /**
-     * Returns the property definition fir the underlying field index.
+     * Returns the property definition for the underlying field index.
      *
      * \param index The index of the field
      */
@@ -196,7 +198,7 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
 
     /**
      * Creates if necessary a new auxiliary field for a PAL property and
-     * activate this property in settings.
+     * activates this property in settings.
      *
      * \param property The property to create
      * \param vlayer The vector layer
@@ -207,7 +209,7 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
 
     /**
      * Creates if necessary a new auxiliary field for a diagram's property and
-     * activate this this property in settings.
+     * activates this property in settings.
      *
      * \param property The property to create
      * \param vlayer The vector layer
@@ -234,7 +236,7 @@ class CORE_EXPORT QgsAuxiliaryLayer : public QgsVectorLayer
      * Returns the name of the auxiliary field for a property definition.
      *
      * \param def The property definition
-     * \param joined The join prefix is taken into account if true
+     * \param joined The join prefix is taken into account if TRUE
      */
     static QString nameFromProperty( const QgsPropertyDefinition &def, bool joined = false );
 
@@ -308,9 +310,9 @@ class CORE_EXPORT QgsAuxiliaryStorage
     virtual ~QgsAuxiliaryStorage();
 
     /**
-     * Returns the status of the auxiliary storage currently definied.
+     * Returns the status of the auxiliary storage currently defined.
      *
-     * \returns true if the auxiliary storage is valid, false otherwise
+     * \returns TRUE if the auxiliary storage is valid, FALSE otherwise
      */
     bool isValid() const;
 
@@ -320,31 +322,39 @@ class CORE_EXPORT QgsAuxiliaryStorage
     QString fileName() const;
 
     /**
-     * Returns the path of current database used. It may be different from the
-     * target filename if the auxiliary storage is opened in copy mode.
+     * Returns the path of the current database used. It may be different from
+     * the target filename if the auxiliary storage is opened in copy mode.
      */
     QString currentFileName() const;
 
     /**
+     * Returns the underlying error string describing potential errors
+     * happening in saveAs(). Empty by default.
+     *
+     * \since QGIS 3.4
+     */
+    QString errorString() const;
+
+    /**
      * Saves the current database to a new path.
      *
-     * \returns true if everything is saved, false otherwise
+     * \returns TRUE if everything is saved, FALSE otherwise
      */
-    bool saveAs( const QString &filename ) const;
+    bool saveAs( const QString &filename );
 
     /**
      * Saves the current database to a new path for a specific project.
      * Actually, the current filename of the project is used to deduce the
      * path of the database to save.
      *
-     * \returns true if everything is saved, false otherwise
+     * \returns TRUE if everything is saved, FALSE otherwise
      */
-    bool saveAs( const QgsProject &project ) const;
+    bool saveAs( const QgsProject &project );
 
     /**
      * Saves the current database.
      *
-     * \returns true if everything is saved, false otherwise
+     * \returns TRUE if everything is saved, FALSE otherwise
      */
     bool save() const;
 
@@ -356,7 +366,7 @@ class CORE_EXPORT QgsAuxiliaryStorage
      * \param field The primary key to join
      * \param layer The vector layer for which the auxiliary layer has to be created
      *
-     * \returns A new auxiliary layer or a nullptr if an error happened.
+     * \returns A new auxiliary layer or NULLPTR if an error happened.
      */
     QgsAuxiliaryLayer *createAuxiliaryLayer( const QgsField &field, QgsVectorLayer *layer ) const SIP_FACTORY;
 
@@ -365,7 +375,7 @@ class CORE_EXPORT QgsAuxiliaryStorage
      *
      * \param uri The uri of the table to remove
      *
-     * \returns true if the table is well deleted, false otherwise
+     * \returns TRUE if the table is well deleted, FALSE otherwise
      */
     static bool deleteTable( const QgsDataSourceUri &uri );
 
@@ -375,7 +385,7 @@ class CORE_EXPORT QgsAuxiliaryStorage
      * \param uri The uri of the table to duplicate
      * \param newTable The name of the new table
      *
-     * \returns true if the table is well duplicated, false otherwise
+     * \returns TRUE if the table is well duplicated, FALSE otherwise
      */
     static bool duplicateTable( const QgsDataSourceUri &uri, const QString &newTable );
 
@@ -384,16 +394,24 @@ class CORE_EXPORT QgsAuxiliaryStorage
      */
     static QString extension();
 
+    /**
+     * Returns TRUE if the auxiliary database yet exists for a project, FALSE otherwise.
+     *
+     * \param project The project for which the database is checked
+     *
+     * \since QGIS 3.2
+     */
+    static bool exists( const QgsProject &project );
+
   private:
-    sqlite3 *open( const QString &filename = QString() );
-    sqlite3 *open( const QgsProject &project );
+    spatialite_database_unique_ptr open( const QString &filename = QString() );
+    spatialite_database_unique_ptr open( const QgsProject &project );
 
     void initTmpFileName();
 
     static QString filenameForProject( const QgsProject &project );
-    static sqlite3 *createDB( const QString &filename );
-    static sqlite3 *openDB( const QString &filename );
-    static void close( sqlite3 *handler );
+    static spatialite_database_unique_ptr createDB( const QString &filename );
+    static spatialite_database_unique_ptr openDB( const QString &filename );
     static bool tableExists( const QString &table, sqlite3 *handler );
     static bool createTable( const QString &type, const QString &table, sqlite3 *handler );
 
@@ -406,6 +424,7 @@ class CORE_EXPORT QgsAuxiliaryStorage
     QString mFileName; // original filename
     QString mTmpFileName; // temporary filename used in copy mode
     bool mCopy = false;
+    QString mErrorString;
 };
 
 #endif

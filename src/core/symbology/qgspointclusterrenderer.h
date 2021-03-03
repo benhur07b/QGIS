@@ -25,7 +25,7 @@
 /**
  * \class QgsPointClusterRenderer
  * \ingroup core
- * A renderer that automatically clusters points with the same geographic position.
+ * \brief A renderer that automatically clusters points with the same geographic position.
  * \since QGIS 3.0
 */
 class CORE_EXPORT QgsPointClusterRenderer: public QgsPointDistanceRenderer
@@ -35,10 +35,11 @@ class CORE_EXPORT QgsPointClusterRenderer: public QgsPointDistanceRenderer
     QgsPointClusterRenderer();
 
     QgsPointClusterRenderer *clone() const override SIP_FACTORY;
-    virtual void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
+    void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
     void stopRender( QgsRenderContext &context ) override;
     QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
     //! Creates a renderer from XML element
     static QgsFeatureRenderer *create( QDomElement &symbologyElem, const QgsReadWriteContext &context ) SIP_FACTORY;
@@ -58,7 +59,7 @@ class CORE_EXPORT QgsPointClusterRenderer: public QgsPointDistanceRenderer
 
     /**
      * Creates a QgsPointClusterRenderer from an existing renderer.
-     * \returns a new renderer if the conversion was possible, otherwise nullptr.
+     * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
      */
     static QgsPointClusterRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
 

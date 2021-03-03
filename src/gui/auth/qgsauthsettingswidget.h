@@ -17,7 +17,7 @@
 #define QGSAUTHSETTINGSWIDGET_H
 
 #include "qgis_gui.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "ui_qgsauthsettingswidget.h"
 
@@ -25,7 +25,7 @@
 
 /**
  * \ingroup gui
- * Widget for entering authentication credentials both in the form username/password
+ * \brief Widget for entering authentication credentials both in the form username/password
  * and by using QGIS Authentication Database and its authentication configurations.
  *
  * The widget also offers the functionality to convert username/password credentials
@@ -63,7 +63,7 @@ class GUI_EXPORT QgsAuthSettingsWidget : public QWidget, private Ui::QgsAuthSett
      * \param password
      * \param dataprovider The key of the calling layer provider, if applicable
      */
-    explicit QgsAuthSettingsWidget( QWidget *parent SIP_TRANSFERTHIS = 0,
+    explicit QgsAuthSettingsWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr,
                                     const QString &configId = QString(),
                                     const QString &username = QString(),
                                     const QString &password = QString(),
@@ -139,7 +139,7 @@ class GUI_EXPORT QgsAuthSettingsWidget : public QWidget, private Ui::QgsAuthSett
 
     /**
      * \brief convertButtonEnabled, mainly useful for unit tests
-     * \return true if the convert button is enabled
+     * \return TRUE if the convert button is enabled
      */
     bool btnConvertToEncryptedIsEnabled( ) const;
 
@@ -168,19 +168,19 @@ class GUI_EXPORT QgsAuthSettingsWidget : public QWidget, private Ui::QgsAuthSett
 
     /**
      * \brief storePassword
-     * \return true if "Store" checkbox for the password is checked
+     * \return TRUE if "Store" checkbox for the password is checked
      */
     bool storePasswordIsChecked( ) const;
 
     /**
      * \brief storeUsername
-     * \return true if "Store" checkbox for the username is checked
+     * \return TRUE if "Store" checkbox for the username is checked
      */
     bool storeUsernameIsChecked( ) const;
 
     /**
      * \brief configurationTabIsSelected
-     * \return true if the configuration tab is the currently selected tab
+     * \return TRUE if the configuration tab is the currently selected tab
      */
     bool configurationTabIsSelected( );
 
@@ -190,7 +190,7 @@ class GUI_EXPORT QgsAuthSettingsWidget : public QWidget, private Ui::QgsAuthSett
      * \brief convertToEncrypted is called when the convert to encrypted button is
      *        clicked and it creates a Basic authentication configuration from
      *        username and password specified in the Basic tab
-     * \return return true on success
+     * \return return TRUE on success
      */
     bool convertToEncrypted( );
 

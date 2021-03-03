@@ -18,6 +18,7 @@
 #include "qgseffectstack.h"
 #include "qgspainteffectregistry.h"
 #include "qgsrendercontext.h"
+#include "qgsapplication.h"
 #include <QPicture>
 
 QgsEffectStack::QgsEffectStack( const QgsEffectStack &other )
@@ -28,6 +29,12 @@ QgsEffectStack::QgsEffectStack( const QgsEffectStack &other )
   {
     appendEffect( other.effect( i )->clone() );
   }
+}
+
+QgsEffectStack::QgsEffectStack( QgsEffectStack &&other )
+  : QgsPaintEffect( other )
+{
+  std::swap( mEffectList, other.mEffectList );
 }
 
 QgsEffectStack::QgsEffectStack( const QgsPaintEffect &effect )
@@ -55,7 +62,14 @@ QgsEffectStack &QgsEffectStack::operator=( const QgsEffectStack &rhs )
   return *this;
 }
 
-QgsPaintEffect *QgsEffectStack::create( const QgsStringMap &map )
+QgsEffectStack &QgsEffectStack::operator=( QgsEffectStack &&other )
+{
+  std::swap( mEffectList, other.mEffectList );
+  mEnabled = other.enabled();
+  return *this;
+}
+
+QgsPaintEffect *QgsEffectStack::create( const QVariantMap &map )
 {
   QgsEffectStack *effect = new QgsEffectStack();
   effect->readProperties( map );
@@ -122,11 +136,9 @@ void QgsEffectStack::draw( QgsRenderContext &context )
     QPicture *pic = results.takeLast();
     if ( mEffectList.at( i )->drawMode() != QgsPaintEffect::Modifier )
     {
-      context.painter()->save();
+      QgsScopedQPainterState painterState( context.painter() );
       fixQPictureDpi( context.painter() );
       context.painter()->drawPicture( 0, 0, *pic );
-      context.painter()->restore();
-
     }
     delete pic;
   }
@@ -183,15 +195,15 @@ bool QgsEffectStack::readProperties( const QDomElement &element )
   return true;
 }
 
-QgsStringMap QgsEffectStack::properties() const
+QVariantMap QgsEffectStack::properties() const
 {
-  QgsStringMap props;
+  QVariantMap props;
   return props;
 }
 
-void QgsEffectStack::readProperties( const QgsStringMap &props )
+void QgsEffectStack::readProperties( const QVariantMap &props )
 {
-  Q_UNUSED( props );
+  Q_UNUSED( props )
 }
 
 void QgsEffectStack::clearStack()

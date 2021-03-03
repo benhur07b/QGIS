@@ -19,7 +19,6 @@
 
 #include <QDialog>
 #include "qgis_sip.h"
-#include "qgis.h"
 #include "ui_qgsauthimportidentitydialog.h"
 
 #include <QSslCertificate>
@@ -30,7 +29,7 @@
 
 /**
  * \ingroup gui
- * Widget for importing an identity certificate/key bundle into the authentication database
+ * \brief Widget for importing an identity certificate/key bundle into the authentication database
  */
 class GUI_EXPORT QgsAuthImportIdentityDialog : public QDialog, private Ui::QgsAuthImportIdentityDialog
 {
@@ -64,18 +63,18 @@ class GUI_EXPORT QgsAuthImportIdentityDialog : public QDialog, private Ui::QgsAu
      * \param parent Parent widget
      */
     explicit QgsAuthImportIdentityDialog( QgsAuthImportIdentityDialog::IdentityType identitytype,
-                                          QWidget *parent SIP_TRANSFERTHIS = 0 );
+                                          QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    //! Get identity type
+    //! Gets identity type
     QgsAuthImportIdentityDialog::IdentityType identityType();
 
     /**
-     * Get certificate/key bundle to be imported.
+     * Gets certificate/key bundle to be imported.
      * \note not available in Python bindings
      */
     const QPair<QSslCertificate, QSslKey> certBundleToImport() SIP_SKIP;
 
-    //! Get certificate/key bundle to be imported as a PKI bundle object
+    //! Gets certificate/key bundle to be imported as a PKI bundle object
     const QgsPkiBundle pkiBundleToImport() { return mPkiBundle; }
 
   private slots:

@@ -34,16 +34,33 @@ class QgsAttributes;
 
 /**
  * \ingroup core
- * Base class for all diagram types*/
-class CORE_EXPORT QgsDiagram
+ * \brief Base class for all diagram types.
+*/
+class CORE_EXPORT QgsDiagram SIP_NODEFAULTCTORS
 {
   public:
+
+#ifdef SIP_RUN
+    SIP_CONVERT_TO_SUBCLASS_CODE
+    if ( sipCpp->diagramName() == QLatin1String( "Pie" ) )
+      sipType = sipType_QgsPieDiagram;
+    else if ( sipCpp->diagramName() == QLatin1String( "Histogram" ) )
+      sipType = sipType_QgsHistogramDiagram;
+    else if ( sipCpp->diagramName() == QLatin1String( "Text" ) )
+      sipType = sipType_QgsTextDiagram;
+    else if ( sipCpp->diagramName() == QLatin1String( "Stacked" ) )
+      sipType = sipType_QgsStackedBarDiagram;
+    else
+      sipType = NULL;
+    SIP_END
+#endif
 
     virtual ~QgsDiagram() { clearCache(); }
 
     /**
      * Returns an instance that is equivalent to this one
-     * \since QGIS 2.4 */
+     * \since QGIS 2.4
+    */
     virtual QgsDiagram *clone() const = 0 SIP_FACTORY;
 
     void clearCache();
@@ -60,7 +77,7 @@ class CORE_EXPORT QgsDiagram
     virtual void renderDiagram( const QgsFeature &feature, QgsRenderContext &c, const QgsDiagramSettings &s, QPointF position ) = 0;
 
     /**
-     * Get a descriptive name for this diagram type.
+     * Gets a descriptive name for this diagram type.
      */
     virtual QString diagramName() const = 0;
     //! Returns the size in map units the diagram will use to render.
@@ -133,6 +150,7 @@ class CORE_EXPORT QgsDiagram
 
   private:
     QMap<QString, QgsExpression *> mExpressions;
+    QgsDiagram &operator= ( const QgsDiagram & ) = delete;
 };
 
 #endif // QGSDIAGRAM_H

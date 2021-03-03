@@ -22,32 +22,48 @@
 
 #include <QCache>
 #include <QFileSystemWatcher>
-#include <QMap>
 #include <QObject>
 #include <QDomDocument>
 
 #include "qgis_server.h"
 #include "qgis_sip.h"
 #include "qgsproject.h"
+#include "qgsserversettings.h"
 
-class QgsAccessControl;
-
+/**
+ * \ingroup server
+ * \brief Cache for server configuration.
+ * \since QGIS 2.8
+ */
 class SERVER_EXPORT QgsConfigCache : public QObject
 {
     Q_OBJECT
   public:
+
+    /**
+     * Returns the current instance.
+     */
     static QgsConfigCache *instance();
 
+    /**
+     * Removes an entry from cache.
+     * \param path The path of the project
+     */
     void removeEntry( const QString &path );
 
     /**
-     * If the project is not cached yet, then the project is read thank to the
-     *  path. If the project is not available, then a nullptr is returned.
+     * If the project is not cached yet, then the project is read from the
+     * path. If the project is not available, then NULLPTR is returned.
+     * If the project contains any bad layer it is considered unavailable
+     * unless the server configuration variable QGIS_SERVER_IGNORE_BAD_LAYERS
+     * passed in the optional settings argument is set to TRUE (the default
+     * value is FALSE).
      * \param path the filename of the QGIS project
-     * \returns the project or nullptr if an error happened
+     * \param settings QGIS server settings
+     * \returns the project or NULLPTR if an error happened
      * \since QGIS 3.0
      */
-    const QgsProject *project( const QString &path );
+    const QgsProject *project( const QString &path, const QgsServerSettings *settings = nullptr );
 
   private:
     QgsConfigCache() SIP_FORCE;

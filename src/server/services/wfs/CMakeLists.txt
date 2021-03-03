@@ -2,7 +2,7 @@
 ########################################################
 # Files
 
-SET (wfs_SRCS
+set (WFS_SRCS
   qgswfs.cpp
   qgswfsutils.cpp
   qgswfsgetcapabilities.cpp
@@ -14,48 +14,37 @@ SET (wfs_SRCS
   qgswfsparameters.cpp
 )
 
-SET (wfs_MOC_HDRS
+set (WFS_HDRS
   qgswfsparameters.h
 )
 
 ########################################################
 # Build
 
-QT5_WRAP_CPP(wfs_MOC_SRCS ${wfs_MOC_HDRS})
+add_library (wfs MODULE ${WFS_SRCS} ${WFS_HDRS})
 
-ADD_LIBRARY (wfs MODULE ${wfs_SRCS} ${wfs_MOC_SRCS} ${wfs_MOC_HDRS})
+# require c++17
+target_compile_features(wfs PRIVATE cxx_std_17)
 
-
-INCLUDE_DIRECTORIES(SYSTEM
+include_directories(SYSTEM
   ${GDAL_INCLUDE_DIR}
-  ${GEOS_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
   ${POSTGRES_INCLUDE_DIR}
 )
 
-INCLUDE_DIRECTORIES(
-  ${CMAKE_BINARY_DIR}/src/core
+include_directories(
+  ${CMAKE_SOURCE_DIR}/src/server
+  ${CMAKE_SOURCE_DIR}/src/server/services
+  ${CMAKE_SOURCE_DIR}/src/server/services/wfs
+
   ${CMAKE_BINARY_DIR}/src/python
   ${CMAKE_BINARY_DIR}/src/analysis
   ${CMAKE_BINARY_DIR}/src/server
+
   ${CMAKE_CURRENT_BINARY_DIR}
-  ../../../core
-  ../../../core/dxf
-  ../../../core/expression
-  ../../../core/geometry
-  ../../../core/metadata
-  ../../../core/raster
-  ../../../core/symbology
-  ../../../core/composer
-  ../../../core/layertree
-  ../..
-  ..
-  .
 )
 
 
-#endif
-TARGET_LINK_LIBRARIES(wfs
+target_link_libraries(wfs
   qgis_core
   qgis_server
 )
@@ -64,7 +53,7 @@ TARGET_LINK_LIBRARIES(wfs
 ########################################################
 # Install
 
-INSTALL(TARGETS wfs
+install(TARGETS wfs
     RUNTIME DESTINATION ${QGIS_SERVER_MODULE_DIR}
     LIBRARY DESTINATION ${QGIS_SERVER_MODULE_DIR}
 )

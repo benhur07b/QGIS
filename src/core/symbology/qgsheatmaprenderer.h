@@ -16,7 +16,7 @@
 #define QGSHEATMAPRENDERER_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrenderer.h"
 #include "qgssymbol.h"
 #include "qgsexpression.h"
@@ -35,7 +35,7 @@ class CORE_EXPORT QgsHeatmapRenderer : public QgsFeatureRenderer
   public:
 
     QgsHeatmapRenderer();
-    virtual ~QgsHeatmapRenderer();
+    ~QgsHeatmapRenderer() override;
 
     //! Direct copies are forbidden. Use clone() instead.
     QgsHeatmapRenderer( const QgsHeatmapRenderer & ) = delete;
@@ -43,24 +43,25 @@ class CORE_EXPORT QgsHeatmapRenderer : public QgsFeatureRenderer
     QgsHeatmapRenderer &operator=( const QgsHeatmapRenderer & ) = delete;
 
     //reimplemented methods
-    virtual QgsHeatmapRenderer *clone() const override SIP_FACTORY;
-    virtual void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
-    virtual bool renderFeature( QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) override;
-    virtual void stopRender( QgsRenderContext &context ) override;
+    QgsHeatmapRenderer *clone() const override SIP_FACTORY;
+    void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
+    bool renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) override SIP_THROW( QgsCsException );
+    void stopRender( QgsRenderContext &context ) override;
     //! \note symbolForFeature2 in Python bindings
-    virtual QgsSymbol *symbolForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
+    QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
     //! \note symbol2 in Python bindings
-    virtual QgsSymbolList symbols( QgsRenderContext &context ) override;
-    virtual QString dump() const override;
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    QgsSymbolList symbols( QgsRenderContext &context ) const override;
+    QString dump() const override;
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
     //! Creates a new heatmap renderer instance from XML
     static QgsFeatureRenderer *create( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
-    virtual QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
+    QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
     static QgsHeatmapRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
     //reimplemented to extent the request so that points up to heatmap's radius distance outside
     //visible area are included
-    virtual void modifyRequestExtent( QgsRectangle &extent, QgsRenderContext &context ) override;
+    void modifyRequestExtent( QgsRectangle &extent, QgsRenderContext &context ) override;
 
     //heatmap specific methods
 
@@ -201,11 +202,11 @@ class CORE_EXPORT QgsHeatmapRenderer : public QgsFeatureRenderer
 
     int mFeaturesRendered = 0;
 
-    double uniformKernel( const double distance, const int bandwidth ) const;
-    double quarticKernel( const double distance, const int bandwidth ) const;
-    double triweightKernel( const double distance, const int bandwidth ) const;
-    double epanechnikovKernel( const double distance, const int bandwidth ) const;
-    double triangularKernel( const double distance, const int bandwidth ) const;
+    double uniformKernel( double distance, int bandwidth ) const;
+    double quarticKernel( double distance, int bandwidth ) const;
+    double triweightKernel( double distance, int bandwidth ) const;
+    double epanechnikovKernel( double distance, int bandwidth ) const;
+    double triangularKernel( double distance, int bandwidth ) const;
 
     QgsMultiPointXY convertToMultipoint( const QgsGeometry *geom );
     void initializeValues( QgsRenderContext &context );

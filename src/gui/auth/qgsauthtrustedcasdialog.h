@@ -18,7 +18,7 @@
 #define QGSAUTHTRUSTEDCASDIALOG_H
 
 #include <QDialog>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "ui_qgsauthtrustedcasdialog.h"
 
 #include <QSslCertificate>
@@ -30,7 +30,7 @@ class QgsMessageBar;
 
 /**
  * \ingroup gui
- * Widget for listing trusted Certificate (Intermediate) Authorities used in secure connections
+ * \brief Widget for listing trusted Certificate (Intermediate) Authorities used in secure connections
  */
 class GUI_EXPORT QgsAuthTrustedCAsDialog : public QDialog, private Ui::QgsAuthTrustedCAsDialog
 {
@@ -43,7 +43,7 @@ class GUI_EXPORT QgsAuthTrustedCAsDialog : public QDialog, private Ui::QgsAuthTr
      * \param parent Parent widget
      * \param trustedCAs List of trusted Certificate Authorities objects
      */
-    explicit QgsAuthTrustedCAsDialog( QWidget *parent SIP_TRANSFERTHIS = 0,
+    explicit QgsAuthTrustedCAsDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr,
                                       const QList<QSslCertificate> &trustedCAs = QList<QSslCertificate>() );
 
   private slots:

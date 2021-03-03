@@ -39,6 +39,11 @@ QString QgsBoundingBoxAlgorithm::group() const
   return QObject::tr( "Vector geometry" );
 }
 
+QString QgsBoundingBoxAlgorithm::groupId() const
+{
+  return QStringLiteral( "vectorgeometry" );
+}
+
 QString QgsBoundingBoxAlgorithm::outputName() const
 {
   return QObject::tr( "Bounds" );
@@ -66,7 +71,7 @@ QgsFields QgsBoundingBoxAlgorithm::outputFields( const QgsFields &inputFields ) 
   return fields;
 }
 
-QgsFeature QgsBoundingBoxAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingFeedback * )
+QgsFeatureList QgsBoundingBoxAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingContext &, QgsProcessingFeedback * )
 {
   QgsFeature f = feature;
   if ( f.hasGeometry() )
@@ -81,7 +86,16 @@ QgsFeature QgsBoundingBoxAlgorithm::processFeature( const QgsFeature &feature, Q
           << bounds.perimeter();
     f.setAttributes( attrs );
   }
-  return f;
+  else
+  {
+    QgsAttributes attrs = f.attributes();
+    attrs << QVariant()
+          << QVariant()
+          << QVariant()
+          << QVariant();
+    f.setAttributes( attrs );
+  }
+  return QgsFeatureList() << f;
 }
 
 ///@endcond

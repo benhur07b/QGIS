@@ -18,6 +18,8 @@
 #include "qgslayout.h"
 #include "qgsproject.h"
 #include "qgsreadwritecontext.h"
+#include "qgslayoutpagecollection.h"
+#include "qgslayoutundostack.h"
 #include <QGraphicsLineItem>
 
 
@@ -25,7 +27,7 @@
 // QgsLayoutGuide
 //
 
-QgsLayoutGuide::QgsLayoutGuide( Qt::Orientation orientation, const QgsLayoutMeasurement &position, QgsLayoutItemPage *page )
+QgsLayoutGuide::QgsLayoutGuide( Qt::Orientation orientation, QgsLayoutMeasurement position, QgsLayoutItemPage *page )
   : QObject( nullptr )
   , mOrientation( orientation )
   , mPosition( position )
@@ -46,7 +48,7 @@ QgsLayoutMeasurement QgsLayoutGuide::position() const
   return mPosition;
 }
 
-void QgsLayoutGuide::setPosition( const QgsLayoutMeasurement &position )
+void QgsLayoutGuide::setPosition( QgsLayoutMeasurement position )
 {
   mPosition = position;
   update();
@@ -76,10 +78,6 @@ void QgsLayoutGuide::update()
     return;
   }
 
-  if ( mLineItem->parentItem() != mPage )
-  {
-    mLineItem->setParentItem( mPage );
-  }
   double layoutPos = mLayout->convertToLayoutUnits( mPosition );
   bool showGuide = mLayout->guides().visible();
   switch ( mOrientation )
@@ -91,7 +89,7 @@ void QgsLayoutGuide::update()
       }
       else
       {
-        mLineItem->setLine( 0, layoutPos, mPage->rect().width(), layoutPos );
+        mLineItem->setLine( 0, layoutPos + mPage->y(), mPage->rect().width(), layoutPos + mPage->y() );
         mLineItem->setVisible( showGuide );
       }
 
@@ -104,7 +102,7 @@ void QgsLayoutGuide::update()
       }
       else
       {
-        mLineItem->setLine( layoutPos, 0, layoutPos, mPage->rect().height() );
+        mLineItem->setLine( layoutPos, mPage->y(), layoutPos, mPage->y() + mPage->rect().height() );
         mLineItem->setVisible( showGuide );
       }
 
@@ -142,11 +140,11 @@ void QgsLayoutGuide::setLayoutPosition( double position )
   switch ( mOrientation )
   {
     case Qt::Horizontal:
-      p = mLineItem->mapFromScene( QPointF( 0, position ) ).y();
+      p = mPage->mapFromScene( QPointF( 0, position ) ).y();
       break;
 
     case Qt::Vertical:
-      p = mLineItem->mapFromScene( QPointF( position, 0 ) ).x();
+      p = mPage->mapFromScene( QPointF( position, 0 ) ).x();
       break;
   }
   mPosition = mLayout->convertFromLayoutUnits( p, mPosition.units() );
@@ -171,7 +169,7 @@ void QgsLayoutGuide::setLayout( QgsLayout *layout )
     QPen linePen( Qt::DotLine );
     linePen.setColor( Qt::red );
     // use a pen width of 0, since this activates a cosmetic pen
-    // which doesn't scale with the composer and keeps a constant size
+    // which doesn't scale with the layout and keeps a constant size
     linePen.setWidthF( 0 );
     mLineItem->setPen( linePen );
   }
@@ -197,7 +195,7 @@ QgsLayoutGuideCollection::QgsLayoutGuideCollection( QgsLayout *layout, QgsLayout
   , mPageCollection( pageCollection )
 {
   QFont f;
-  mHeaderSize = QFontMetrics( f ).width( QStringLiteral( "XX" ) );
+  mHeaderSize = QFontMetrics( f ).boundingRect( QStringLiteral( "XX" ) ).width();
 
   connect( mPageCollection, &QgsLayoutPageCollection::pageAboutToBeRemoved, this, &QgsLayoutGuideCollection::pageAboutToBeRemoved );
 }
@@ -301,6 +299,9 @@ bool QgsLayoutGuideCollection::setData( const QModelIndex &index, const QVariant
         return false;
 
       QgsLayoutMeasurement m = guide->position();
+      if ( qgsDoubleNear( m.length(), newPos ) )
+        return true;
+
       m.setLength( newPos );
       mLayout->undoStack()->beginCommand( mPageCollection, tr( "Move Guide" ), Move + index.row() );
       whileBlocking( guide )->setPosition( m );
@@ -434,14 +435,15 @@ void QgsLayoutGuideCollection::applyGuidesToAllOtherPages( int sourcePage )
   mBlockUndoCommands = true;
   QgsLayoutItemPage *page = mPageCollection->page( sourcePage );
   // remove other page's guides
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  const auto constMGuides = mGuides;
+  for ( QgsLayoutGuide *guide : constMGuides )
   {
     if ( guide->page() != page )
       removeGuide( guide );
   }
 
   // remaining guides belong to source page - clone them to other pages
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  for ( QgsLayoutGuide *guide : qgis::as_const( mGuides ) )
   {
     for ( int p = 0; p < mPageCollection->pageCount(); ++p )
     {
@@ -463,16 +465,23 @@ void QgsLayoutGuideCollection::applyGuidesToAllOtherPages( int sourcePage )
 
 void QgsLayoutGuideCollection::update()
 {
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  const auto constMGuides = mGuides;
+  for ( QgsLayoutGuide *guide : constMGuides )
   {
     guide->update();
   }
 }
 
+QList<QgsLayoutGuide *> QgsLayoutGuideCollection::guides()
+{
+  return mGuides;
+}
+
 QList<QgsLayoutGuide *> QgsLayoutGuideCollection::guides( Qt::Orientation orientation, int page )
 {
   QList<QgsLayoutGuide *> res;
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  const auto constMGuides = mGuides;
+  for ( QgsLayoutGuide *guide : constMGuides )
   {
     if ( guide->orientation() == orientation && guide->item()->isVisible() &&
          ( page < 0 || mPageCollection->page( page ) == guide->page() ) )
@@ -484,7 +493,8 @@ QList<QgsLayoutGuide *> QgsLayoutGuideCollection::guides( Qt::Orientation orient
 QList<QgsLayoutGuide *> QgsLayoutGuideCollection::guidesOnPage( int page )
 {
   QList<QgsLayoutGuide *> res;
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  const auto constMGuides = mGuides;
+  for ( QgsLayoutGuide *guide : constMGuides )
   {
     if ( mPageCollection->page( page ) == guide->page() )
       res << guide;
@@ -508,7 +518,8 @@ void QgsLayoutGuideCollection::setVisible( bool visible )
 void QgsLayoutGuideCollection::pageAboutToBeRemoved( int pageNumber )
 {
   mBlockUndoCommands = true;
-  Q_FOREACH ( QgsLayoutGuide *guide, guidesOnPage( pageNumber ) )
+  const auto constGuidesOnPage = guidesOnPage( pageNumber );
+  for ( QgsLayoutGuide *guide : constGuidesOnPage )
   {
     removeGuide( guide );
   }
@@ -519,7 +530,8 @@ bool QgsLayoutGuideCollection::writeXml( QDomElement &parentElement, QDomDocumen
 {
   QDomElement element = document.createElement( QStringLiteral( "GuideCollection" ) );
   element.setAttribute( QStringLiteral( "visible" ), mGuidesVisible );
-  Q_FOREACH ( QgsLayoutGuide *guide, mGuides )
+  const auto constMGuides = mGuides;
+  for ( QgsLayoutGuide *guide : constMGuides )
   {
     QDomElement guideElement = document.createElement( QStringLiteral( "Guide" ) );
     guideElement.setAttribute( QStringLiteral( "orientation" ), guide->orientation() );
@@ -536,12 +548,12 @@ bool QgsLayoutGuideCollection::writeXml( QDomElement &parentElement, QDomDocumen
 bool QgsLayoutGuideCollection::readXml( const QDomElement &e, const QDomDocument &, const QgsReadWriteContext & )
 {
   QDomElement element = e;
-  if ( element.nodeName() != QStringLiteral( "GuideCollection" ) )
+  if ( element.nodeName() != QLatin1String( "GuideCollection" ) )
   {
     element = element.firstChildElement( QStringLiteral( "GuideCollection" ) );
   }
 
-  if ( element.nodeName() != QStringLiteral( "GuideCollection" ) )
+  if ( element.nodeName() != QLatin1String( "GuideCollection" ) )
   {
     return false;
   }

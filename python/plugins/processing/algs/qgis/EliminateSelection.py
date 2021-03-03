@@ -16,24 +16,21 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Bernhard Ströbl'
 __date__ = 'January 2017'
 __copyright__ = '(C) 2017, Bernhard Ströbl'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsFeatureRequest,
+from qgis.core import (QgsApplication,
+                       QgsFeatureRequest,
                        QgsFeature,
                        QgsFeatureSink,
                        QgsGeometry,
+                       QgsProcessingAlgorithm,
                        QgsProcessingException,
                        QgsProcessingUtils,
                        QgsProcessingParameterVectorLayer,
@@ -47,7 +44,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class EliminateSelection(QgisAlgorithm):
-
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     MODE = 'MODE'
@@ -57,13 +53,22 @@ class EliminateSelection(QgisAlgorithm):
     MODE_BOUNDARY = 2
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'eliminate.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmDissolve.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmDissolve.svg")
 
     def group(self):
         return self.tr('Vector geometry')
 
+    def groupId(self):
+        return 'vectorgeometry'
+
     def __init__(self):
         super().__init__()
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading | QgsProcessingAlgorithm.FlagNotAvailableInStandaloneTool
 
     def initAlgorithm(self, config=None):
         self.modes = [self.tr('Largest Area'),
@@ -97,6 +102,8 @@ class EliminateSelection(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                inLayer.fields(), inLayer.wkbType(), inLayer.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         for aFeat in inLayer.getFeatures():
             if feedback.isCanceled():
@@ -108,6 +115,8 @@ class EliminateSelection(QgisAlgorithm):
             else:
                 # write the others to output
                 sink.addFeature(aFeat, QgsFeatureSink.FastInsert)
+
+        del sink
 
         # Delete all features to eliminate in processLayer
         processLayer = QgsProcessingUtils.mapLayerFromString(dest_id, context)
@@ -222,6 +231,6 @@ class EliminateSelection(QgisAlgorithm):
             if feedback.isCanceled():
                 break
 
-            sink.addFeature(feature, QgsFeatureSink.FastInsert)
+            processLayer.dataProvider().addFeature(feature, QgsFeatureSink.FastInsert)
 
         return {self.OUTPUT: dest_id}

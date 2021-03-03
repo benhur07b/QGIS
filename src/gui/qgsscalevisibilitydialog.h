@@ -17,7 +17,7 @@
 #define QGSSCALEVISIBILITYDIALOG_H
 
 #include <QDialog>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QGroupBox>
 #include "qgis_gui.h"
 
@@ -27,7 +27,7 @@ class QgsScaleRangeWidget;
 /**
  * \ingroup gui
  * \class QgsScaleVisibilityDialog
- * A dialog allowing users to enter a scale visibility range.
+ * \brief A dialog allowing users to enter a scale visibility range.
  */
 class GUI_EXPORT QgsScaleVisibilityDialog : public QDialog
 {
@@ -43,10 +43,10 @@ class GUI_EXPORT QgsScaleVisibilityDialog : public QDialog
      * can be used to associate the dialog with a map canvas, allowing use of the current map scale
      * within the dialog.
      */
-    explicit QgsScaleVisibilityDialog( QWidget *parent SIP_TRANSFERTHIS = 0, const QString &title = QString(), QgsMapCanvas *mapCanvas = nullptr );
+    explicit QgsScaleVisibilityDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr, const QString &title = QString(), QgsMapCanvas *mapCanvas = nullptr );
 
     /**
-     * Return true if scale based visibilty is enabled.
+     * Returns TRUE if scale based visibility is enabled.
      */
     bool hasScaleVisibility() const;
 

@@ -16,7 +16,8 @@
 #ifndef QGSPHONGMATERIALWIDGET_H
 #define QGSPHONGMATERIALWIDGET_H
 
-#include <QWidget>
+#include "qgsmaterialsettingswidget.h"
+#include "qgsabstractmaterialsettings.h"
 
 #include <ui_phongmaterialwidget.h>
 
@@ -24,19 +25,18 @@ class QgsPhongMaterialSettings;
 
 
 //! Widget for configuration of Phong material settings
-class QgsPhongMaterialWidget : public QWidget, private Ui::PhongMaterialWidget
+class QgsPhongMaterialWidget : public QgsMaterialSettingsWidget, private Ui::PhongMaterialWidget
 {
     Q_OBJECT
   public:
     explicit QgsPhongMaterialWidget( QWidget *parent = nullptr );
 
-    void setMaterial( const QgsPhongMaterialSettings &material );
-    QgsPhongMaterialSettings material() const;
+    static QgsMaterialSettingsWidget *create();
 
-  signals:
-    void changed();
+    void setTechnique( QgsMaterialSettingsRenderingTechnique technique ) override;
+    void setSettings( const QgsAbstractMaterialSettings *settings, QgsVectorLayer *layer ) override;
+    QgsAbstractMaterialSettings *settings() override;
 
-  public slots:
 };
 
 #endif // QGSPHONGMATERIALWIDGET_H

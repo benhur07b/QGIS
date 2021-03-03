@@ -20,7 +20,7 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 
 ///@cond PRIVATE
@@ -46,15 +46,16 @@ class QgsTransectAlgorithm : public QgsProcessingAlgorithm
     void initAlgorithm( const QVariantMap &configuration = QVariantMap() ) override;
     QString name() const override;
     QString displayName() const override;
-    virtual QStringList tags() const override;
+    QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsTransectAlgorithm *createInstance() const override SIP_FACTORY;
 
   protected:
 
-    virtual QVariantMap processAlgorithm( const QVariantMap &parameters,
-                                          QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+    QVariantMap processAlgorithm( const QVariantMap &parameters,
+                                  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
 
   private:
 
@@ -66,7 +67,7 @@ class QgsTransectAlgorithm : public QgsProcessingAlgorithm
      * \param orientation Orientation of the transect
      * \param angle Angle of the transect relative to the segment [\a p1 - \a p2] (degrees clockwise)
      */
-    QgsGeometry calcTransect( const QgsPoint &point, const double angleAtVertex, const double length, const Side orientation, const double angle );
+    QgsGeometry calcTransect( const QgsPoint &point, double angleAtVertex, double length, Side orientation, double angle );
 };
 
 ///@endcond PRIVATE

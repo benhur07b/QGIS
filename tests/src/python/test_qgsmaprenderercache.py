@@ -9,15 +9,14 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '1/02/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
 from qgis.core import (QgsMapRendererCache,
                        QgsRectangle,
                        QgsVectorLayer,
-                       QgsProject)
+                       QgsProject,
+                       QgsMapToPixel)
 from qgis.testing import start_app, unittest
 from qgis.PyQt.QtCore import QCoreApplication
 from qgis.PyQt.QtGui import QImage
@@ -124,6 +123,27 @@ class TestQgsMapRendererCache(unittest.TestCase):
         cache.setCacheImage('xxx', im, [layer])
         layer.triggerRepaint(True)
         self.assertFalse(cache.hasCacheImage('xxx'))
+
+    def testInvalidateCacheForLayer(self):
+        """ test invalidating the cache for a layer """
+        layer = QgsVectorLayer("Point?field=fldtxt:string",
+                               "layer", "memory")
+        QgsProject.instance().addMapLayers([layer])
+        self.assertTrue(layer.isValid())
+
+        # add image to cache
+        cache = QgsMapRendererCache()
+        im = QImage(200, 200, QImage.Format_RGB32)
+        cache.setCacheImage('xxx', im, [layer])
+        self.assertFalse(cache.cacheImage('xxx').isNull())
+        self.assertTrue(cache.hasCacheImage('xxx'))
+
+        # invalidate cache for layer
+        cache.invalidateCacheForLayer(layer)
+        # cache image should be cleared
+        self.assertTrue(cache.cacheImage('xxx').isNull())
+        self.assertFalse(cache.hasCacheImage('xxx'))
+        QgsProject.instance().removeMapLayer(layer.id())
 
     def testRequestRepaintMultiple(self):
         """ test requesting repaint with multiple dependent layers """
@@ -262,9 +282,36 @@ class TestQgsMapRendererCache(unittest.TestCase):
 
         # wait a second...
         sleep(1)
-        QCoreApplication.processEvents()
+        for i in range(100):
+            QCoreApplication.processEvents()
         # cache should be cleared
         self.assertFalse(cache.hasCacheImage('l1'))
+
+    def testSetCacheImageDifferentParams(self):
+        """
+        Test setting cache image with different parameters
+        """
+        cache = QgsMapRendererCache()
+        cache.updateParameters(QgsRectangle(1, 1, 3, 3), QgsMapToPixel(5))
+        im = QImage(200, 200, QImage.Format_RGB32)
+        cache.setCacheImage('im1', im, [])
+
+        self.assertEqual(cache.cacheImage('im1').width(), 200)
+
+        # if existing cached image exists with matching parameters, we don't store a new image -- old
+        # one should still be retained
+        im = QImage(201, 201, QImage.Format_RGB32)
+        cache.setCacheImageWithParameters('im1', im, QgsRectangle(1, 1, 3, 4), QgsMapToPixel(5), [])
+        self.assertEqual(cache.cacheImage('im1').width(), 200)
+        cache.setCacheImageWithParameters('im1', im, QgsRectangle(1, 1, 3, 3), QgsMapToPixel(6), [])
+        self.assertEqual(cache.cacheImage('im1').width(), 200)
+
+        # replace with matching parameters
+        cache.setCacheImageWithParameters('im1', im, QgsRectangle(1, 1, 3, 3), QgsMapToPixel(5), [])
+        self.assertEqual(cache.cacheImage('im1').width(), 201)
+        im = QImage(202, 202, QImage.Format_RGB32)
+        cache.setCacheImage('im1', im, [])
+        self.assertEqual(cache.cacheImage('im1').width(), 202)
 
 
 if __name__ == '__main__':

@@ -54,6 +54,10 @@ class TestQgsLineFillSymbol : public QObject
     void cleanup() {} // will be called after every testfunction.
 
     void lineFillSymbol();
+    void lineFillSymbolOffset();
+    void lineFillLargeOffset();
+    void lineFillNegativeAngle();
+
     void dataDefinedSubSymbol();
 
   private:
@@ -79,7 +83,7 @@ void TestQgsLineFillSymbol::initTestCase()
   QgsApplication::showSettings();
 
   //create some objects that will be used in all tests...
-  QString myDataDir( TEST_DATA_DIR ); //defined in CmakeLists.txt
+  QString myDataDir( QStringLiteral( TEST_DATA_DIR ) ); //defined in CmakeLists.txt
   mTestDataDir = myDataDir + '/';
 
   //
@@ -129,28 +133,62 @@ void TestQgsLineFillSymbol::lineFillSymbol()
 {
   mReport += QLatin1String( "<h2>Line fill symbol renderer test</h2>\n" );
 
-  QgsStringMap properties;
+  QVariantMap properties;
   properties.insert( QStringLiteral( "color" ), QStringLiteral( "0,0,0,255" ) );
   properties.insert( QStringLiteral( "width" ), QStringLiteral( "1" ) );
   properties.insert( QStringLiteral( "capstyle" ), QStringLiteral( "flat" ) );
   QgsLineSymbol *lineSymbol = QgsLineSymbol::createSimple( properties );
 
   mLineFill->setSubSymbol( lineSymbol );
-  QVERIFY( imageCheck( "symbol_linefill" ) );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill" ) ) );
+}
+
+void TestQgsLineFillSymbol::lineFillSymbolOffset()
+{
+  mReport += QLatin1String( "<h2>Line fill symbol renderer test</h2>\n" );
+
+  mLineFill->setOffset( 0.5 );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill_posoffset" ) ) );
+
+  mLineFill->setOffset( -0.5 );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill_negoffset" ) ) );
+  mLineFill->setOffset( 0 );
+}
+
+void TestQgsLineFillSymbol::lineFillLargeOffset()
+{
+  // test line fill with large offset compared to line distance
+  mLineFill->setOffset( 8 );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill_large_posoffset" ) ) );
+
+  mLineFill->setOffset( -8 );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill_large_negoffset" ) ) );
+  mLineFill->setOffset( 0 );
+}
+
+void TestQgsLineFillSymbol::lineFillNegativeAngle()
+{
+  mLineFill->setOffset( -8 );
+  mLineFill->setDistance( 2.2 );
+  mLineFill->setLineAngle( -130 );
+  QVERIFY( imageCheck( QStringLiteral( "symbol_linefill_negangle" ) ) );
+  mLineFill->setOffset( 0 );
+  mLineFill->setLineAngle( 45 );
+  mLineFill->setDistance( 5 );
 }
 
 void TestQgsLineFillSymbol::dataDefinedSubSymbol()
 {
   mReport += QLatin1String( "<h2>Line fill symbol data defined sub symbol test</h2>\n" );
 
-  QgsStringMap properties;
+  QVariantMap properties;
   properties.insert( QStringLiteral( "color" ), QStringLiteral( "0,0,0,255" ) );
   properties.insert( QStringLiteral( "width" ), QStringLiteral( "1" ) );
   properties.insert( QStringLiteral( "capstyle" ), QStringLiteral( "flat" ) );
   QgsLineSymbol *lineSymbol = QgsLineSymbol::createSimple( properties );
   lineSymbol->symbolLayer( 0 )->setDataDefinedProperty( QgsSymbolLayer::PropertyStrokeColor, QgsProperty::fromExpression( QStringLiteral( "if(\"Name\" ='Lake','#ff0000','#ff00ff')" ) ) );
   mLineFill->setSubSymbol( lineSymbol );
-  QVERIFY( imageCheck( "datadefined_subsymbol" ) );
+  QVERIFY( imageCheck( QStringLiteral( "datadefined_subsymbol" ) ) );
 }
 
 //

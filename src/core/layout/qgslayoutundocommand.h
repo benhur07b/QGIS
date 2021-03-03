@@ -19,7 +19,7 @@
 #define QGSLAYOUTUNDOCOMMAND_H
 
 #include <QUndoCommand>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QDomDocument>
 
 #include "qgis_core.h"
@@ -28,7 +28,7 @@ class QgsLayout;
 
 /**
  * \ingroup core
- * Base class for commands to undo/redo layout and layout object changes.
+ * \brief Base class for commands to undo/redo layout and layout object changes.
  * \since QGIS 3.0
 */
 class CORE_EXPORT QgsAbstractLayoutUndoCommand: public QUndoCommand
@@ -75,7 +75,7 @@ class CORE_EXPORT QgsAbstractLayoutUndoCommand: public QUndoCommand
     QDomDocument afterState() const { return mAfterState.cloneNode().toDocument(); }
 
     /**
-     * Returns true if both the before and after states are valid and different.
+     * Returns TRUE if both the before and after states are valid and different.
      */
     virtual bool containsChange() const;
 
@@ -122,7 +122,7 @@ class CORE_EXPORT QgsAbstractLayoutUndoCommand: public QUndoCommand
 
 /**
  * \ingroup core
- * Interface for layout objects which support undo/redo commands.
+ * \brief Interface for layout objects which support undo/redo commands.
  * \since QGIS 3.0
  */
 class CORE_EXPORT QgsLayoutUndoObjectInterface

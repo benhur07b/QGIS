@@ -87,7 +87,11 @@ void QgsAbout::init()
       //ignore the line if it starts with a hash....
       if ( !line.isEmpty() && line.at( 0 ) == '#' )
         continue;
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
       QStringList myTokens = line.split( '\t', QString::SkipEmptyParts );
+#else
+      QStringList myTokens = line.split( '\t', Qt::SkipEmptyParts );
+#endif
       lines << myTokens[0];
     }
     file.close();
@@ -143,8 +147,8 @@ void QgsAbout::init()
     QString donorsHTML = ""
                          + tr( "<p>For a list of individuals and institutions who have contributed "
                                "money to fund QGIS development and other project costs see "
-                               "<a href=\"http://qgis.org/en/site/about/sponsorship.html#list-of-donors\">"
-                               "http://qgis.org/en/site/about/sponsorship.html#list-of-donors</a></p>" );
+                               "<a href=\"https://qgis.org/en/site/about/sustaining_members.html#list-of-donors\">"
+                               "https://qgis.org/en/site/about/sustaining_members.html#list-of-donors</a></p>" );
 #if 0
     QString website;
     QTextStream donorsStream( &donorsFile );
@@ -177,7 +181,7 @@ void QgsAbout::init()
     txtDonors->clear();
     txtDonors->document()->setDefaultStyleSheet( QgsApplication::reportStyleSheet() );
     txtDonors->setHtml( donorsHTML );
-    QgsDebugMsg( QString( "donorsHTML:%1" ).arg( donorsHTML.toLatin1().constData() ) );
+    QgsDebugMsg( QStringLiteral( "donorsHTML:%1" ).arg( donorsHTML.toLatin1().constData() ) );
   }
 
   // read the TRANSLATORS file and populate the text widget
@@ -199,7 +203,7 @@ void QgsAbout::init()
       translatorHTML += translatorStream.readLine();
     }
     txtTranslators->setHtml( translatorHTML );
-    QgsDebugMsg( QString( "translatorHTML:%1" ).arg( translatorHTML.toLatin1().constData() ) );
+    QgsDebugMsg( QStringLiteral( "translatorHTML:%1" ).arg( translatorHTML.toLatin1().constData() ) );
   }
   setWhatsNew();
   setLicence();
@@ -230,7 +234,10 @@ void QgsAbout::setWhatsNew()
 {
   txtWhatsNew->clear();
   txtWhatsNew->document()->setDefaultStyleSheet( QgsApplication::reportStyleSheet() );
-  txtWhatsNew->setSource( "file:///" + QgsApplication::pkgDataPath() + "/doc/news.html" );
+  if ( !QFile::exists( QgsApplication::pkgDataPath() + "/doc/NEWS.html" ) )
+    return;
+
+  txtWhatsNew->setSource( QString( "file:///" + QgsApplication::pkgDataPath() + "/doc/NEWS.html" ) );
 }
 
 void QgsAbout::setPluginInfo()
@@ -245,12 +252,12 @@ void QgsAbout::setPluginInfo()
   myString += "<b>" + tr( "Available Qt Database Plugins" ) + "</b><br>";
   myString += QLatin1String( "<ol>\n<li>\n" );
   QStringList myDbDriverList = QSqlDatabase::drivers();
-  myString += myDbDriverList.join( QStringLiteral( "</li>\n<li>" ) );
+  myString += myDbDriverList.join( QLatin1String( "</li>\n<li>" ) );
   myString += QLatin1String( "</li>\n</ol>\n" );
   //qt image plugins
   myString += "<b>" + tr( "Available Qt Image Plugins" ) + "</b><br>";
   myString += tr( "Qt Image Plugin Search Paths <br>" );
-  myString += QApplication::libraryPaths().join( QStringLiteral( "<br>" ) );
+  myString += QApplication::libraryPaths().join( QLatin1String( "<br>" ) );
   myString += QLatin1String( "<ol>\n<li>\n" );
   QList<QByteArray> myImageFormats = QImageReader::supportedImageFormats();
   QList<QByteArray>::const_iterator myIterator = myImageFormats.constBegin();
@@ -270,12 +277,12 @@ void QgsAbout::setPluginInfo()
 
 void QgsAbout::btnQgisUser_clicked()
 {
-  openUrl( QStringLiteral( "http://lists.osgeo.org/mailman/listinfo/qgis-user" ) );
+  openUrl( QStringLiteral( "https://lists.osgeo.org/mailman/listinfo/qgis-user" ) );
 }
 
 void QgsAbout::btnQgisHome_clicked()
 {
-  openUrl( QStringLiteral( "http://qgis.org" ) );
+  openUrl( QStringLiteral( "https://qgis.org" ) );
 }
 
 void QgsAbout::openUrl( const QUrl &url )

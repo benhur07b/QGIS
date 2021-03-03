@@ -41,9 +41,9 @@ class CORE_EXPORT QgsWebView : public QWebView
     {
       QDesktopWidget desktop;
       // Apply zoom factor for HiDPI screens
-      if ( desktop.physicalDpiX() > 96 )
+      if ( desktop.logicalDpiX() > 96 )
       {
-        setZoomFactor( desktop.physicalDpiX() / 96 );
+        setZoomFactor( desktop.logicalDpiX() / 96 );
       }
     }
 };
@@ -68,7 +68,7 @@ class CORE_EXPORT QgsWebView : public QTextBrowser
 /// @cond NOT_STABLE_API
     Q_OBJECT
   public:
-    explicit QgsWebView( QWidget *parent = 0 )
+    explicit QgsWebView( QWidget *parent = nullptr )
       : QTextBrowser( parent )
       , mSettings( new QWebSettings() )
       , mPage( new QWebPage( this ) )

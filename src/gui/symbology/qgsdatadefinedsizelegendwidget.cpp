@@ -28,6 +28,7 @@
 #include "qgssymbollayer.h"
 #include "qgssymbolselectordialog.h"
 #include "qgsvectorlayer.h"
+#include "qgsexpressioncontextutils.h"
 
 
 QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDefinedSizeLegend *ddsLegend, const QgsProperty &ddSize, QgsMarkerSymbol *overrideSymbol, QgsMapCanvas *canvas, QWidget *parent )
@@ -36,7 +37,9 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
   , mMapCanvas( canvas )
 {
   setupUi( this );
-  setPanelTitle( tr( "Data-defined size legend" ) );
+  setPanelTitle( tr( "Data-defined Size Legend" ) );
+
+  mLineSymbolButton->setSymbolType( QgsSymbol::Line );
 
   QgsMarkerSymbol *symbol = nullptr;
 
@@ -56,6 +59,9 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
     else
       cboAlignSymbols->setCurrentIndex( 1 );
 
+    if ( ddsLegend->lineSymbol() )
+      mLineSymbolButton->setSymbol( ddsLegend->lineSymbol()->clone() );
+
     symbol = ddsLegend->symbol() ? ddsLegend->symbol()->clone() : nullptr;  // may be null (undefined)
   }
 
@@ -67,7 +73,7 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
 
   if ( !symbol )
   {
-    symbol = QgsMarkerSymbol::createSimple( QgsStringMap() );
+    symbol = QgsMarkerSymbol::createSimple( QVariantMap() );
   }
   mSourceSymbol.reset( symbol );
 
@@ -84,7 +90,8 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
   if ( ddsLegend )
   {
     groupManualSizeClasses->setChecked( !ddsLegend->classes().isEmpty() );
-    Q_FOREACH ( const QgsDataDefinedSizeLegend::SizeClass &sc, ddsLegend->classes() )
+    const auto constClasses = ddsLegend->classes();
+    for ( const QgsDataDefinedSizeLegend::SizeClass &sc : constClasses )
     {
       QStandardItem *item = new QStandardItem( QString::number( sc.size ) );
       item->setData( sc.size );
@@ -102,7 +109,8 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
   connect( mSizeClassesModel, &QStandardItemModel::dataChanged, this, &QgsDataDefinedSizeLegendWidget::onSizeClassesChanged );
 
   // prepare layer and model to preview legend
-  mPreviewLayer = new QgsVectorLayer( QStringLiteral( "Point?crs=EPSG:4326" ), QStringLiteral( "Preview" ), QStringLiteral( "memory" ) );
+  const QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
+  mPreviewLayer = new QgsVectorLayer( QStringLiteral( "Point?crs=EPSG:4326" ), QStringLiteral( "Preview" ), QStringLiteral( "memory" ), options );
   mPreviewTree = new QgsLayerTree;
   mPreviewLayerNode = mPreviewTree->addLayer( mPreviewLayer );  // node owned by the tree
   mPreviewModel = new QgsLayerTreeModel( mPreviewTree );
@@ -117,6 +125,7 @@ QgsDataDefinedSizeLegendWidget::QgsDataDefinedSizeLegendWidget( const QgsDataDef
   connect( groupManualSizeClasses, &QGroupBox::clicked, this, &QgsPanelWidget::widgetChanged );
   connect( btnChangeSymbol, &QPushButton::clicked, this, &QgsDataDefinedSizeLegendWidget::changeSymbol );
   connect( editTitle, &QLineEdit::textChanged, this, &QgsPanelWidget::widgetChanged );
+  connect( mLineSymbolButton, &QgsSymbolButton::changed, this, &QgsPanelWidget::widgetChanged );
   connect( this, &QgsPanelWidget::widgetChanged, this, &QgsDataDefinedSizeLegendWidget::updatePreview );
   updatePreview();
 }
@@ -154,6 +163,8 @@ QgsDataDefinedSizeLegend *QgsDataDefinedSizeLegendWidget::dataDefinedSizeLegend(
     }
     ddsLegend->setClasses( classes );
   }
+
+  ddsLegend->setLineSymbol( mLineSymbolButton->clonedSymbol< QgsLineSymbol >() );
   return ddsLegend;
 }
 
@@ -184,7 +195,11 @@ void QgsDataDefinedSizeLegendWidget::changeSymbol()
   context.setExpressionContext( &ec );
 
   QString crsAuthId = mMapCanvas ? mMapCanvas->mapSettings().destinationCrs().authid() : QString();
-  std::unique_ptr<QgsVectorLayer> layer( new QgsVectorLayer( "Point?crs=" + crsAuthId, QStringLiteral( "tmp" ), QStringLiteral( "memory" ) ) );
+  QgsVectorLayer::LayerOptions options { QgsProject::instance()->transformContext() };
+  std::unique_ptr<QgsVectorLayer> layer = std::make_unique<QgsVectorLayer>( QStringLiteral( "Point?crs=%1" ).arg( crsAuthId ),
+                                          QStringLiteral( "tmp" ),
+                                          QStringLiteral( "memory" ),
+                                          options ) ;
 
   QgsSymbolSelectorDialog d( newSymbol.get(), QgsStyle::defaultStyle(), layer.get(), this );
   d.setContext( context );

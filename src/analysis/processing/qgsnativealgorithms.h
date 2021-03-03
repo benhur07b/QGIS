@@ -19,14 +19,14 @@
 #define QGSNATIVEALGORITHMS_H
 
 #include "qgis_analysis.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingprovider.h"
 
 /**
  * \ingroup analysis
  * \class QgsNativeAlgorithms
- * \since QGIS 3.0
  * \brief Native c++ processing algorithm provider.
+ * \since QGIS 3.0
  */
 class ANALYSIS_EXPORT QgsNativeAlgorithms: public QgsProcessingProvider
 {
@@ -42,6 +42,7 @@ class ANALYSIS_EXPORT QgsNativeAlgorithms: public QgsProcessingProvider
     QIcon icon() const override;
     QString svgIconPath() const override;
     QString id() const override;
+    QString helpId() const override;
     QString name() const override;
     bool supportsNonFileBasedOutput() const override;
 

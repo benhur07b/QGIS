@@ -31,8 +31,9 @@
  * preference, from top to bottom.
  *
  * URI construction takes in account following information:
- *  - QGIS version
- *  - language of the QGIS UI
+ *
+ * - QGIS version
+ * - language of the QGIS UI
  *
  * If no help found, default error page with information how to setup
  * help system will be shown.
@@ -63,7 +64,7 @@ class GUI_EXPORT QgsHelp
 
     /**
      * Check if given URL accessible by issuing HTTP HEAD request.
-     * Returns true if URL accessible, false otherwise.
+     * Returns TRUE if URL accessible, FALSE otherwise.
      * \param url URL to check
      * \since QGIS 3.0
      */

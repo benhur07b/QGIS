@@ -18,7 +18,7 @@
 #define QGSAUTHAUTHORITIESEDITOR_H
 
 #include <QWidget>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QSslCertificate>
 
 #include "ui_qgsauthauthoritieseditor.h"
@@ -32,7 +32,7 @@ class QAction;
 
 /**
  * \ingroup gui
- * Widget for viewing and editing authentication identities database
+ * \brief Widget for viewing and editing authentication identities database
  */
 class GUI_EXPORT QgsAuthAuthoritiesEditor : public QWidget, private Ui::QgsAuthAuthoritiesEditor
 {
@@ -44,7 +44,7 @@ class GUI_EXPORT QgsAuthAuthoritiesEditor : public QWidget, private Ui::QgsAuthA
      * Widget for viewing and editing certificate authorities directly in database
      * \param parent Parent widget
      */
-    explicit QgsAuthAuthoritiesEditor( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsAuthAuthoritiesEditor( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
   private slots:
     void populateCaCertsView();

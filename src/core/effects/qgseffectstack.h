@@ -18,7 +18,7 @@
 #define QGSEFFECTSTACK_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgspainteffect.h"
 
 /**
@@ -41,7 +41,7 @@
  * \since QGIS 2.9
  */
 
-class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
+class CORE_EXPORT QgsEffectStack : public QgsPaintEffect SIP_NODEFAULTCTORS
 {
 
   public:
@@ -52,7 +52,7 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
      * \param map unused encoded properties string map
      * \returns new QgsEffectStack
      */
-    static QgsPaintEffect *create( const QgsStringMap &map ) SIP_FACTORY;
+    static QgsPaintEffect *create( const QVariantMap &map ) SIP_FACTORY;
 
     /**
      * Constructor for empty QgsEffectStack.
@@ -62,6 +62,11 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
     QgsEffectStack( const QgsEffectStack &other );
 
     /**
+     * Move constructor.
+     */
+    QgsEffectStack( QgsEffectStack &&other ) SIP_SKIP;
+
+    /**
      * Creates a new QgsEffectStack effect from a single initial effect.
      * \param effect initial effect to add to the stack. The effect will
      * be cloned, so ownership is not transferred to the stack.
@@ -69,22 +74,22 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
      */
     explicit QgsEffectStack( const QgsPaintEffect &effect );
 
-    virtual ~QgsEffectStack();
+    ~QgsEffectStack() override;
 
-    virtual QString type() const override { return QStringLiteral( "effectStack" ); }
-    virtual QgsEffectStack *clone() const override SIP_FACTORY;
-    virtual bool saveProperties( QDomDocument &doc, QDomElement &element ) const override;
-    virtual bool readProperties( const QDomElement &element ) override;
+    QString type() const override { return QStringLiteral( "effectStack" ); }
+    QgsEffectStack *clone() const override SIP_FACTORY;
+    bool saveProperties( QDomDocument &doc, QDomElement &element ) const override;
+    bool readProperties( const QDomElement &element ) override;
 
     /**
      * Unused for QgsEffectStack, will always return an empty string map
      */
-    virtual QgsStringMap properties() const override;
+    QVariantMap properties() const override;
 
     /**
      * Unused for QgsEffectStack, props parameter will be ignored
      */
-    virtual void readProperties( const QgsStringMap &props ) override;
+    void readProperties( const QVariantMap &props ) override;
 
     /**
      * Appends an effect to the end of the stack.
@@ -101,7 +106,7 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
      * transferred to the stack object.
      * \see appendEffect
      */
-    bool insertEffect( const int index, QgsPaintEffect *effect SIP_TRANSFER );
+    bool insertEffect( int index, QgsPaintEffect *effect SIP_TRANSFER );
 
     /**
      * Replaces the effect at a specified position within the stack.
@@ -109,13 +114,13 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
      * \param effect QgsPaintEffect to replace with. Ownership of the effect will be
      * transferred to the stack object.
      */
-    bool changeEffect( const int index, QgsPaintEffect *effect SIP_TRANSFER );
+    bool changeEffect( int index, QgsPaintEffect *effect SIP_TRANSFER );
 
     /**
      * Removes an effect from the stack and returns a pointer to it.
      * \param index position of effect to take
      */
-    QgsPaintEffect *takeEffect( const int index SIP_TRANSFERBACK );
+    QgsPaintEffect *takeEffect( int index SIP_TRANSFERBACK );
 
     /**
      * Returns a pointer to the list of effects currently contained by
@@ -139,9 +144,12 @@ class CORE_EXPORT QgsEffectStack : public QgsPaintEffect
 
     QgsEffectStack &operator=( const QgsEffectStack &rhs );
 
+    QgsEffectStack &operator=( QgsEffectStack &&other ) SIP_SKIP;
+
+
   protected:
 
-    virtual void draw( QgsRenderContext &context ) override;
+    void draw( QgsRenderContext &context ) override;
 
   private:
 

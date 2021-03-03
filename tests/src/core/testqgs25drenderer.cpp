@@ -30,9 +30,10 @@
 #include <qgsproject.h>
 #include <qgssymbol.h>
 #include <qgs25drenderer.h>
-#include "qgscomposition.h"
-#include "qgscomposermap.h"
+#include "qgslayout.h"
+#include "qgslayoutitemmap.h"
 #include "qgsmultirenderchecker.h"
+#include "qgsexpressioncontextutils.h"
 
 /**
  * \ingroup UnitTests
@@ -51,7 +52,7 @@ class TestQgs25DRenderer : public QObject
     void cleanup() {} // will be called after every testfunction.
 
     void render();
-    void renderComposition();
+    void renderLayout();
 
   private:
     bool imageCheck( const QString &type );
@@ -117,26 +118,27 @@ void TestQgs25DRenderer::render()
   Qgs25DRenderer *renderer = new Qgs25DRenderer();
   renderer->setShadowEnabled( false );
   renderer->setWallShadingEnabled( false );
-  renderer->setRoofColor( QColor( "#fdbf6f" ) );
+  renderer->setRoofColor( QColor( 253, 191, 111 ) );
   mpPolysLayer->setRenderer( renderer );
 
   QVERIFY( imageCheck( "25d_render" ) );
 }
 
-void TestQgs25DRenderer::renderComposition()
+void TestQgs25DRenderer::renderLayout()
 {
-  QgsComposition *composition = new QgsComposition( QgsProject::instance() );
-  composition->setPaperSize( 297, 210 ); //A4 landscape
-  QgsComposerMap *map = new QgsComposerMap( composition, 20, 20, 200, 100 );
+  QgsLayout l( QgsProject::instance() );
+  l.initializeDefaults();
+  QgsLayoutItemMap *map = new QgsLayoutItemMap( &l );
+  map->attemptSetSceneRect( QRectF( 20, 20, 200, 100 ) );
   map->setFrameEnabled( true );
   map->setLayers( QList< QgsMapLayer * >() << mpPolysLayer );
-  composition->addComposerMap( map );
+  l.addLayoutItem( map );
 
-  map->setNewExtent( mpPolysLayer->extent() );
-  QgsCompositionChecker checker( QStringLiteral( "25d_composer" ), composition );
+  map->setExtent( mpPolysLayer->extent() );
+  QgsLayoutChecker checker( QStringLiteral( "25d_composer" ), &l );
   checker.setControlPathPrefix( QStringLiteral( "25d_renderer" ) );
 
-  QVERIFY( checker.testComposition( mReport, 0, 100 ) );
+  QVERIFY( checker.testLayout( mReport, 0, 100 ) );
 }
 
 bool TestQgs25DRenderer::imageCheck( const QString &testType )

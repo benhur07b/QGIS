@@ -27,20 +27,27 @@
 // version without notice, or even be removed.
 //
 
+#define SIP_NO_FILE
+
 #include <QtConcurrent/QtConcurrentRun>
 #include <QFutureWatcher>
 #include <QElapsedTimer>
+#include <QMutex>
 
+#include "qgschunknode_p.h"
+#include "qgscoordinatetransformcontext.h"
 #include "qgsrectangle.h"
 #include "qgsterraintileloader_p.h"
 #include "qgstilingscheme.h"
 
 class QgsRasterDataProvider;
 class QgsRasterLayer;
+class QgsCoordinateTransformContext;
+class QgsTerrainGenerator;
 
 /**
  * \ingroup 3d
- * Chunk loader for DEM terrain tiles.
+ * \brief Chunk loader for DEM terrain tiles.
  * \since QGIS 3.0
  */
 class QgsDemTerrainTileLoader : public QgsTerrainTileLoader
@@ -48,10 +55,9 @@ class QgsDemTerrainTileLoader : public QgsTerrainTileLoader
     Q_OBJECT
   public:
     //! Constructs loader for the given chunk node
-    QgsDemTerrainTileLoader( QgsTerrainEntity *terrain, QgsChunkNode *node );
-    ~QgsDemTerrainTileLoader();
+    QgsDemTerrainTileLoader( QgsTerrainEntity *terrain, QgsChunkNode *node, QgsTerrainGenerator *terrainGenerator );
 
-    virtual Qt3DCore::QEntity *createEntity( Qt3DCore::QEntity *parent );
+    Qt3DCore::QEntity *createEntity( Qt3DCore::QEntity *parent ) override;
 
   private slots:
     void onHeightMapReady( int jobId, const QByteArray &heightMap );
@@ -65,10 +71,11 @@ class QgsDemTerrainTileLoader : public QgsTerrainTileLoader
 };
 
 
+class QgsTerrainDownloader;
 
 /**
  * \ingroup 3d
- * Utility class to asynchronously create heightmaps from DEM raster for given tiles of terrain.
+ * \brief Utility class to asynchronously create heightmaps from DEM raster for given tiles of terrain.
  * \since QGIS 3.0
  */
 class QgsDemHeightMapGenerator : public QObject
@@ -80,14 +87,14 @@ class QgsDemHeightMapGenerator : public QObject
      * Constructs height map generator based on a raster layer with elevation model,
      * terrain's tiling scheme and height map resolution (number of height values on each side of tile)
      */
-    QgsDemHeightMapGenerator( QgsRasterLayer *dtm, const QgsTilingScheme &tilingScheme, int resolution );
-    ~QgsDemHeightMapGenerator();
+    QgsDemHeightMapGenerator( QgsRasterLayer *dtm, const QgsTilingScheme &tilingScheme, int resolution, const QgsCoordinateTransformContext &transformContext );
+    ~QgsDemHeightMapGenerator() override;
 
     //! asynchronous terrain read for a tile (array of floats)
-    int render( int x, int y, int z );
+    int render( const QgsChunkNodeId &nodeId );
 
-    //! synchronous terrain read for a tile
-    QByteArray renderSynchronously( int x, int y, int z );
+    //! Waits for the tile to finish rendering
+    void waitForFinished();
 
     //! Returns resolution(number of height values on each side of tile)
     int resolution() const { return mResolution; }
@@ -115,19 +122,25 @@ class QgsDemHeightMapGenerator : public QObject
 
     int mLastJobId;
 
+    std::unique_ptr<QgsTerrainDownloader> mDownloader;
+
     struct JobData
     {
       int jobId;
+      QgsChunkNodeId tileId;
       QgsRectangle extent;
       QFuture<QByteArray> future;
-      QFutureWatcher<QByteArray> *fw;
       QElapsedTimer timer;
     };
 
     QHash<QFutureWatcher<QByteArray>*, JobData> mJobs;
 
+    void lazyLoadDtmCoarseData( int res, const QgsRectangle &rect );
+    mutable QMutex mLazyLoadDtmCoarseDataMutex;
     //! used for height queries
     QByteArray mDtmCoarseData;
+
+    QgsCoordinateTransformContext mTransformContext;
 };
 
 /// @endcond

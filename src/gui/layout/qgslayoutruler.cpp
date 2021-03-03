@@ -17,6 +17,7 @@
 #include "qgis.h"
 #include "qgslayoutview.h"
 #include "qgslogger.h"
+#include "qgslayoutpagecollection.h"
 #include <QDragEnterEvent>
 #include <QGraphicsLineItem>
 #include <QPainter>
@@ -42,7 +43,7 @@ QgsLayoutRuler::QgsLayoutRuler( QWidget *parent, Qt::Orientation orientation )
   //calculate ruler sizes and marker separations
 
   //minimum gap required between major ticks is 3 digits * 250%, based on appearance
-  mScaleMinPixelsWidth = mRulerFontMetrics->width( QStringLiteral( "000" ) ) * 2.5;
+  mScaleMinPixelsWidth = mRulerFontMetrics->boundingRect( QStringLiteral( "000" ) ).width() * 2.5;
   //minimum ruler height is twice the font height in pixels
   mRulerMinSize = mRulerFontMetrics->height() * 1.5;
 
@@ -55,7 +56,7 @@ QgsLayoutRuler::QgsLayoutRuler( QWidget *parent, Qt::Orientation orientation )
   mTextBaseline = mRulerMinSize / 1.667;
   mMinSpacingVerticalLabels = mRulerMinSize / 5;
 
-  double guideMarkerSize = mRulerFontMetrics->width( QStringLiteral( "*" ) );
+  double guideMarkerSize = mRulerFontMetrics->horizontalAdvance( '*' );
   mDragGuideTolerance = guideMarkerSize;
   switch ( mOrientation )
   {
@@ -78,7 +79,7 @@ QSize QgsLayoutRuler::minimumSizeHint() const
 
 void QgsLayoutRuler::paintEvent( QPaintEvent *event )
 {
-  Q_UNUSED( event );
+  Q_UNUSED( event )
   if ( !mView || !mView->currentLayout() )
   {
     return;
@@ -186,7 +187,7 @@ void QgsLayoutRuler::paintEvent( QPaintEvent *event )
           p.drawLine( 0, pixelCoord, mRulerMinSize, pixelCoord );
           //calc size of label
           QString label = QString::number( beforePageCoord );
-          int labelSize = mRulerFontMetrics->width( label );
+          int labelSize = mRulerFontMetrics->boundingRect( label ).width();
 
           //draw label only if it fits in before start of next page
           if ( pixelCoord + labelSize + 8 < firstPageY )
@@ -234,7 +235,7 @@ void QgsLayoutRuler::paintEvent( QPaintEvent *event )
           p.drawLine( 0, pixelCoord, mRulerMinSize, pixelCoord );
           //calc size of label
           QString label = QString::number( pageCoord );
-          int labelSize = mRulerFontMetrics->width( label );
+          int labelSize = mRulerFontMetrics->boundingRect( label ).width();
 
           //draw label only if it fits in before start of next page
           if ( ( pixelCoord + labelSize + 8 < nextPageStartPixel )
@@ -283,10 +284,11 @@ void QgsLayoutRuler::drawGuideMarkers( QPainter *p, QgsLayout *layout )
 {
   QList< QgsLayoutItemPage * > visiblePages = mView->visiblePages();
   QList< QgsLayoutGuide * > guides = layout->guides().guides( mOrientation == Qt::Horizontal ? Qt::Vertical : Qt::Horizontal );
-  p->save();
+  QgsScopedQPainterState painterState( p );
   p->setRenderHint( QPainter::Antialiasing, true );
   p->setPen( Qt::NoPen );
-  Q_FOREACH ( QgsLayoutGuide *guide, guides )
+  const auto constGuides = guides;
+  for ( QgsLayoutGuide *guide : constGuides )
   {
     if ( visiblePages.contains( guide->page() ) )
     {
@@ -312,7 +314,6 @@ void QgsLayoutRuler::drawGuideMarkers( QPainter *p, QgsLayout *layout )
       drawGuideAtPos( p, convertLayoutPointToLocal( point ) );
     }
   }
-  p->restore();
 }
 
 void QgsLayoutRuler::drawGuideAtPos( QPainter *painter, QPoint pos )
@@ -338,7 +339,11 @@ void QgsLayoutRuler::drawGuideAtPos( QPainter *painter, QPoint pos )
 
 void QgsLayoutRuler::createTemporaryGuideItem()
 {
-  mGuideItem.reset( new QGraphicsLineItem() );
+  if ( !mView->currentLayout() )
+    return;
+
+  delete mGuideItem;
+  mGuideItem = new QGraphicsLineItem();
 
   mGuideItem->setZValue( QgsLayout::ZGuide );
   QPen linePen( Qt::DotLine );
@@ -346,7 +351,7 @@ void QgsLayoutRuler::createTemporaryGuideItem()
   linePen.setWidthF( 0 );
   mGuideItem->setPen( linePen );
 
-  mView->currentLayout()->addItem( mGuideItem.get() );
+  mView->currentLayout()->addItem( mGuideItem );
 }
 
 QPointF QgsLayoutRuler::convertLocalPointToLayout( QPoint localPoint ) const
@@ -363,12 +368,16 @@ QPoint QgsLayoutRuler::convertLayoutPointToLocal( QPointF layoutPoint ) const
 
 QgsLayoutGuide *QgsLayoutRuler::guideAtPoint( QPoint localPoint ) const
 {
+  if ( !mView->currentLayout() )
+    return nullptr;
+
   QPointF layoutPoint = convertLocalPointToLayout( localPoint );
   QList< QgsLayoutItemPage * > visiblePages = mView->visiblePages();
   QList< QgsLayoutGuide * > guides = mView->currentLayout()->guides().guides( mOrientation == Qt::Horizontal ? Qt::Vertical : Qt::Horizontal );
   QgsLayoutGuide *closestGuide = nullptr;
-  double minDelta = DBL_MAX;
-  Q_FOREACH ( QgsLayoutGuide *guide, guides )
+  double minDelta = std::numeric_limits<double>::max();
+  const auto constGuides = guides;
+  for ( QgsLayoutGuide *guide : constGuides )
   {
     if ( visiblePages.contains( guide->page() ) )
     {
@@ -403,11 +412,10 @@ QgsLayoutGuide *QgsLayoutRuler::guideAtPoint( QPoint localPoint ) const
 
 void QgsLayoutRuler::drawRotatedText( QPainter *painter, QPointF pos, const QString &text )
 {
-  painter->save();
+  QgsScopedQPainterState painterState( painter );
   painter->translate( pos.x(), pos.y() );
   painter->rotate( 270 );
   painter->drawText( 0, 0, text );
-  painter->restore();
 }
 
 void QgsLayoutRuler::drawSmallDivisions( QPainter *painter, double startPos, int numDivisions, double rulerScale, double maxPos )
@@ -574,6 +582,9 @@ void QgsLayoutRuler::mouseMoveEvent( QMouseEvent *event )
   mMarkerPos = event->pos();
   update();
 
+  if ( !mView->currentLayout() )
+    return;
+
   QPointF displayPos;
   if ( mCreatingGuide || mDraggingGuide )
   {
@@ -673,6 +684,9 @@ void QgsLayoutRuler::mouseMoveEvent( QMouseEvent *event )
 
 void QgsLayoutRuler::mousePressEvent( QMouseEvent *event )
 {
+  if ( !mView->currentLayout() )
+    return;
+
   if ( event->button() == Qt::LeftButton )
   {
     mDraggingGuide = guideAtPoint( event->pos() );
@@ -701,6 +715,9 @@ void QgsLayoutRuler::mousePressEvent( QMouseEvent *event )
 
 void QgsLayoutRuler::mouseReleaseEvent( QMouseEvent *event )
 {
+  if ( !mView->currentLayout() )
+    return;
+
   if ( event->button() == Qt::LeftButton )
   {
     if ( mDraggingGuide )
@@ -735,7 +752,8 @@ void QgsLayoutRuler::mouseReleaseEvent( QMouseEvent *event )
     {
       mCreatingGuide = false;
       QApplication::restoreOverrideCursor();
-      mGuideItem.reset();
+      delete mGuideItem;
+      mGuideItem = nullptr;
 
       // check that cursor left the ruler
       switch ( mOrientation )

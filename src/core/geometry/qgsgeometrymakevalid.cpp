@@ -348,7 +348,7 @@ static bool lwcollection_make_geos_friendly( QgsGeometryCollection *g );
 // Ensure the geometry is "structurally" valid (enough for GEOS to accept it)
 static bool lwgeom_make_geos_friendly( QgsAbstractGeometry *geom )
 {
-  QgsDebugMsg( QString( "lwgeom_make_geos_friendly enter (type %1)" ).arg( geom->wkbType() ) );
+  QgsDebugMsgLevel( QStringLiteral( "lwgeom_make_geos_friendly enter (type %1)" ).arg( geom->wkbType() ), 3 );
   switch ( QgsWkbTypes::flatType( geom->wkbType() ) )
   {
     case QgsWkbTypes::Point:
@@ -374,7 +374,7 @@ static bool lwgeom_make_geos_friendly( QgsAbstractGeometry *geom )
       break;
 
     default:
-      QgsDebugMsg( QString( "lwgeom_make_geos_friendly: unsupported input geometry type: %1" ).arg( geom->wkbType() ) );
+      QgsDebugMsg( QStringLiteral( "lwgeom_make_geos_friendly: unsupported input geometry type: %1" ).arg( geom->wkbType() ) );
       break;
   }
   return false;
@@ -388,6 +388,7 @@ static bool ring_make_geos_friendly( QgsCurve *ring )
 
   // earlier we allowed in only geometries with straight segments
   QgsLineString *linestring = qgsgeometry_cast<QgsLineString *>( ring );
+  Q_ASSERT_X( linestring, "ring_make_geos_friendly", "ring was not a linestring" );
 
   // close the ring if not already closed (2d only)
 
@@ -456,13 +457,15 @@ static GEOSGeometry *LWGEOM_GEOS_nodeLines( const GEOSGeometry *lines )
   if ( ! point )
     return nullptr;
 
-  GEOSGeometry *noded = GEOSUnion_r( handle, lines, point );
-  if ( !noded )
+  GEOSGeometry *noded = nullptr;
+  try
   {
-    GEOSGeom_destroy_r( handle, point );
-    return nullptr;
+    noded = GEOSUnion_r( handle, lines, point );
   }
-
+  catch ( GEOSException & )
+  {
+    // no need to do anything here - we'll return nullptr anyway
+  }
   GEOSGeom_destroy_r( handle, point );
   return noded;
 }
@@ -582,7 +585,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValidPolygon( const GEOSGeometry *gin, QStr
 
     if ( GEOSisEmpty_r( handle, new_area ) )
     {
-      // no more rings can be build with thes edges
+      // no more rings can be build with the edges
       GEOSGeom_destroy_r( handle, new_area );
       break;
     }
@@ -704,7 +707,7 @@ Q_NOWARN_UNREACHABLE_PUSH
 
 static GEOSGeometry *LWGEOM_GEOS_makeValidLine( const GEOSGeometry *gin, QString &errorMessage )
 {
-  Q_UNUSED( errorMessage );
+  Q_UNUSED( errorMessage )
   return LWGEOM_GEOS_nodeLines( gin );
 }
 
@@ -715,7 +718,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValidMultiLine( const GEOSGeometry *gin, QS
   int ngeoms = GEOSGetNumGeometries_r( handle, gin );
   uint32_t nlines_alloc = ngeoms;
   QVector<GEOSGeometry *> lines;
-  QVector<GEOSGeometry *> points( ngeoms );
+  QVector<GEOSGeometry *> points;
   lines.reserve( nlines_alloc );
   points.reserve( ngeoms );
 
@@ -755,7 +758,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValidMultiLine( const GEOSGeometry *gin, QS
   }
 
   GEOSGeometry *mpoint_out = nullptr;
-  if ( points.count() )
+  if ( !points.isEmpty() )
   {
     if ( points.count() > 1 )
     {
@@ -768,7 +771,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValidMultiLine( const GEOSGeometry *gin, QS
   }
 
   GEOSGeometry *mline_out = nullptr;
-  if ( lines.count() )
+  if ( !lines.isEmpty() )
   {
     if ( lines.count() > 1 )
     {
@@ -812,7 +815,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValidCollection( const GEOSGeometry *gin, Q
   int nvgeoms = GEOSGetNumGeometries_r( handle, gin );
   if ( nvgeoms == -1 )
   {
-    errorMessage = QStringLiteral( "GEOSGetNumGeometries: %1" ).arg( QStringLiteral( "?" ) );
+    errorMessage = QStringLiteral( "GEOSGetNumGeometries: %1" ).arg( QLatin1String( "?" ) );
     return nullptr;
   }
 
@@ -874,7 +877,7 @@ static GEOSGeometry *LWGEOM_GEOS_makeValid( const GEOSGeometry *gin, QString &er
     case GEOS_MULTIPOINT:
     case GEOS_POINT:
       // points are always valid, but we might have invalid ordinate values
-      QgsDebugMsg( "PUNTUAL geometry resulted invalid to GEOS -- dunno how to clean that up" );
+      QgsDebugMsg( QStringLiteral( "PUNTUAL geometry resulted invalid to GEOS -- dunno how to clean that up" ) );
       return nullptr;
 
     case GEOS_LINESTRING:
@@ -908,12 +911,12 @@ std::unique_ptr< QgsAbstractGeometry > _qgis_lwgeom_make_valid( const QgsAbstrac
   geos::unique_ptr geosgeom = QgsGeos::asGeos( lwgeom_in );
   if ( !geosgeom )
   {
-    QgsDebugMsg( "Original geom can't be converted to GEOS - will try cleaning that up first" );
+    QgsDebugMsgLevel( QStringLiteral( "Original geom can't be converted to GEOS - will try cleaning that up first" ), 3 );
 
     std::unique_ptr<QgsAbstractGeometry> lwgeom_in_clone( lwgeom_in->clone() );
     if ( !lwgeom_make_geos_friendly( lwgeom_in_clone.get() ) )
     {
-      QgsDebugMsg( "Could not make a valid geometry out of input" );
+      QgsDebugMsg( QStringLiteral( "Could not make a valid geometry out of input" ) );
     }
 
     // try again as we did cleanup now
@@ -928,7 +931,7 @@ std::unique_ptr< QgsAbstractGeometry > _qgis_lwgeom_make_valid( const QgsAbstrac
   }
   else
   {
-    QgsDebugMsgLevel( "original geom converted to GEOS", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "original geom converted to GEOS" ), 4 );
   }
 
   GEOSGeometry *geosout = LWGEOM_GEOS_makeValid( geosgeom.get(), errorMessage );

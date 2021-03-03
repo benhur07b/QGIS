@@ -20,7 +20,14 @@
 #include "qgsziputils.h"
 #include "qgsmessagelog.h"
 #include "qgsauxiliarystorage.h"
-#include <iostream>
+
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
+#include <QStandardPaths>
+#include <QUuid>
 
 QgsArchive::QgsArchive()
   : mDir( new QTemporaryDir() )
@@ -29,14 +36,17 @@ QgsArchive::QgsArchive()
 
 QgsArchive::QgsArchive( const QgsArchive &other )
   : mFiles( other.mFiles )
-  ,  mDir( new QTemporaryDir() )
+  , mDir( new QTemporaryDir() )
 {
 }
 
 QgsArchive &QgsArchive::operator=( const QgsArchive &other )
 {
   if ( this != &other )
+  {
     mFiles = other.mFiles;
+    mDir.reset( new QTemporaryDir() );
+  }
 
   return *this;
 }
@@ -54,10 +64,9 @@ void QgsArchive::clear()
 
 bool QgsArchive::zip( const QString &filename )
 {
-  // create a temporary path
-  QTemporaryFile tmpFile;
-  tmpFile.open();
-  tmpFile.close();
+  QString tempPath = QStandardPaths::standardLocations( QStandardPaths::TempLocation ).at( 0 );
+  QString uuid = QUuid::createUuid().toString();
+  QFile tmpFile( tempPath + QDir::separator() + uuid );
 
   // zip content
   if ( ! QgsZipUtils::zip( tmpFile.fileName(), mFiles ) )
@@ -71,6 +80,13 @@ bool QgsArchive::zip( const QString &filename )
   if ( QFile::exists( filename ) )
     QFile::remove( filename );
 
+#ifdef Q_OS_WIN
+  // Clear temporary flag (see GH #32118)
+  DWORD dwAttrs;
+  dwAttrs = GetFileAttributes( tmpFile.fileName().toLocal8Bit( ).data( ) );
+  SetFileAttributes( tmpFile.fileName().toLocal8Bit( ).data( ), dwAttrs & ~ FILE_ATTRIBUTE_TEMPORARY );
+#endif // Q_OS_WIN
+
   // save zip archive
   if ( ! tmpFile.rename( filename ) )
   {
@@ -78,9 +94,6 @@ bool QgsArchive::zip( const QString &filename )
     QgsMessageLog::logMessage( err, QStringLiteral( "QgsArchive" ) );
     return false;
   }
-
-  // keep the zip filename
-  tmpFile.setAutoRemove( false );
 
   return true;
 }
@@ -115,7 +128,8 @@ QStringList QgsArchive::files() const
 
 QString QgsProjectArchive::projectFile() const
 {
-  Q_FOREACH ( const QString &file, files() )
+  const auto constFiles = files();
+  for ( const QString &file : constFiles )
   {
     QFileInfo fileInfo( file );
     if ( fileInfo.suffix().compare( QLatin1String( "qgs" ), Qt::CaseInsensitive ) == 0 )
@@ -142,7 +156,8 @@ QString QgsProjectArchive::auxiliaryStorageFile() const
 {
   const QString extension = QgsAuxiliaryStorage::extension();
 
-  for ( const QString &file : files() )
+  const QStringList fileList = files();
+  for ( const QString &file : fileList )
   {
     const QFileInfo fileInfo( file );
     if ( fileInfo.suffix().compare( extension, Qt::CaseInsensitive ) == 0 )

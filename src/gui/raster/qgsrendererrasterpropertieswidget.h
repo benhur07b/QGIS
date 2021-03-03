@@ -21,6 +21,7 @@
 #include "ui_qgsrendererrasterpropswidgetbase.h"
 
 #include "qgsmaplayerconfigwidget.h"
+#include "qgsresamplingutils.h"
 #include "qgis_gui.h"
 
 
@@ -55,7 +56,7 @@ class GUI_EXPORT QgsRendererRasterPropertiesWidget : public QgsMapLayerConfigWid
     void setMapCanvas( QgsMapCanvas *canvas );
 
     /**
-     * Return the active render widget. Can be null.
+     * Returns the active render widget. Can be NULLPTR.
      */
     QgsRasterRendererWidget *currentRenderWidget() { return mRendererWidget; }
 
@@ -64,7 +65,7 @@ class GUI_EXPORT QgsRendererRasterPropertiesWidget : public QgsMapLayerConfigWid
     void rendererChanged();
 
     //! Apply the changes from the dialog to the layer.
-    void apply();
+    void apply() override;
 
     /**
      * \brief Sync the widget to the given layer.
@@ -84,11 +85,25 @@ class GUI_EXPORT QgsRendererRasterPropertiesWidget : public QgsMapLayerConfigWid
 
     void refreshAfterStyleChanged();
 
+    /**
+     * updates gamma spinbox on slider changes
+     * \since QGIS 3.16
+     */
+    void updateGammaSpinBox( int value );
+
+    /**
+     * updates gamma slider on spinbox changes
+     * \since QGIS 3.16
+     */
+    void updateGammaSlider( double value );
+
   private:
     void setRendererWidget( const QString &rendererName );
 
     QgsRasterLayer *mRasterLayer = nullptr;
     QgsRasterRendererWidget *mRendererWidget = nullptr;
+
+    QgsResamplingUtils mResamplingUtils;
 };
 
 #endif // QGSRENDERERRASTERPROPERTIESDIALOG_H

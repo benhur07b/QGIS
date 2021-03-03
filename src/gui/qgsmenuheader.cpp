@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsmenuheader.h"
+#include "qgis.h"
 #include <QPainter>
 #include <QApplication>
 
@@ -23,9 +24,9 @@ QgsMenuHeader::QgsMenuHeader( const QString &text, QWidget *parent )
   : QWidget( parent )
   , mText( text )
 {
-  int textMinWidth = fontMetrics().width( mText );
+  int textMinWidth = fontMetrics().boundingRect( mText ).width();
   mTextHeight = fontMetrics().height();
-  mLabelMargin = Qgis::UI_SCALE_FACTOR * fontMetrics().width( QStringLiteral( "." ) );
+  mLabelMargin = Qgis::UI_SCALE_FACTOR * fontMetrics().horizontalAdvance( '.' );
   mMinWidth = 2 * mLabelMargin + textMinWidth;
   setSizePolicy( QSizePolicy::Minimum, QSizePolicy::Fixed );
   updateGeometry();

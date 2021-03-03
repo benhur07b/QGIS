@@ -26,29 +26,35 @@
 #include "qgsabstractdatasourcewidget.h"
 #include "qgsmapcanvas.h"
 #include "qgsmessagelog.h"
+#include "qgsmessagebar.h"
 #include "qgsgui.h"
+#include "qgsbrowserguimodel.h"
 
-QgsDataSourceManagerDialog::QgsDataSourceManagerDialog( QgsBrowserModel *browserModel, QWidget *parent, QgsMapCanvas *canvas, Qt::WindowFlags fl ) :
-  QgsOptionsDialogBase( QStringLiteral( "Data Source Manager" ), parent, fl ),
-  ui( new Ui::QgsDataSourceManagerDialog ),
-  mPreviousRow( -1 ),
-  mMapCanvas( canvas )
+QgsDataSourceManagerDialog::QgsDataSourceManagerDialog( QgsBrowserGuiModel *browserModel, QWidget *parent, QgsMapCanvas *canvas, Qt::WindowFlags fl )
+  : QgsOptionsDialogBase( QStringLiteral( "Data Source Manager" ), parent, fl )
+  , ui( new Ui::QgsDataSourceManagerDialog )
+  , mPreviousRow( -1 )
+  , mMapCanvas( canvas )
+  , mBrowserModel( browserModel )
 {
-
   ui->setupUi( this );
   ui->verticalLayout_2->setSpacing( 6 );
-  ui->verticalLayout_2->setMargin( 0 );
   ui->verticalLayout_2->setContentsMargins( 0, 0, 0, 0 );
+
+  mMessageBar = new QgsMessageBar( this );
+  mMessageBar->setSizePolicy( QSizePolicy::MinimumExpanding, QSizePolicy::Fixed );
+  static_cast<QVBoxLayout *>( layout() )->insertWidget( 0, mMessageBar );
+
   // QgsOptionsDialogBase handles saving/restoring of geometry, splitter and current tab states,
   // switching vertical tabs between icon/text to icon-only modes (splitter collapsed to left),
   // and connecting QDialogButtonBox's accepted/rejected signals to dialog's accept/reject slots
-  initOptionsBase( true );
+  initOptionsBase( false );
 
   // Bind list index to the stacked dialogs
   connect( ui->mOptionsListWidget, &QListWidget::currentRowChanged, this, &QgsDataSourceManagerDialog::setCurrentPage );
 
   // BROWSER Add the browser widget to the first stacked widget page
-  mBrowserWidget = new QgsBrowserDockWidget( QStringLiteral( "Browser" ), browserModel, this );
+  mBrowserWidget = new QgsBrowserDockWidget( QStringLiteral( "Browser" ), mBrowserModel, this );
   mBrowserWidget->setFeatures( QDockWidget::NoDockWidgetFeatures );
   ui->mOptionsStackedWidget->addWidget( mBrowserWidget );
   mPageNames.append( QStringLiteral( "browser" ) );
@@ -60,17 +66,18 @@ QgsDataSourceManagerDialog::QgsDataSourceManagerDialog( QgsBrowserModel *browser
 
   // Add provider dialogs
   const QList<QgsSourceSelectProvider *> sourceSelectProviders = QgsGui::sourceSelectProviderRegistry()->providers( );
-  for ( const auto provider : sourceSelectProviders )
+  for ( QgsSourceSelectProvider *provider : sourceSelectProviders )
   {
     QgsAbstractDataSourceWidget *dlg = provider->createDataSourceWidget( this );
     if ( !dlg )
     {
-      QgsMessageLog::logMessage( tr( "Cannot get %1 select dialog from source select provider %2." ).arg( provider->name(), provider->providerKey() ), QStringLiteral( "DataSourceManager" ), QgsMessageLog::CRITICAL );
+      QgsMessageLog::logMessage( tr( "Cannot get %1 select dialog from source select provider %2." ).arg( provider->name(), provider->providerKey() ), QStringLiteral( "DataSourceManager" ), Qgis::Critical );
       continue;
     }
     addProviderDialog( dlg, provider->providerKey(), provider->text(), provider->icon( ), provider->toolTip( ) );
   }
 
+  restoreOptionsBaseUi( QStringLiteral( "Data Source Manager" ) );
 }
 
 QgsDataSourceManagerDialog::~QgsDataSourceManagerDialog()
@@ -87,11 +94,17 @@ void QgsDataSourceManagerDialog::openPage( const QString &pageName )
   }
 }
 
+QgsMessageBar *QgsDataSourceManagerDialog::messageBar() const
+{
+  return mMessageBar;
+}
+
 void QgsDataSourceManagerDialog::setCurrentPage( int index )
 {
   mPreviousRow = ui->mOptionsStackedWidget->currentIndex();
   ui->mOptionsStackedWidget->setCurrentIndex( index );
   setWindowTitle( tr( "Data Source Manager | %1" ).arg( ui->mOptionsListWidget->currentItem()->text() ) );
+  resizeAlltabs( index );
 }
 
 void QgsDataSourceManagerDialog::setPreviousPage()
@@ -106,9 +119,26 @@ void QgsDataSourceManagerDialog::refresh()
   emit providerDialogsRefreshRequested();
 }
 
+void QgsDataSourceManagerDialog::reset()
+{
+  int pageCount = ui->mOptionsStackedWidget->count();
+  for ( int i = 0; i < pageCount; ++i )
+  {
+    QWidget *widget = ui->mOptionsStackedWidget->widget( i );
+    QgsAbstractDataSourceWidget *dataSourceWidget = qobject_cast<QgsAbstractDataSourceWidget *>( widget );
+    if ( dataSourceWidget )
+      dataSourceWidget->reset();
+  }
+}
+
 void QgsDataSourceManagerDialog::rasterLayerAdded( const QString &uri, const QString &baseName, const QString &providerKey )
 {
   emit addRasterLayer( uri, baseName, providerKey );
+}
+
+void QgsDataSourceManagerDialog::rasterLayersAdded( const QStringList &layersList )
+{
+  emit addRasterLayers( layersList );
 }
 
 void QgsDataSourceManagerDialog::vectorLayerAdded( const QString &vectorLayerPath, const QString &baseName, const QString &providerKey )
@@ -120,7 +150,6 @@ void QgsDataSourceManagerDialog::vectorLayersAdded( const QStringList &layerQStr
 {
   emit addVectorLayers( layerQStringList, enc, dataSourceType );
 }
-
 
 void QgsDataSourceManagerDialog::addProviderDialog( QgsAbstractDataSourceWidget *dlg, const QString &providerKey, const QString &providerName, const QIcon &icon, const QString &toolTip )
 {
@@ -134,6 +163,8 @@ void QgsDataSourceManagerDialog::addProviderDialog( QgsAbstractDataSourceWidget 
   {
     dlg->setMapCanvas( mMapCanvas );
   }
+  dlg->setBrowserModel( mBrowserModel );
+
   connect( dlg, &QgsAbstractDataSourceWidget::rejected, this, &QgsDataSourceManagerDialog::reject );
   connect( dlg, &QgsAbstractDataSourceWidget::accepted, this, &QgsDataSourceManagerDialog::accept );
   makeConnections( dlg, providerKey );
@@ -142,12 +173,10 @@ void QgsDataSourceManagerDialog::addProviderDialog( QgsAbstractDataSourceWidget 
 void QgsDataSourceManagerDialog::makeConnections( QgsAbstractDataSourceWidget *dlg, const QString &providerKey )
 {
   // DB
-  connect( dlg, SIGNAL( addDatabaseLayers( QStringList const &, QString const & ) ),
-           this, SIGNAL( addDatabaseLayers( QStringList const &, QString const & ) ) );
-  connect( dlg, SIGNAL( progress( int, int ) ),
-           this, SIGNAL( showProgress( int, int ) ) );
-  connect( dlg, SIGNAL( progressMessage( QString ) ),
-           this, SIGNAL( showStatusMessage( QString ) ) );
+  connect( dlg, &QgsAbstractDataSourceWidget::addDatabaseLayers,
+           this, &QgsDataSourceManagerDialog::addDatabaseLayers );
+  connect( dlg, &QgsAbstractDataSourceWidget::progressMessage,
+           this, &QgsDataSourceManagerDialog::showStatusMessage );
   // Vector
   connect( dlg, &QgsAbstractDataSourceWidget::addVectorLayer, this, [ = ]( const QString & vectorLayerPath, const QString & baseName, const QString & specifiedProvider )
   {
@@ -157,21 +186,38 @@ void QgsDataSourceManagerDialog::makeConnections( QgsAbstractDataSourceWidget *d
          );
   connect( dlg, &QgsAbstractDataSourceWidget::addVectorLayers,
            this, &QgsDataSourceManagerDialog::vectorLayersAdded );
-  connect( dlg, SIGNAL( connectionsChanged() ), this, SIGNAL( connectionsChanged() ) );
+  connect( dlg, &QgsAbstractDataSourceWidget::connectionsChanged, this, &QgsDataSourceManagerDialog::connectionsChanged );
   // Raster
-  connect( dlg, SIGNAL( addRasterLayer( QString const &, QString const &, QString const & ) ),
-           this, SIGNAL( addRasterLayer( QString const &, QString const &, QString const & ) ) );
-
+  connect( dlg, &QgsAbstractDataSourceWidget::addRasterLayer,
+           this, [ = ]( const QString & uri, const QString & baseName, const QString & providerKey )
+  {
+    addRasterLayer( uri, baseName, providerKey );
+  } );
+  connect( dlg, &QgsAbstractDataSourceWidget::addRasterLayers,
+           this, &QgsDataSourceManagerDialog::rasterLayersAdded );
+  // Mesh
+  connect( dlg, &QgsAbstractDataSourceWidget::addMeshLayer, this, &QgsDataSourceManagerDialog::addMeshLayer );
+  // Vector tile
+  connect( dlg, &QgsAbstractDataSourceWidget::addVectorTileLayer, this, &QgsDataSourceManagerDialog::addVectorTileLayer );
+  // Point Cloud
+  connect( dlg, &QgsAbstractDataSourceWidget::addPointCloudLayer, this, &QgsDataSourceManagerDialog::addPointCloudLayer );
   // Virtual
-  connect( dlg, SIGNAL( replaceVectorLayer( QString, QString, QString, QString ) ),
-           this, SIGNAL( replaceSelectedVectorLayer( QString, QString, QString, QString ) ) );
+  connect( dlg, &QgsAbstractDataSourceWidget::replaceVectorLayer,
+           this, &QgsDataSourceManagerDialog::replaceSelectedVectorLayer );
   // Common
-  connect( dlg, SIGNAL( connectionsChanged() ), this, SIGNAL( connectionsChanged() ) );
-  connect( this, SIGNAL( providerDialogsRefreshRequested() ), dlg, SLOT( refresh() ) );
+  connect( dlg, &QgsAbstractDataSourceWidget::connectionsChanged, this, &QgsDataSourceManagerDialog::connectionsChanged );
+  connect( this, &QgsDataSourceManagerDialog::providerDialogsRefreshRequested, dlg, &QgsAbstractDataSourceWidget::refresh );
+
+  // Message
+  connect( dlg, &QgsAbstractDataSourceWidget::pushMessage, this, [ = ]( const QString & title, const QString & message, const Qgis::MessageLevel level )
+  {
+    mMessageBar->pushMessage( title, message, level );
+  } );
 }
 
 void QgsDataSourceManagerDialog::showEvent( QShowEvent *e )
 {
   ui->mOptionsStackedWidget->currentWidget()->show();
-  QDialog::showEvent( e );
+  QgsOptionsDialogBase::showEvent( e );
+  resizeAlltabs( ui->mOptionsStackedWidget->currentIndex() );
 }

@@ -18,7 +18,7 @@
 
 
 #include "qgis_gui.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsguiutils.h"
 #include "qgsproviderregistry.h"
 #include "qgsabstractdatasourcewidget.h"
@@ -28,7 +28,7 @@ class QWidget;
 
 /**
  * \ingroup gui
- * This is the interface for those who want to add entries to the QgsDataSourceManagerDialog
+ * \brief This is the interface for those who want to add entries to the QgsDataSourceManagerDialog
  *
  * \since QGIS 3.0
  */
@@ -80,11 +80,10 @@ class GUI_EXPORT QgsSourceSelectProvider
     virtual int ordering( ) const { return OrderOtherProvider; }
 
     /**
-     * Create a new instance of QgsAbstractDataSourceWidget (or null).
+     * Create a new instance of QgsAbstractDataSourceWidget (or NULLPTR).
      * Caller takes responsibility of deleting created.
      */
     virtual QgsAbstractDataSourceWidget *createDataSourceWidget( QWidget *parent = nullptr, Qt::WindowFlags fl = Qt::Widget, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::Embedded ) const = 0 SIP_FACTORY;
-
 };
 
 

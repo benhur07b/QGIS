@@ -20,42 +20,54 @@
 #include "qgsmapcanvas.h"
 #include "qgslinestring.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
 #include <memory>
 
 QgsMapToolRectangleExtent::QgsMapToolRectangleExtent( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolAddRectangle( parentTool, canvas, mode )
 {
+  mToolName = tr( "Add rectangle from extent" );
 }
 
 void QgsMapToolRectangleExtent::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
 
   if ( e->button() == Qt::LeftButton )
   {
-    mPoints.append( mapPoint );
+    if ( mPoints.empty() )
+      mPoints.append( point );
 
-    if ( !mPoints.isEmpty() && !mTempRubberBand )
+    if ( !mTempRubberBand )
     {
-      mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
       mTempRubberBand->show();
     }
   }
   else if ( e->button() == Qt::RightButton )
   {
-    deactivate();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    mPoints.append( point );
+
+    release( e );
   }
 }
 
 void QgsMapToolRectangleExtent::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
 
   if ( mTempRubberBand )
   {
@@ -63,19 +75,11 @@ void QgsMapToolRectangleExtent::cadCanvasMoveEvent( QgsMapMouseEvent *e )
     {
       case 1:
       {
-        if ( qgsDoubleNear( mCanvas->rotation(), 0.0 ) )
-        {
-          mRectangle = QgsRectangle( mPoints.at( 0 ), mapPoint );
-          mTempRubberBand->setGeometry( QgsMapToolAddRectangle::rectangleToPolygon( ) );
-        }
-        else
-        {
-          double dist = mPoints.at( 0 ).distance( mapPoint );
-          double angle = mPoints.at( 0 ).azimuth( mapPoint );
+        double dist = mPoints.at( 0 ).distance( point );
+        double angle = mPoints.at( 0 ).azimuth( point );
 
-          mRectangle = QgsRectangle( mPoints.at( 0 ), mPoints.at( 0 ).project( dist, angle ) );
-          mTempRubberBand->setGeometry( QgsMapToolAddRectangle::rectangleToPolygon() );
-        }
+        mRectangle = QgsQuadrilateral::rectangleFromExtent( mPoints.at( 0 ), mPoints.at( 0 ).project( dist, angle ) );
+        mTempRubberBand->setGeometry( mRectangle.toPolygon() );
       }
       break;
       default:

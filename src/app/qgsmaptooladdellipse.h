@@ -19,15 +19,17 @@
 #include "qgsmaptoolcapture.h"
 #include "qgsellipse.h"
 #include "qgssettings.h"
+#include "qgis_app.h"
 
 class QgsGeometryRubberBand;
+class QgsSnapIndicator;
 
-class QgsMapToolAddEllipse: public QgsMapToolCapture
+class APP_EXPORT QgsMapToolAddEllipse: public QgsMapToolCapture
 {
     Q_OBJECT
   public:
     QgsMapToolAddEllipse( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode = CaptureLine );
-    ~QgsMapToolAddEllipse();
+    ~QgsMapToolAddEllipse() override;
 
     void keyPressEvent( QKeyEvent *e ) override;
     void keyReleaseEvent( QKeyEvent *e ) override;
@@ -39,6 +41,9 @@ class QgsMapToolAddEllipse: public QgsMapToolCapture
 
   protected:
     explicit QgsMapToolAddEllipse( QgsMapCanvas *canvas ) = delete; //forbidden
+
+    //! Convenient method to release (activate/deactivate) tools
+    void release( QgsMapMouseEvent *e );
 
     /**
      * The parent map tool, e.g. the add feature tool.
@@ -53,6 +58,11 @@ class QgsMapToolAddEllipse: public QgsMapToolCapture
     QgsEllipse mEllipse;
     //! convenient method to return the number of segments
     unsigned int segments( ) { return QgsSettings().value( QStringLiteral( "/qgis/digitizing/offset_quad_seg" ), 8 ).toInt() * 12; }
+    //! Layer type which will be used for rubberband
+    QgsWkbTypes::GeometryType mLayerType = QgsWkbTypes::LineGeometry;
+
+    //! Snapping indicators
+    std::unique_ptr<QgsSnapIndicator> mSnapIndicator;
 
 };
 

@@ -13,11 +13,11 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSRULEBASEDRENDERERV2WIDGET_H
-#define QGSRULEBASEDRENDERERV2WIDGET_H
+#ifndef QGSRULEBASEDRENDERERWIDGET_H
+#define QGSRULEBASEDRENDERERWIDGET_H
 
 #include "qgsrendererwidget.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "qgsrulebasedrenderer.h"
 class QMenu;
@@ -27,7 +27,7 @@ class QgsSymbolSelectorWidget;
 
 #include <QAbstractItemModel>
 
-/* Features count fro rule */
+/* Features count for rule */
 struct QgsRuleBasedRendererCount SIP_SKIP
 {
   int count; // number of features
@@ -38,30 +38,34 @@ struct QgsRuleBasedRendererCount SIP_SKIP
 
 /**
  * \ingroup gui
-Tree model for the rules:
-
-(invalid)  == root node
- +--- top level rule
- +--- top level rule
-*/
+ * \brief Tree model for the rules:
+ *
+ * (invalid)  == root node
+ * +--- top level rule
+ * +--- top level rule
+ */
 class GUI_EXPORT QgsRuleBasedRendererModel : public QAbstractItemModel
 {
     Q_OBJECT
 
   public:
-    QgsRuleBasedRendererModel( QgsRuleBasedRenderer *r );
 
-    virtual Qt::ItemFlags flags( const QModelIndex &index ) const override;
-    virtual QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
-    virtual QVariant headerData( int section, Qt::Orientation orientation,
-                                 int role = Qt::DisplayRole ) const override;
-    virtual int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
-    virtual int columnCount( const QModelIndex & = QModelIndex() ) const override;
-    virtual QModelIndex index( int row, int column, const QModelIndex &parent = QModelIndex() ) const override;
-    virtual QModelIndex parent( const QModelIndex &index ) const override;
+    /**
+     * Constructor for QgsRuleBasedRendererModel, for the specified \a renderer.
+     */
+    QgsRuleBasedRendererModel( QgsRuleBasedRenderer *renderer, QObject *parent );
+
+    Qt::ItemFlags flags( const QModelIndex &index ) const override;
+    QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
+    QVariant headerData( int section, Qt::Orientation orientation,
+                         int role = Qt::DisplayRole ) const override;
+    int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
+    int columnCount( const QModelIndex & = QModelIndex() ) const override;
+    QModelIndex index( int row, int column, const QModelIndex &parent = QModelIndex() ) const override;
+    QModelIndex parent( const QModelIndex &index ) const override;
 
     // editing support
-    virtual bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
+    bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
 
     // drag'n'drop support
     Qt::DropActions supportedDropActions() const override;
@@ -81,6 +85,14 @@ class GUI_EXPORT QgsRuleBasedRendererModel : public QAbstractItemModel
     void updateRule( const QModelIndex &index );
     void removeRule( const QModelIndex &index );
 
+    /**
+     * Sets the \a symbol for the rule at the specified \a index. Ownership of the symbols is
+     * transferred to the renderer.
+     *
+     * \since QGIS 3.10
+     */
+    void setSymbol( const QModelIndex &index, QgsSymbol *symbol SIP_TRANSFER );
+
     void willAddRules( const QModelIndex &parent, int count ); // call beginInsertRows
     void finishedAddingRules(); // call endInsertRows
 
@@ -96,7 +108,7 @@ class GUI_EXPORT QgsRuleBasedRendererModel : public QAbstractItemModel
 
 ///////
 
-#include "ui_qgsrulebasedrendererv2widget.h"
+#include "ui_qgsrulebasedrendererwidget.h"
 
 /**
  * \ingroup gui
@@ -111,9 +123,10 @@ class GUI_EXPORT QgsRuleBasedRendererWidget : public QgsRendererWidget, private 
     static QgsRendererWidget *create( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
     QgsRuleBasedRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
-    ~QgsRuleBasedRendererWidget();
+    ~QgsRuleBasedRendererWidget() override;
 
-    virtual QgsFeatureRenderer *renderer() override;
+    QgsFeatureRenderer *renderer() override;
+    void setDockMode( bool dockMode ) override;
 
   public slots:
 
@@ -158,16 +171,19 @@ class GUI_EXPORT QgsRuleBasedRendererWidget : public QgsRendererWidget, private 
     QAction *mDeleteAction = nullptr;
 
     QgsRuleBasedRenderer::RuleList mCopyBuffer;
+    QMenu *mContextMenu = nullptr;
 
   protected slots:
     void copy() override;
     void paste() override;
+    void pasteSymbolToSelection() override;
 
   private slots:
     void refineRuleCategoriesAccepted( QgsPanelWidget *panel );
     void refineRuleRangesAccepted( QgsPanelWidget *panel );
     void ruleWidgetPanelAccepted( QgsPanelWidget *panel );
     void liveUpdateRuleFromPanel();
+    void showContextMenu( QPoint p );
 };
 
 ///////
@@ -202,7 +218,7 @@ class GUI_EXPORT QgsRendererRulePropsWidget : public QgsPanelWidget, private Ui:
                                 const QgsSymbolWidgetContext &context = QgsSymbolWidgetContext() );
 
     /**
-     * Return the current set rule.
+     * Returns the current set rule.
      * \returns The current rule.
      */
     QgsRuleBasedRenderer::Rule *rule() { return mRule; }
@@ -226,9 +242,9 @@ class GUI_EXPORT QgsRendererRulePropsWidget : public QgsPanelWidget, private Ui:
 
     /**
      * Set the widget in dock mode.
-     * \param dockMode True for dock mode.
+     * \param dockMode TRUE for dock mode.
      */
-    virtual void setDockMode( bool dockMode );
+    void setDockMode( bool dockMode ) override;
 
   protected:
     QgsRuleBasedRenderer::Rule *mRule; // borrowed
@@ -258,9 +274,7 @@ class GUI_EXPORT QgsRendererRulePropsDialog : public QDialog
      * \param parent parent widget
      * \param context symbol widget context
      */
-    QgsRendererRulePropsDialog( QgsRuleBasedRenderer::Rule *rule, QgsVectorLayer *layer, QgsStyle *style, QWidget *parent SIP_TRANSFERTHIS = 0, const QgsSymbolWidgetContext &context = QgsSymbolWidgetContext() );
-
-    ~QgsRendererRulePropsDialog();
+    QgsRendererRulePropsDialog( QgsRuleBasedRenderer::Rule *rule, QgsVectorLayer *layer, QgsStyle *style, QWidget *parent SIP_TRANSFERTHIS = nullptr, const QgsSymbolWidgetContext &context = QgsSymbolWidgetContext() );
 
     QgsRuleBasedRenderer::Rule *rule() { return mPropsWidget->rule(); }
 
@@ -269,10 +283,13 @@ class GUI_EXPORT QgsRendererRulePropsDialog : public QDialog
     void buildExpression();
     void accept() override;
 
+  private slots:
+    void showHelp();
+
   private:
     QgsRendererRulePropsWidget *mPropsWidget = nullptr;
     QDialogButtonBox *buttonBox = nullptr;
 };
 
 
-#endif // QGSRULEBASEDRENDERERV2WIDGET_H
+#endif // QGSRULEBASEDRENDERERWIDGET_H

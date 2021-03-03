@@ -17,8 +17,8 @@
 #include "qgslistwidget.h"
 #include "qgsattributeform.h"
 
-QgsListWidgetWrapper::QgsListWidgetWrapper( QgsVectorLayer *vl, int fieldIdx, QWidget *editor, QWidget *parent ):
-  QgsEditorWidgetWrapper( vl, fieldIdx, editor, parent )
+QgsListWidgetWrapper::QgsListWidgetWrapper( QgsVectorLayer *layer, int fieldIdx, QWidget *editor, QWidget *parent ):
+  QgsEditorWidgetWrapper( layer, fieldIdx, editor, parent )
 {
 }
 
@@ -61,7 +61,7 @@ bool QgsListWidgetWrapper::valid() const
   return mWidget ? mWidget->valid() : true;
 }
 
-void QgsListWidgetWrapper::setValue( const QVariant &value )
+void QgsListWidgetWrapper::updateValues( const QVariant &value, const QVariantList & )
 {
   mWidget->setList( value.toList() );
 }
@@ -70,24 +70,30 @@ QVariant QgsListWidgetWrapper::value() const
 {
   QVariant::Type type = field().type();
   if ( !mWidget ) return QVariant( type );
+  const QVariantList list = mWidget->list();
+  if ( list.size() == 0 && config( QStringLiteral( "EmptyIsNull" ) ).toBool() )
+  {
+    return QVariant( );
+  }
   if ( type == QVariant::StringList )
   {
     QStringList result;
-    const QVariantList list = mWidget->list();
     for ( QVariantList::const_iterator it = list.constBegin(); it != list.constEnd(); ++it )
       result.append( it->toString() );
     return result;
   }
   else
-    return QVariant( mWidget->list() );
+  {
+    return list;
+  }
 }
 
 void QgsListWidgetWrapper::onValueChanged()
 {
-  emit valueChanged( value() );
+  emitValueChanged();
 }
 
-void QgsListWidgetWrapper::updateConstraintWidgetStatus( ConstraintResult /*constraintValid*/ )
+void QgsListWidgetWrapper::updateConstraintWidgetStatus()
 {
   // Nothing
 }

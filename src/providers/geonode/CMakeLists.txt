@@ -1,70 +1,53 @@
 
-SET (GEONODE_SRCS
+set (GEONODE_SRCS
   qgsgeonodeprovider.cpp
+  qgsgeonodedataitems.cpp
 )
 
-SET(GEONODE_MOC_HDRS
-)
-
-IF (WITH_GUI)
-  SET(GEONODE_SRCS ${GEONODE_SRCS}
-    qgsgeonodedataitems.cpp
+if (WITH_GUI)
+  set(GEONODE_SRCS ${GEONODE_SRCS}
+    qgsgeonodeprovidergui.cpp
+    qgsgeonodedataitemguiprovider.cpp
     qgsgeonodenewconnection.cpp
     qgsgeonodesourceselect.cpp
   )
-  SET(GEONODE_MOC_HDRS ${GEONODE_MOC_HDRS}
-    qgsgeonodesourceselect.h
-    qgsgeonodenewconnection.h
-    qgsgeonodedataitems.h
-  )
-ENDIF ()
+endif()
 
 ########################################################
 # Build
 
-QT5_WRAP_CPP(GEONODE_MOC_SRCS ${GEONODE_MOC_HDRS})
+include_directories(
 
-INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/raster
-  ${CMAKE_SOURCE_DIR}/src/core/auth
-  ${CMAKE_SOURCE_DIR}/src/core/geocms/geonode
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/core/symbology
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/gui
-  ${CMAKE_SOURCE_DIR}/src/gui/auth
-
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/ui
 )
-INCLUDE_DIRECTORIES(SYSTEM
-  ${GEOS_INCLUDE_DIR}
-)
 
-ADD_LIBRARY(geonodeprovider MODULE ${GEONODE_SRCS} ${GEONODE_MOC_SRCS})
+add_library(geonodeprovider MODULE ${GEONODE_SRCS})
 
-TARGET_LINK_LIBRARIES(geonodeprovider
+# require c++17
+target_compile_features(geonodeprovider PRIVATE cxx_std_17)
+
+target_link_libraries(geonodeprovider
   qgis_core
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES (geonodeprovider
+if (WITH_GUI)
+  target_link_libraries (geonodeprovider
     qgis_gui
   )
-ENDIF ()
+  add_dependencies(geonodeprovider ui)
+endif()
+
+target_compile_definitions(geonodeprovider PRIVATE "-DQT_NO_FOREACH")
 
 # clang-tidy
-IF(CLANG_TIDY_EXE)
-  SET_TARGET_PROPERTIES(
+if(CLANG_TIDY_EXE)
+  set_target_properties(
     geonodeprovider PROPERTIES
     CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
   )
-ENDIF(CLANG_TIDY_EXE)
+endif()
 
-INSTALL (TARGETS geonodeprovider
+install (TARGETS geonodeprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})
 

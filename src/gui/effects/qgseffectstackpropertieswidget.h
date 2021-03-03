@@ -21,6 +21,7 @@
 #include "qgis.h"
 #include <QWidget>
 #include <QStandardItemModel>
+#include <QPicture>
 #include "qgspanelwidget.h"
 
 #include "ui_qgseffectstackpropertieswidgetbase.h"
@@ -40,10 +41,10 @@ class QgsPaintEffect;
  * \brief A widget for modifying the properties of a QgsEffectStack, including adding
  * and reordering effects within the stack.
  *
- * \since QGIS 2.9
  * \see QgsEffectStack
  * \see QgsEffectStackPropertiesDialog
  * \see QgsEffectStackCompactWidget
+ * \since QGIS 2.9
  */
 
 class GUI_EXPORT QgsEffectStackPropertiesWidget : public QgsPanelWidget, private Ui::QgsEffectStackPropertiesWidgetBase
@@ -57,9 +58,9 @@ class GUI_EXPORT QgsEffectStackPropertiesWidget : public QgsPanelWidget, private
      * \param stack QgsEffectStack to modify in the widget
      * \param parent parent widget
      */
-    QgsEffectStackPropertiesWidget( QgsEffectStack *stack, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsEffectStackPropertiesWidget( QgsEffectStack *stack, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    ~QgsEffectStackPropertiesWidget();
+    ~QgsEffectStackPropertiesWidget() override;
 
     /**
      * Returns effect stack attached to the widget
@@ -116,7 +117,7 @@ class GUI_EXPORT QgsEffectStackPropertiesWidget : public QgsPanelWidget, private
     QgsEffectStack *mStack = nullptr;
     QStandardItemModel *mModel = nullptr;
     QWidget *mPresentWidget = nullptr;
-    QPicture *mPreviewPicture = nullptr;
+    QPicture mPreviewPicture;
 
     /**
      * Refreshes the widget to reflect the current state of the stack.
@@ -159,10 +160,10 @@ class GUI_EXPORT QgsEffectStackPropertiesWidget : public QgsPanelWidget, private
  * \brief A dialog for modifying the properties of a QgsEffectStack, including adding
  * and reordering effects within the stack.
  *
- * \since QGIS 2.9
  * \see QgsEffectStack
  * \see QgsEffectStackPropertiesWidget
  * \see QgsEffectStackCompactWidget
+ * \since QGIS 2.9
  */
 
 class GUI_EXPORT QgsEffectStackPropertiesDialog: public QgsDialog
@@ -177,7 +178,7 @@ class GUI_EXPORT QgsEffectStackPropertiesDialog: public QgsDialog
      * \param parent parent widget
      * \param f window flags
      */
-    QgsEffectStackPropertiesDialog( QgsEffectStack *stack, QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags f = 0 );
+    QgsEffectStackPropertiesDialog( QgsEffectStack *stack, QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags f = Qt::WindowFlags() );
 
     /**
      * Returns effect stack attached to the dialog
@@ -195,6 +196,10 @@ class GUI_EXPORT QgsEffectStackPropertiesDialog: public QgsDialog
 
     QgsEffectStackPropertiesWidget *mPropertiesWidget = nullptr;
 
+  private slots:
+
+    void showHelp();
+
 };
 
 
@@ -202,12 +207,12 @@ class GUI_EXPORT QgsEffectStackPropertiesDialog: public QgsDialog
  * \ingroup gui
  * \class QgsEffectStackCompactWidget
  * \brief A small widget consisting of a checkbox for enabling/disabling an effect stack
- * and a button for opening an effect stack customisation dialog.
+ * and a button for opening an effect stack customization dialog.
  *
- * \since QGIS 2.9
  * \see QgsEffectStack
  * \see QgsEffectStackPropertiesWidget
  * \see QgsEffectStackPropertiesDialog
+ * \since QGIS 2.9
  */
 
 class GUI_EXPORT QgsEffectStackCompactWidget: public QgsPanelWidget
@@ -223,8 +228,8 @@ class GUI_EXPORT QgsEffectStackCompactWidget: public QgsPanelWidget
      * is not a QgsEffectStack, it will be automatically converted to an effect
      * stack consisting of the original effect
      */
-    QgsEffectStackCompactWidget( QWidget *parent SIP_TRANSFERTHIS = 0, QgsPaintEffect *effect = nullptr );
-    ~QgsEffectStackCompactWidget();
+    QgsEffectStackCompactWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr, QgsPaintEffect *effect = nullptr );
+    ~QgsEffectStackCompactWidget() override;
 
     /**
      * Sets paint effect attached to the widget,
@@ -268,7 +273,7 @@ class GUI_EXPORT QgsEffectStackCompactWidget: public QgsPanelWidget
     QgsEffectStack *mStack = nullptr;
     QCheckBox *mEnabledCheckBox = nullptr;
     QToolButton *mButton = nullptr;
-    QPicture *mPreviewPicture = nullptr;
+    QPicture mPreviewPicture;
 
 };
 

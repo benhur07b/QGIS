@@ -19,13 +19,10 @@
 #ifndef QGSMAPOVERVIEWCANVAS_H
 #define QGSMAPOVERVIEWCANVAS_H
 
-
-#include <QMouseEvent>
-#include <QWheelEvent>
 #include <QWidget>
-#include <QStringList>
 #include <QPixmap>
 
+class QMouseEvent;
 class QgsMapCanvas;
 class QgsPanningWidget; // defined in .cpp
 class QgsRectangle;
@@ -36,7 +33,7 @@ class QgsMapRendererQImageJob;
 
 /**
  * \ingroup gui
- * A widget that displays an overview map.
+ * \brief A widget that displays an overview map.
  */
 class GUI_EXPORT QgsMapOverviewCanvas : public QWidget
 {
@@ -61,16 +58,6 @@ class GUI_EXPORT QgsMapOverviewCanvas : public QWidget
 
     void updateFullExtent();
 
-  public slots:
-
-    // ### QGIS 3: make protected
-    //! used for overview canvas to reflect changed extent in main map canvas
-    void drawExtentRect();
-
-    // ### QGIS 3: make protected
-    //! Should be called when the canvas destination CRS is changed
-    void destinationCrsChanged();
-
   protected slots:
     void mapRenderingFinished();
 
@@ -80,6 +67,15 @@ class GUI_EXPORT QgsMapOverviewCanvas : public QWidget
     void layerRepaintRequested( bool deferred = false );
 
   protected:
+
+    //! used for overview canvas to reflect changed extent in main map canvas
+    void drawExtentRect();
+
+    //! Should be called when the canvas destination CRS is changed
+    void destinationCrsChanged();
+
+    //! Called when the canvas transform context is changed
+    void transformContextChanged();
 
     //! Overridden paint event
     void paintEvent( QPaintEvent *pe ) override;
@@ -98,6 +94,9 @@ class GUI_EXPORT QgsMapOverviewCanvas : public QWidget
 
     //! Overridden mouse release event
     void mouseReleaseEvent( QMouseEvent *e ) override;
+
+    //! Overridden mouse release event
+    void wheelEvent( QWheelEvent *e ) override;
 
     //! called when panning to reflect mouse movement
     void updatePanningWidget( QPoint pos );

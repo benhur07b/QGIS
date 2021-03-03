@@ -21,7 +21,7 @@
 #define SIP_NO_FILE
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 #include "qgsprocessingprovider.h"
 #include "qgsprocessingutils.h"
@@ -40,8 +40,9 @@ class QgsMergeLinesAlgorithm : public QgsProcessingFeatureBasedAlgorithm
     QgsMergeLinesAlgorithm() = default;
     QString name() const override;
     QString displayName() const override;
-    virtual QStringList tags() const override;
+    QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QList<int> inputLayerTypes() const override;
     QgsMergeLinesAlgorithm *createInstance() const override SIP_FACTORY;
@@ -50,7 +51,7 @@ class QgsMergeLinesAlgorithm : public QgsProcessingFeatureBasedAlgorithm
     QString outputName() const override;
     QgsProcessing::SourceType outputLayerType() const override;
     QgsWkbTypes::Type outputWkbType( QgsWkbTypes::Type ) const override;
-    QgsFeature processFeature( const QgsFeature &feature, QgsProcessingFeedback *feedback ) override;
+    QgsFeatureList processFeature( const QgsFeature &feature,  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
 
 };
 

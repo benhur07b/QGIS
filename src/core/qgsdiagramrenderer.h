@@ -12,11 +12,11 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef QGSDIAGRAMRENDERERV2_H
-#define QGSDIAGRAMRENDERERV2_H
+#ifndef QGSDIAGRAMRENDERER_H
+#define QGSDIAGRAMRENDERER_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QColor>
 #include <QFont>
 #include <QList>
@@ -30,9 +30,9 @@
 #include "qgssymbol.h"
 #include "qgsproperty.h"
 #include "qgspropertycollection.h"
-#include "qgsdatadefinedsizelegend.h"
 
 #include "diagram/qgsdiagram.h"
+#include "qgsreadwritecontext.h"
 
 class QgsDiagramRenderer;
 class QgsFeature;
@@ -43,6 +43,8 @@ class QgsReadWriteContext;
 class QgsVectorLayer;
 class QgsLayerTreeModelLegendNode;
 class QgsLayerTreeLayer;
+class QgsPaintEffect;
+class QgsDataDefinedSizeLegend;
 
 namespace pal { class Layer; } SIP_SKIP
 
@@ -89,15 +91,15 @@ class CORE_EXPORT QgsDiagramLayerSettings
       BackgroundColor, //!< Diagram background color
       StrokeColor, //!< Stroke color
       StrokeWidth, //!< Stroke width
-      PositionX, //! x-coordinate data defined diagram position
-      PositionY, //! y-coordinate data defined diagram position
-      Distance, //! Distance to diagram from feature
-      Priority, //! Diagram priority (between 0 and 10)
-      ZIndex, //! Z-index for diagram ordering
-      IsObstacle, //! Whether diagram features act as obstacles for other diagrams/labels
-      Show, //! Whether to show the diagram
-      AlwaysShow, //! Whether the diagram should always be shown, even if it overlaps other diagrams/labels
-      StartAngle, //! Angle offset for pie diagram
+      PositionX, //!< X-coordinate data defined diagram position
+      PositionY, //!< Y-coordinate data defined diagram position
+      Distance, //!< Distance to diagram from feature
+      Priority, //!< Diagram priority (between 0 and 10)
+      ZIndex, //!< Z-index for diagram ordering
+      IsObstacle, //!< Whether diagram features act as obstacles for other diagrams/labels
+      Show, //!< Whether to show the diagram
+      AlwaysShow, //!< Whether the diagram should always be shown, even if it overlaps other diagrams/labels
+      StartAngle, //!< Angle offset for pie diagram
     };
 
     /**
@@ -145,7 +147,7 @@ class CORE_EXPORT QgsDiagramLayerSettings
      * Sets the the diagram placement flags. These are only used if the diagram placement
      * is set to a line type.
      * \param flags placement value
-     * \see getPlacement()
+     * \see linePlacementFlags()
      * \since QGIS 2.16
      */
     void setLinePlacementFlags( LinePlacementFlags flags ) { mPlacementFlags = flags; }
@@ -196,7 +198,7 @@ class CORE_EXPORT QgsDiagramLayerSettings
 
     /**
      * Sets whether the feature associated with a diagram acts as an obstacle for other labels or diagrams.
-     * \param isObstacle set to true for feature to act as obstacle
+     * \param isObstacle set to TRUE for feature to act as obstacle
      * \see isObstacle()
      * \since QGIS 2.16
      */
@@ -227,8 +229,8 @@ class CORE_EXPORT QgsDiagramLayerSettings
     /**
      * Returns the diagram renderer associated with the layer.
      * \see setRenderer()
-     * \since QGIS 2.16
      * \note not available in Python bindings
+     * \since QGIS 2.16
      */
     const QgsDiagramRenderer *renderer() const { return mRenderer; } SIP_SKIP
 
@@ -265,7 +267,7 @@ class CORE_EXPORT QgsDiagramLayerSettings
 
     /**
      * Sets whether the layer should show all diagrams, including overlapping diagrams
-     * \param showAllDiagrams set to true to show all diagrams
+     * \param showAllDiagrams set to TRUE to show all diagrams
      * \see showAllDiagrams()
      * \since QGIS 2.16
      */
@@ -286,7 +288,7 @@ class CORE_EXPORT QgsDiagramLayerSettings
     /**
      * Prepares the diagrams for a specified expression context. Calling prepare before rendering
      * multiple diagrams allows precalculation of expensive setup tasks such as parsing expressions.
-     * Returns true if preparation was successful.
+     * Returns TRUE if preparation was successful.
      * \since QGIS 3.0
      */
     bool prepare( const QgsExpressionContext &context = QgsExpressionContext() ) const;
@@ -300,24 +302,26 @@ class CORE_EXPORT QgsDiagramLayerSettings
 
     /**
      * Returns a reference to the diagram's property collection, used for data defined overrides.
-     * \since QGIS 3.0
      * \see setDataDefinedProperties()
+     * \since QGIS 3.0
      */
     QgsPropertyCollection &dataDefinedProperties() { return mDataDefinedProperties; }
 
     /**
      * Returns a reference to the diagram's property collection, used for data defined overrides.
-     * \since QGIS 3.0
-     * \see setProperties()
+     * \see setDataDefinedProperties()
+     * \see Property
      * \note not available in Python bindings
+     * \since QGIS 3.0
      */
     const QgsPropertyCollection &dataDefinedProperties() const { return mDataDefinedProperties; } SIP_SKIP
 
     /**
      * Sets the diagram's property collection, used for data defined overrides.
      * \param collection property collection. Existing properties will be replaced.
-     * \since QGIS 3.0
      * \see dataDefinedProperties()
+     * \see Property
+     * \since QGIS 3.0
      */
     void setDataDefinedProperties( const QgsPropertyCollection &collection ) { mDataDefinedProperties = collection; }
 
@@ -392,8 +396,24 @@ class CORE_EXPORT QgsDiagramSettings
       Right
     };
 
-    QgsDiagramSettings()
-    {}
+    /**
+     * Angular directions.
+     * \since QGIS 3.12
+     */
+    enum Direction
+    {
+      Clockwise, //!< Clockwise orientation
+      Counterclockwise, //!< Counter-clockwise orientation
+    };
+
+    //! Constructor for QgsDiagramSettings
+    QgsDiagramSettings();
+    ~QgsDiagramSettings();
+
+    //! Copy constructor
+    QgsDiagramSettings( const QgsDiagramSettings &other );
+
+    QgsDiagramSettings &operator=( const QgsDiagramSettings &other );
 
     bool enabled = true;
     QFont font;
@@ -465,10 +485,91 @@ class CORE_EXPORT QgsDiagramSettings
     //! Scale diagrams smaller than mMinimumSize to mMinimumSize
     double minimumSize = 0.0;
 
+    /**
+     * Returns the spacing between diagram contents.
+     *
+     * Spacing units can be retrieved by calling spacingUnit().
+     *
+     * \see setSpacing()
+     * \see spacingUnit()
+     * \see spacingMapUnitScale()
+     *
+     * \since QGIS 3.12
+     */
+    double spacing() const { return mSpacing; }
+
+    /**
+     * Sets the \a spacing between diagram contents.
+     *
+     * Spacing units are set via setSpacingUnit().
+     *
+     * \see spacing()
+     * \see setSpacingUnit()
+     * \see setSpacingMapUnitScale()
+     *
+     * \since QGIS 3.12
+     */
+    void setSpacing( double spacing ) { mSpacing = spacing; }
+
+    /**
+     * Sets the \a unit for the content spacing.
+     * \see spacingUnit()
+     * \see setSpacing()
+     * \see setSpacingMapUnitScale()
+     *
+     * \since QGIS 3.12
+    */
+    void setSpacingUnit( QgsUnitTypes::RenderUnit unit ) { mSpacingUnit = unit; }
+
+    /**
+     * Returns the units for the content spacing.
+     * \see setSpacingUnit()
+     * \see spacing()
+     * \see spacingMapUnitScale()
+     * \since QGIS 3.12
+    */
+    QgsUnitTypes::RenderUnit spacingUnit() const { return mSpacingUnit; }
+
+    /**
+     * Sets the map unit \a scale for the content spacing.
+     * \see spacingMapUnitScale()
+     * \see setSpacing()
+     * \see setSpacingUnit()
+     *
+     * \since QGIS 3.12
+    */
+    void setSpacingMapUnitScale( const QgsMapUnitScale &scale ) { mSpacingMapUnitScale = scale; }
+
+    /**
+     * Returns the map unit scale for the content spacing.
+     * \see setSpacingMapUnitScale()
+     * \see spacing()
+     * \see spacingUnit()
+     *
+     * \since QGIS 3.12
+    */
+    const QgsMapUnitScale &spacingMapUnitScale() const { return mSpacingMapUnitScale; }
+
+    /**
+     * Returns the chart's angular direction.
+     *
+     * \see setDirection()
+     * \since QGIS 3.12
+     */
+    Direction direction() const;
+
+    /**
+     * Sets the chart's angular \a direction.
+     *
+     * \see direction()
+     * \since QGIS 3.12
+     */
+    void setDirection( Direction direction );
+
     //! Reads diagram settings from XML
-    void readXml( const QDomElement &elem );
+    void readXml( const QDomElement &elem, const QgsReadWriteContext &context = QgsReadWriteContext() );
     //! Writes diagram settings to XML
-    void writeXml( QDomElement &rendererElem, QDomDocument &doc ) const;
+    void writeXml( QDomElement &rendererElem, QDomDocument &doc, const QgsReadWriteContext &context = QgsReadWriteContext() ) const;
 
     /**
      * Returns list of legend nodes for the diagram
@@ -477,12 +578,85 @@ class CORE_EXPORT QgsDiagramSettings
      */
     QList< QgsLayerTreeModelLegendNode * > legendItems( QgsLayerTreeLayer *nodeLayer ) const SIP_FACTORY;
 
+    /**
+     * Returns the line symbol to use for rendering axis in diagrams.
+     *
+     * \see setAxisLineSymbol()
+     * \see showAxis()
+     *
+     * \since QGIS 3.12
+     */
+    QgsLineSymbol *axisLineSymbol() const;
+
+    /**
+     * Sets the line \a symbol to use for rendering axis in diagrams.
+     *
+     * Ownership of \a symbol is transferred to the settings.
+     *
+     * \see axisLineSymbol()
+     * \see setShowAxis()
+     *
+     * \since QGIS 3.12
+     */
+    void setAxisLineSymbol( QgsLineSymbol *symbol SIP_TRANSFER );
+
+    /**
+     * Returns TRUE if the diagram axis should be shown.
+     *
+     * \see setShowAxis()
+     * \see axisLineSymbol()
+     *
+     * \since QGIS 3.12
+     */
+    bool showAxis() const;
+
+    /**
+     * Sets whether the diagram axis should be shown.
+     *
+     * \see showAxis()
+     * \see setAxisLineSymbol()
+     *
+     * \since QGIS 3.12
+     */
+    void setShowAxis( bool showAxis );
+
+    /**
+     * Returns the paint effect to use while rendering diagrams.
+     *
+     * \see setPaintEffect()
+     *
+     * \since QGIS 3.12
+     */
+    QgsPaintEffect *paintEffect() const;
+
+    /**
+     * Sets the paint \a effect to use while rendering diagrams.
+     *
+     * Ownership of \a effect is transferred to the settings.
+     *
+     * \see paintEffect()
+     *
+     * \since QGIS 3.12
+     */
+    void setPaintEffect( QgsPaintEffect *effect SIP_TRANSFER );
+
+  private:
+
+    double mSpacing = 0;
+    QgsUnitTypes::RenderUnit mSpacingUnit = QgsUnitTypes::RenderMillimeters;
+    QgsMapUnitScale mSpacingMapUnitScale;
+    Direction mDirection = Counterclockwise;
+
+    bool mShowAxis = false;
+    std::unique_ptr< QgsLineSymbol > mAxisLineSymbol;
+    std::unique_ptr< QgsPaintEffect > mPaintEffect;
+
 };
 
 /**
  * \ingroup core
  * \class QgsDiagramInterpolationSettings
- * Additional diagram settings for interpolated size rendering.
+ * \brief Additional diagram settings for interpolated size rendering.
  */
 class CORE_EXPORT QgsDiagramInterpolationSettings
 {
@@ -511,9 +685,9 @@ class CORE_EXPORT QgsDiagramRenderer
 
 #ifdef SIP_RUN
     SIP_CONVERT_TO_SUBCLASS_CODE
-    if ( sipCpp->rendererName() == QStringLiteral( "SingleCategory" ) )
+    if ( sipCpp->rendererName() == QLatin1String( "SingleCategory" ) )
       sipType = sipType_QgsSingleCategoryDiagramRenderer;
-    else if ( sipCpp->rendererName() == QStringLiteral( "LinearlyInterpolated" ) )
+    else if ( sipCpp->rendererName() == QLatin1String( "LinearlyInterpolated" ) )
       sipType = sipType_QgsLinearlyInterpolatedDiagramRenderer;
     else
       sipType = NULL;
@@ -530,7 +704,8 @@ class CORE_EXPORT QgsDiagramRenderer
 
     /**
      * Returns new instance that is equivalent to this one
-     * \since QGIS 2.4 */
+     * \since QGIS 2.4
+    */
     virtual QgsDiagramRenderer *clone() const = 0 SIP_FACTORY;
 
     //! Returns size of the diagram for a feature in map units. Returns an invalid QSizeF in case of error
@@ -581,19 +756,17 @@ class CORE_EXPORT QgsDiagramRenderer
     virtual QList< QgsLayerTreeModelLegendNode * > legendItems( QgsLayerTreeLayer *nodeLayer ) const SIP_FACTORY;
 
     /**
-     * Returns true if renderer will show legend items for diagram attributes.
-     * \since QGIS 2.16
+     * Returns TRUE if renderer will show legend items for diagram attributes.
      * \see setAttributeLegend()
-     * \see sizeLegend()
+     * \since QGIS 2.16
      */
     bool attributeLegend() const { return mShowAttributeLegend; }
 
     /**
      * Sets whether the renderer will show legend items for diagram attributes.
-     * \param enabled set to true to show diagram attribute legend
-     * \since QGIS 2.16
+     * \param enabled set to TRUE to show diagram attribute legend
      * \see attributeLegend()
-     * \see setSizeLegend()
+     * \since QGIS 2.16
      */
     void setAttributeLegend( bool enabled ) { mShowAttributeLegend = enabled; }
 
@@ -602,7 +775,7 @@ class CORE_EXPORT QgsDiagramRenderer
     QgsDiagramRenderer &operator=( const QgsDiagramRenderer &other );
 
     /**
-     * Returns diagram settings for a feature (or false if the diagram for the feature is not to be rendered). Used internally within renderDiagram()
+     * Returns diagram settings for a feature (or FALSE if the diagram for the feature is not to be rendered). Used internally within renderDiagram()
      * \param feature the feature
      * \param c render context
      * \param s out: diagram settings for the feature
@@ -641,12 +814,14 @@ class CORE_EXPORT QgsDiagramRenderer
 
 /**
  * \ingroup core
- * Renders the diagrams for all features with the same settings
+ * \brief Renders the diagrams for all features with the same settings
 */
 class CORE_EXPORT QgsSingleCategoryDiagramRenderer : public QgsDiagramRenderer
 {
   public:
-    QgsSingleCategoryDiagramRenderer();
+
+    //! Constructor for QgsSingleCategoryDiagramRenderer
+    QgsSingleCategoryDiagramRenderer() = default;
 
     QgsSingleCategoryDiagramRenderer *clone() const override SIP_FACTORY;
 
@@ -680,7 +855,7 @@ class CORE_EXPORT QgsLinearlyInterpolatedDiagramRenderer : public QgsDiagramRend
 {
   public:
     QgsLinearlyInterpolatedDiagramRenderer();
-    ~QgsLinearlyInterpolatedDiagramRenderer();
+    ~QgsLinearlyInterpolatedDiagramRenderer() override;
 
     QgsLinearlyInterpolatedDiagramRenderer *clone() const override SIP_FACTORY;
 
@@ -691,7 +866,7 @@ class CORE_EXPORT QgsLinearlyInterpolatedDiagramRenderer : public QgsDiagramRend
 
     QList<QString> diagramAttributes() const override;
 
-    virtual QSet< QString > referencedFields( const QgsExpressionContext &context = QgsExpressionContext() ) const override;
+    QSet< QString > referencedFields( const QgsExpressionContext &context = QgsExpressionContext() ) const override;
 
     QString rendererName() const override { return QStringLiteral( "LinearlyInterpolated" ); }
 
@@ -739,7 +914,7 @@ class CORE_EXPORT QgsLinearlyInterpolatedDiagramRenderer : public QgsDiagramRend
     void setDataDefinedSizeLegend( QgsDataDefinedSizeLegend *settings SIP_TRANSFER );
 
     /**
-     * Returns configuration of appearance of legend. Will return null if no configuration has been set.
+     * Returns configuration of appearance of legend. Will return NULLPTR if no configuration has been set.
      * \since QGIS 3.0
      */
     QgsDataDefinedSizeLegend *dataDefinedSizeLegend() const;
@@ -758,6 +933,8 @@ class CORE_EXPORT QgsLinearlyInterpolatedDiagramRenderer : public QgsDiagramRend
 
     //! Stores more settings about how legend for varying size of symbols should be rendered
     QgsDataDefinedSizeLegend *mDataDefinedSizeLegend = nullptr;
+
+    QgsLinearlyInterpolatedDiagramRenderer &operator=( const QgsLinearlyInterpolatedDiagramRenderer & ) = delete;
 };
 
-#endif // QGSDIAGRAMRENDERERV2_H
+#endif // QGSDIAGRAMRENDERER_H

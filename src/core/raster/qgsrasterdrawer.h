@@ -32,7 +32,7 @@ class QgsRasterIterator;
 
 /**
  * \ingroup core
- * The drawing pipe for raster layers.
+ * \brief The drawing pipe for raster layers.
  */
 class CORE_EXPORT QgsRasterDrawer
 {
@@ -44,7 +44,7 @@ class CORE_EXPORT QgsRasterDrawer
      * \param p destination QPainter
      * \param viewPort viewport to render
      * \param qgsMapToPixel map to pixel converter
-     * \param feedback optional raster feedback object for cancelation/preview. Added in QGIS 3.0.
+     * \param feedback optional raster feedback object for cancellation/preview. Added in QGIS 3.0.
      */
     void draw( QPainter *p, QgsRasterViewPort *viewPort, const QgsMapToPixel *qgsMapToPixel, QgsRasterBlockFeedback *feedback = nullptr );
 

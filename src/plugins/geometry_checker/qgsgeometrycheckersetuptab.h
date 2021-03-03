@@ -19,7 +19,6 @@
 
 #include <QMutex>
 
-#include "qgsfeature.h"
 #include "ui_qgsgeometrycheckersetuptab.h"
 
 class QgisInterface;
@@ -32,7 +31,13 @@ class QgsGeometryCheckerSetupTab : public QWidget
     Q_OBJECT
   public:
     QgsGeometryCheckerSetupTab( QgisInterface *iface, QDialog *checkerDialog, QWidget *parent = nullptr );
-    ~QgsGeometryCheckerSetupTab();
+    ~QgsGeometryCheckerSetupTab() override;
+
+    /**
+     * Indicates whether the geometry checker is currently running its checks in the background.
+     * Useful to figure out whether it is safe to close the dialog and thus destroy the checker.
+     */
+    bool isRunningInBackground() const { return mIsRunningInBackground; }
 
   signals:
     void checkerStarted( QgsGeometryChecker *checker );
@@ -45,12 +50,15 @@ class QgsGeometryCheckerSetupTab : public QWidget
     QPushButton *mRunButton = nullptr;
     QPushButton *mAbortButton = nullptr;
     QMutex m_errorListMutex;
+    bool mIsRunningInBackground = false;
 
     QList<QgsVectorLayer *> getSelectedLayers();
 
   private slots:
     void runChecks();
     void updateLayers();
+    void selectAllLayers();
+    void deselectAllLayers();
     void validateInput();
     void selectOutputDirectory();
     void showCancelFeedback();

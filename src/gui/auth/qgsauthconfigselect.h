@@ -19,7 +19,7 @@
 
 #include <QWidget>
 #include <QLabel>
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "ui_qgsauthconfigselect.h"
 #include "qgsauthconfig.h"
@@ -28,7 +28,7 @@
 
 /**
  * \ingroup gui
- * Selector widget for authentication configs
+ * \brief Selector widget for authentication configs
  */
 class GUI_EXPORT QgsAuthConfigSelect : public QWidget, private Ui::QgsAuthConfigSelect
 {
@@ -42,15 +42,15 @@ class GUI_EXPORT QgsAuthConfigSelect : public QWidget, private Ui::QgsAuthConfig
      * \param parent Parent widget
      * \param dataprovider The key of the calling layer provider, if applicable
      */
-    explicit QgsAuthConfigSelect( QWidget *parent SIP_TRANSFERTHIS = 0, const QString &dataprovider = QString() );
+    explicit QgsAuthConfigSelect( QWidget *parent SIP_TRANSFERTHIS = nullptr, const QString &dataprovider = QString() );
 
-    //! Set the authentication config id for the resource
+    //! Sets the authentication config id for the resource
     void setConfigId( const QString &authcfg );
 
-    //! Get the authentication config id for the resource
+    //! Gets the authentication config id for the resource
     const QString configId() const { return mAuthCfg; }
 
-    //! Set key of layer provider, if applicable
+    //! Sets key of layer provider, if applicable
     void setDataProviderKey( const QString &key );
 
   signals:
@@ -93,6 +93,7 @@ class GUI_EXPORT QgsAuthConfigSelect : public QWidget, private Ui::QgsAuthConfig
     bool mDisabled = false;
     QVBoxLayout *mAuthNotifyLayout = nullptr;
     QLabel *mAuthNotify = nullptr;
+    bool mTemporarilyBlockLoad = false;
 };
 
 
@@ -104,7 +105,7 @@ class QPushButton;
 
 /**
  * \ingroup gui
- * Dialog wrapper of select widget to edit an authcfg in a data source URI
+ * \brief Dialog wrapper of select widget to edit an authcfg in a data source URI
  */
 class GUI_EXPORT QgsAuthConfigUriEdit : public QDialog, private Ui::QgsAuthConfigUriEdit
 {
@@ -118,11 +119,11 @@ class GUI_EXPORT QgsAuthConfigUriEdit : public QDialog, private Ui::QgsAuthConfi
      * \param datauri URI QString with of without an authcfg=ID string
      * \param dataprovider The key of the calling layer provider, if applicable
      */
-    explicit QgsAuthConfigUriEdit( QWidget *parent SIP_TRANSFERTHIS = 0,
+    explicit QgsAuthConfigUriEdit( QWidget *parent SIP_TRANSFERTHIS = nullptr,
                                    const QString &datauri = QString(),
                                    const QString &dataprovider = QString() );
 
-    //! Set the data source URI to parse
+    //! Sets the data source URI to parse
     void setDataSourceUri( const QString &datauri );
 
     //! The returned, possibly edited data source URI

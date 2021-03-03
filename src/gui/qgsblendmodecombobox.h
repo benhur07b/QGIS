@@ -19,19 +19,21 @@
 #define QGSBLENDMODECOMBOBOX_H
 
 #include <QComboBox>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QPainter> // For QPainter::CompositionMode enum
 #include "qgis_gui.h"
 
 /**
  * \ingroup gui
- * A combobox which lets the user select blend modes from a predefined list
+ * \brief A combobox which lets the user select blend modes from a predefined list
  **/
 class GUI_EXPORT QgsBlendModeComboBox : public QComboBox
 {
     Q_OBJECT
   public:
-    QgsBlendModeComboBox( QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    //! Constructor for QgsBlendModeComboBox
+    QgsBlendModeComboBox( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     //! Function to read the selected blend mode as QPainter::CompositionMode
     QPainter::CompositionMode blendMode();

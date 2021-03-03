@@ -22,18 +22,23 @@
 #include <qgspointxy.h>
 
 class QgsRectangle;
+struct QgsChunkNodeId;
+
+#define SIP_NO_FILE
 
 /**
  * \ingroup 3d
- * The class encapsulates tiling scheme (just like with WMTS / TMS / XYZ layers).
+ * \brief The class encapsulates tiling scheme (just like with WMTS / TMS / XYZ layers).
+ *
  * The origin (tile [0,0]) is in bottom-left corner.
+ * \note Not available in Python bindings
  * \since QGIS 3.0
  */
 class _3D_EXPORT QgsTilingScheme
 {
   public:
     //! Creates invalid tiling scheme
-    QgsTilingScheme();
+    QgsTilingScheme() = default;
 
     //! Creates tiling scheme where level 0 tile is centered at the full extent and the full extent completely fits into the level 0 tile
     QgsTilingScheme( const QgsRectangle &fullExtent, const QgsCoordinateReferenceSystem &crs );
@@ -46,6 +51,9 @@ class _3D_EXPORT QgsTilingScheme
     //! Returns map coordinates of the extent of a tile
     QgsRectangle tileToExtent( int x, int y, int z ) const;
 
+    //! Returns map coordinates of the extent of a tile
+    QgsRectangle tileToExtent( const QgsChunkNodeId &nodeId ) const;
+
     //! Returns coordinates of a tile that most tightly fits the whole extent
     void extentToTile( const QgsRectangle &extent, int &x, int &y, int &z ) const;
 
@@ -54,7 +62,7 @@ class _3D_EXPORT QgsTilingScheme
 
   private:
     QgsPointXY mMapOrigin; //!< Origin point in map coordinates: (0,0) in the tiling scheme
-    double mBaseTileSide;  //!< Length of tile side at zoom level 0 in map coordinates
+    double mBaseTileSide = 0;  //!< Length of tile side at zoom level 0 in map coordinates
     QgsCoordinateReferenceSystem mCrs;  //!< CRS of the coordinates
 
 };

@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsalgorithmminimumenclosingcircle.h"
+#include "qgsvectorlayer.h"
 
 ///@cond PRIVATE
 
@@ -39,6 +40,11 @@ QString QgsMinimumEnclosingCircleAlgorithm::group() const
   return QObject::tr( "Vector geometry" );
 }
 
+QString QgsMinimumEnclosingCircleAlgorithm::groupId() const
+{
+  return QStringLiteral( "vectorgeometry" );
+}
+
 QString QgsMinimumEnclosingCircleAlgorithm::outputName() const
 {
   return QObject::tr( "Minimum enclosing circles" );
@@ -46,7 +52,7 @@ QString QgsMinimumEnclosingCircleAlgorithm::outputName() const
 
 QgsWkbTypes::Type QgsMinimumEnclosingCircleAlgorithm::outputWkbType( QgsWkbTypes::Type ) const
 {
-  return QgsWkbTypes::Polygon;
+  return QgsWkbTypes::Type::Polygon;
 }
 
 void QgsMinimumEnclosingCircleAlgorithm::initParameters( const QVariantMap & )
@@ -67,6 +73,18 @@ QgsMinimumEnclosingCircleAlgorithm *QgsMinimumEnclosingCircleAlgorithm::createIn
   return new QgsMinimumEnclosingCircleAlgorithm();
 }
 
+bool QgsMinimumEnclosingCircleAlgorithm::supportInPlaceEdit( const QgsMapLayer *l ) const
+{
+  const QgsVectorLayer *layer = qobject_cast< const QgsVectorLayer * >( l );
+  if ( !layer )
+    return false;
+
+  if ( ! QgsProcessingFeatureBasedAlgorithm::supportInPlaceEdit( layer ) )
+    return false;
+  // (no Z no M)
+  return !( QgsWkbTypes::hasM( layer->wkbType() ) || QgsWkbTypes::hasZ( layer->wkbType() ) );
+}
+
 QgsFields QgsMinimumEnclosingCircleAlgorithm::outputFields( const QgsFields &inputFields ) const
 {
   QgsFields fields = inputFields;
@@ -81,7 +99,7 @@ bool QgsMinimumEnclosingCircleAlgorithm::prepareAlgorithm( const QVariantMap &pa
   return true;
 }
 
-QgsFeature QgsMinimumEnclosingCircleAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingFeedback * )
+QgsFeatureList QgsMinimumEnclosingCircleAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingContext &, QgsProcessingFeedback * )
 {
   QgsFeature f = feature;
   if ( f.hasGeometry() )
@@ -95,7 +113,14 @@ QgsFeature QgsMinimumEnclosingCircleAlgorithm::processFeature( const QgsFeature 
           << M_PI *radius *radius;
     f.setAttributes( attrs );
   }
-  return f;
+  else
+  {
+    QgsAttributes attrs = f.attributes();
+    attrs << QVariant()
+          << QVariant();
+    f.setAttributes( attrs );
+  }
+  return QgsFeatureList() << f;
 }
 
 ///@endcond

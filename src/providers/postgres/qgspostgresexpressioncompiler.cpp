@@ -17,8 +17,8 @@
 #include "qgssqlexpressioncompiler.h"
 #include "qgsexpressionnodeimpl.h"
 
-QgsPostgresExpressionCompiler::QgsPostgresExpressionCompiler( QgsPostgresFeatureSource *source )
-  : QgsSqlExpressionCompiler( source->mFields, QgsSqlExpressionCompiler::IntegerDivisionResultsInInteger )
+QgsPostgresExpressionCompiler::QgsPostgresExpressionCompiler( QgsPostgresFeatureSource *source, bool ignoreStaticNodes )
+  : QgsSqlExpressionCompiler( source->mFields, QgsSqlExpressionCompiler::IntegerDivisionResultsInInteger, ignoreStaticNodes )
   , mGeometryColumn( source->mGeometryColumn )
   , mSpatialColType( source->mSpatialColType )
   , mDetectedGeomType( source->mDetectedGeomType )
@@ -36,6 +36,18 @@ QString QgsPostgresExpressionCompiler::quotedIdentifier( const QString &identifi
 QString QgsPostgresExpressionCompiler::quotedValue( const QVariant &value, bool &ok )
 {
   ok = true;
+
+  // don't use the default QgsPostgresConn::quotedValue handling for double values -- for
+  // various reasons it returns them as string values!
+  switch ( value.type() )
+  {
+    case QVariant::Double:
+      return value.toString();
+
+    default:
+      break;
+  }
+
   return QgsPostgresConn::quotedValue( value );
 }
 
@@ -104,6 +116,9 @@ static const QMap<QString, QString> FUNCTION_NAMES_SQL_FUNCTIONS_MAP
   { "lower", "lower" },
   { "trim", "trim" },
   { "upper", "upper" },
+  { "make_date", "make_date" },
+  { "make_time", "make_time" },
+  { "make_datetime", "make_timestamp" },
 };
 
 QString QgsPostgresExpressionCompiler::sqlFunctionFromFunctionName( const QString &fnName ) const
@@ -144,8 +159,17 @@ QString QgsPostgresExpressionCompiler::castToInt( const QString &value ) const
   return QStringLiteral( "((%1)::int)" ).arg( value );
 }
 
+QString QgsPostgresExpressionCompiler::castToText( const QString &value ) const
+{
+  return QStringLiteral( "((%1)::text)" ).arg( value );
+}
+
 QgsSqlExpressionCompiler::Result QgsPostgresExpressionCompiler::compileNode( const QgsExpressionNode *node, QString &result )
 {
+  QgsSqlExpressionCompiler::Result staticRes = replaceNodeByStaticCachedValueIfPossible( node, result );
+  if ( staticRes != Fail )
+    return staticRes;
+
   switch ( node->nodeType() )
   {
     case QgsExpressionNode::ntFunction:
@@ -191,7 +215,7 @@ QgsSqlExpressionCompiler::Result QgsPostgresExpressionCompiler::compileNode( con
         return Complete;
       }
 #endif
-      FALLTHROUGH;
+      FALLTHROUGH
     }
 
     default:

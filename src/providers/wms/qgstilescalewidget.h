@@ -36,10 +36,11 @@ class QgsTileScaleWidget : public QWidget, private Ui::QgsTileScaleWidget
     void scaleChanged( double );
     void mSlider_valueChanged( int );
     void scaleEnabled( bool );
+    void locationChanged( Qt::DockWidgetArea area );
 
   private:
-    QgsTileScaleWidget( QgsMapCanvas *mapCanvas, QWidget *parent = nullptr, Qt::WindowFlags f = 0 );
-    ~QgsTileScaleWidget() = default;
+    QgsTileScaleWidget( QgsMapCanvas *mapCanvas, QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags() );
+    ~QgsTileScaleWidget() override = default;
 
     QgsMapCanvas *mMapCanvas = nullptr;
     QList<double> mResolutions;

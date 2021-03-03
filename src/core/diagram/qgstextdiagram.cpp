@@ -73,8 +73,8 @@ QString QgsTextDiagram::diagramName() const
 
 QSizeF QgsTextDiagram::diagramSize( const QgsAttributes &attributes, const QgsRenderContext &c, const QgsDiagramSettings &s )
 {
-  Q_UNUSED( c );
-  Q_UNUSED( attributes );
+  Q_UNUSED( c )
+  Q_UNUSED( attributes )
 
   return s.size;
 }
@@ -174,19 +174,32 @@ void QgsTextDiagram::renderDiagram( const QgsFeature &feature, QgsRenderContext 
         QLineF verticalLine( baseX + w / nCategories * i, baseY + h, baseX + w / nCategories * i, baseY );
         if ( baseX + w / nCategories * i < baseX + w / 2.0 )
         {
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
           verticalLine.intersect( triangleEdgeLeft, &intersectionPoint1 );
+#else
+          verticalLine.intersects( triangleEdgeLeft, &intersectionPoint1 );
+#endif
         }
         else
         {
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
           verticalLine.intersect( triangleEdgeRight, &intersectionPoint1 );
+#else
+          verticalLine.intersects( triangleEdgeRight, &intersectionPoint1 );
+#endif
         }
         p->drawLine( QPointF( baseX + w / nCategories * i, baseY + h ), intersectionPoint1 );
       }
       else //vertical
       {
         QLineF horizontalLine( baseX, baseY + h / nCategories * i, baseX + w, baseY + h / nCategories * i );
+#if QT_VERSION < QT_VERSION_CHECK(5, 14, 0)
         horizontalLine.intersect( triangleEdgeLeft, &intersectionPoint1 );
         horizontalLine.intersect( triangleEdgeRight, &intersectionPoint2 );
+#else
+        horizontalLine.intersects( triangleEdgeLeft, &intersectionPoint1 );
+        horizontalLine.intersects( triangleEdgeRight, &intersectionPoint2 );
+#endif
         p->drawLine( intersectionPoint1, intersectionPoint2 );
       }
     }
@@ -207,8 +220,8 @@ void QgsTextDiagram::renderDiagram( const QgsFeature &feature, QgsRenderContext 
     QgsExpression *expression = getExpression( s.categoryAttributes.at( i ), expressionContext );
     QString val = expression->evaluate( &expressionContext ).toString();
 
-    //find out dimesions
-    double textWidth = fontMetrics.width( val );
+    //find out dimensions
+    double textWidth = fontMetrics.horizontalAdvance( val );
     double textHeight = fontMetrics.height();
 
     mPen.setColor( s.categoryColors.at( i ) );

@@ -28,7 +28,7 @@ class CharacterWidget;
 
 /**
  * \ingroup gui
- * A dialog for selecting a single character from a single font
+ * \brief A dialog for selecting a single character from a single font
   */
 
 class GUI_EXPORT QgsCharacterSelectorDialog : public QDialog, private Ui::QgsCharacterSelectorBase
@@ -39,7 +39,13 @@ class GUI_EXPORT QgsCharacterSelectorDialog : public QDialog, private Ui::QgsCha
     QgsCharacterSelectorDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
   public slots:
-    const QChar &selectCharacter( bool *gotChar, const QFont &font, const QString &style );
+
+    /**
+     * Opens the dialog modally and returns when the user has selected a character.
+     *
+     * If \a initialSelection is specified, then that character will be initially selected in the dialog.
+     */
+    QChar selectCharacter( bool *gotChar, const QFont &font, const QString &style, QChar initialSelection = QChar() );
 
   private slots:
     void setCharacter( QChar chr );

@@ -51,7 +51,7 @@ class QgsAuthPkcs12Edit : public QgsAuthMethodEdit, private Ui::QgsAuthPkcs12Edi
 
   private slots:
     void clearPkiMessage( QLineEdit *lineedit );
-    void writePkiMessage( QLineEdit *lineedit, const QString &msg, Validity valid = Unknown );
+    void writePkiMessage( QLineEdit *lineedit, const QString &msg, QgsAuthPkcs12Edit::Validity valid = Unknown );
 
     void clearPkcs12BundlePath();
     void clearPkcs12BundlePass();
@@ -67,7 +67,7 @@ class QgsAuthPkcs12Edit : public QgsAuthMethodEdit, private Ui::QgsAuthPkcs12Edi
     bool populateCas( );
 
     QgsStringMap mConfigMap;
-    bool mValid = 0;
+    bool mValid = false;
 };
 
 #endif // QGSAUTHPKCS12EDIT_H

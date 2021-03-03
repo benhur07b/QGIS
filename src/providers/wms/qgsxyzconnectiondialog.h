@@ -23,21 +23,29 @@
 
 struct QgsXyzConnection;
 
+class QgsXyzSourceWidget;
 
 class QgsXyzConnectionDialog : public QDialog, public Ui::QgsXyzConnectionDialog
 {
     Q_OBJECT
   public:
-    explicit QgsXyzConnectionDialog( QWidget *parent = 0 );
+    explicit QgsXyzConnectionDialog( QWidget *parent = nullptr );
 
     void setConnection( const QgsXyzConnection &conn );
 
     QgsXyzConnection connection() const;
 
-  private:
+    void accept() override;
 
+  private slots:
+    //! Updates state of the OK button depending of the filled fields
+    void updateOkButtonState();
+
+  private:
     QString mBaseKey;
     QString mCredentialsBaseKey;
+
+    QgsXyzSourceWidget *mSourceWidget = nullptr;
 };
 
 #endif // QGSXYZCONNECTIONDIALOG_H

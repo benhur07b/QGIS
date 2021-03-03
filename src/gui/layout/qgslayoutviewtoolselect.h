@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTVIEWTOOLSELECT_H
 #define QGSLAYOUTVIEWTOOLSELECT_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtool.h"
 #include "qgslayoutviewrubberband.h"
@@ -26,7 +26,7 @@ class QgsLayoutMouseHandles;
 
 /**
  * \ingroup gui
- * Layout view tool for selecting items in the layout.
+ * \brief Layout view tool for selecting items in the layout.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
@@ -40,6 +40,7 @@ class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
      * Constructor for QgsLayoutViewToolSelect.
      */
     QgsLayoutViewToolSelect( QgsLayoutView *view SIP_TRANSFERTHIS );
+    ~QgsLayoutViewToolSelect() override;
 
     void layoutPressEvent( QgsLayoutViewMouseEvent *event ) override;
     void layoutMoveEvent( QgsLayoutViewMouseEvent *event ) override;
@@ -57,6 +58,7 @@ class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
     SIP_SKIP QgsLayoutMouseHandles *mouseHandles();
     ///@endcond
 
+    //! Sets the a \a layout.
     void setLayout( QgsLayout *layout );
 
   private:
@@ -72,7 +74,7 @@ class GUI_EXPORT QgsLayoutViewToolSelect : public QgsLayoutViewTool
     //! Start of rubber band creation
     QPointF mRubberBandStartPos;
 
-    QgsLayoutMouseHandles *mMouseHandles = nullptr; //owned by scene
+    QPointer< QgsLayoutMouseHandles > mMouseHandles; //owned by scene
 };
 
 #endif // QGSLAYOUTVIEWTOOLSELECT_H

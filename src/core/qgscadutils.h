@@ -25,7 +25,7 @@ class QgsSnappingUtils;
 
 /**
  * \ingroup core
- * The QgsCadUtils class provides routines for CAD editing.
+ * \brief The QgsCadUtils class provides routines for CAD editing.
  *
  * \since QGIS 3.0
  */
@@ -53,7 +53,7 @@ class CORE_EXPORT QgsCadUtils
     //! Structure defining all constraints for alignMapPoint() method
     struct AlignMapPointContext
     {
-      //! Snapping utils that will be used to snap point to map. Must not be null
+      //! Snapping utils that will be used to snap point to map. Must not be NULLPTR.
       QgsSnappingUtils *snappingUtils = nullptr;
       //! Map units/pixel ratio from map canvas. Needed for
       double mapUnitsPerPixel;
@@ -92,11 +92,20 @@ class CORE_EXPORT QgsCadUtils
       //! map point aligned according to the constraints
       QgsPointXY finalMapPoint;
 
-      //! Snapped segment - only valid if actually used for something
+      /**
+       * Snapped point - only valid if actually used for something
+       * \since QGIS 3.14
+       */
+      QgsPointLocator::Match snapMatch;
+
+      /**
+       * Snapped segment - only valid if actually used for something
+       * \deprecated will be removed in QGIS 4.0 - use snapMatch instead
+       */
       QgsPointLocator::Match edgeMatch;
 
       //! Angle (in degrees) to which we have soft-locked ourselves (if not set it is -1)
-      int softLockCommonAngle;
+      double softLockCommonAngle;
     };
 
     /**

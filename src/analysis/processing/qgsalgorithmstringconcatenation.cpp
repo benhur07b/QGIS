@@ -26,7 +26,7 @@ QString QgsStringConcatenationAlgorithm::name() const
 
 QgsProcessingAlgorithm::Flags QgsStringConcatenationAlgorithm::flags() const
 {
-  return FlagHideFromToolbox;
+  return FlagHideFromToolbox | FlagSkipGenericModelLogging;
 }
 
 QString QgsStringConcatenationAlgorithm::displayName() const
@@ -41,7 +41,12 @@ QStringList QgsStringConcatenationAlgorithm::tags() const
 
 QString QgsStringConcatenationAlgorithm::group() const
 {
-  return QObject::tr( "Modeler tool" );
+  return QObject::tr( "Modeler tools" );
+}
+
+QString QgsStringConcatenationAlgorithm::groupId() const
+{
+  return QStringLiteral( "modelertools" );
 }
 
 QString QgsStringConcatenationAlgorithm::shortHelpString() const
@@ -67,7 +72,7 @@ QVariantMap QgsStringConcatenationAlgorithm::processAlgorithm( const QVariantMap
   QString input_2 = parameterAsString( parameters, QStringLiteral( "INPUT_2" ), context );
 
   QVariantMap outputs;
-  outputs.insert( QStringLiteral( "CONCATENATION" ), input_1 + input_2 );
+  outputs.insert( QStringLiteral( "CONCATENATION" ), QString( input_1 + input_2 ) );
   return outputs;
 }
 

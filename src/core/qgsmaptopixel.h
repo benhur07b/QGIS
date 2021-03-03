@@ -22,14 +22,16 @@
 #include <QTransform>
 #include <vector>
 #include "qgsunittypes.h"
-#include <cassert>
+#include "qgspointxy.h"
 
-class QgsPointXY;
+#include <cassert>
+#include <memory>
+
 class QPoint;
 
 /**
  * \ingroup core
-  * Perform transforms between map coordinates and device coordinates.
+  * \brief Perform transforms between map coordinates and device coordinates.
   *
   * This class can convert device coordinates to map coordinates and vice versa.
   */
@@ -73,32 +75,68 @@ class CORE_EXPORT QgsMapToPixel
     QgsMapToPixel();
 
     /**
-     * Transform the point from map (world) coordinates to device coordinates
+     * Transform the point \a p from map (world) coordinates to device coordinates.
      * \param p Point to transform
      * \returns QgsPointXY in device coordinates
      */
-    QgsPointXY transform( const QgsPointXY &p ) const;
+    QgsPointXY transform( const QgsPointXY &p ) const
+    {
+      qreal x = p.x();
+      qreal y = p.y();
+      transformInPlace( x, y );
+      return QgsPointXY( x, y );
+    }
 
-    void transform( QgsPointXY *p ) const;
+    /**
+     * Transform the point \a p from map (world) coordinates to device coordinates in place.
+     */
+    void transform( QgsPointXY *p ) const
+    {
+      qreal x = p->x();
+      qreal y = p->y();
+      transformInPlace( x, y );
+      p->set( x, y );
+    }
 
     /**
      * Transform the point specified by x,y from map (world)
      * coordinates to device coordinates
-     * \param x x cordinate o point to transform
+     * \param x x coordinate o point to transform
      * \param y y coordinate of point to transform
      * \returns QgsPointXY in device coordinates
      */
-    QgsPointXY transform( qreal x, qreal y ) const;
+    QgsPointXY transform( qreal x, qreal y ) const
+    {
+      transformInPlace( x, y );
+      return QgsPointXY( x, y );
+    }
 
     /**
-     * Transform device coordinates to map coordinates. Modifies the
+     * Transforms device coordinates to map coordinates. Modifies the
      * given coordinates in place. Intended as a fast way to do the
      * transform.
      */
-    void transformInPlace( double &x, double &y ) const;
+    void transformInPlace( double &x, double &y ) const
+    {
+      qreal mx, my;
+      mMatrix.map( static_cast< qreal >( x ), static_cast< qreal >( y ), &mx, &my );
+      x = mx;
+      y = my;
+    }
 
-    //! \note not available in Python bindings
-    void transformInPlace( float &x, float &y ) const SIP_SKIP;
+    /**
+     * Transforms device coordinates to map coordinates. Modifies the
+     * given coordinates in place. Intended as a fast way to do the
+     * transform.
+     * \note Not available in Python bindings
+     */
+    void transformInPlace( float &x, float &y ) const SIP_SKIP
+    {
+      double mx = x, my = y;
+      transformInPlace( mx, my );
+      x = mx;
+      y = my;
+    }
 
 #ifndef SIP_RUN
 
@@ -117,19 +155,42 @@ class CORE_EXPORT QgsMapToPixel
     }
 #endif
 
-    QgsPointXY toMapCoordinates( int x, int y ) const;
+    //! Transform device coordinates to map (world) coordinates
+    QgsPointXY toMapCoordinates( int x, int y ) const
+    {
+      return toMapCoordinates( static_cast<double>( x ), static_cast<double>( y ) );
+    }
 
     //! Transform device coordinates to map (world) coordinates
-    QgsPointXY toMapCoordinatesF( double x, double y ) const;
+    QgsPointXY toMapCoordinates( double x, double y ) const SIP_PYNAME( toMapCoordinatesF )
+    {
+      bool invertible;
+      QTransform matrix = mMatrix.inverted( &invertible );
+      assert( invertible );
+      qreal mx, my;
+      matrix.map( static_cast< qreal >( x ), static_cast< qreal >( y ), &mx, &my );
+      return QgsPointXY( mx, my );
+    }
 
     /**
      * Transform device coordinates to map (world) coordinates
      * \param p Point to be converted to map cooordinates
      * \returns QgsPointXY in map coorndiates
      */
-    QgsPointXY toMapCoordinates( QPoint p ) const;
+    QgsPointXY toMapCoordinates( QPoint p ) const
+    {
+      QgsPointXY mapPt = toMapCoordinates( static_cast<double>( p.x() ), static_cast<double>( p.y() ) );
+      return QgsPointXY( mapPt );
+    }
 
-    QgsPointXY toMapPoint( double x, double y ) const;
+    /**
+     * Transform device coordinates to map (world) coordinates
+     * \deprecated since QGIS 3.4 use toMapCoordinates instead
+     */
+    Q_DECL_DEPRECATED QgsPointXY toMapPoint( double x, double y ) const SIP_DEPRECATED
+    {
+      return toMapCoordinates( x, y );
+    }
 
     /**
      * Set map units per pixel
@@ -137,21 +198,21 @@ class CORE_EXPORT QgsMapToPixel
      */
     void setMapUnitsPerPixel( double mapUnitsPerPixel );
 
-    //! Return current map units per pixel
-    double mapUnitsPerPixel() const;
+    //! Returns current map units per pixel
+    double mapUnitsPerPixel() const { return mMapUnitsPerPixel; }
 
     /**
-     * Return current map width in pixels
+     * Returns current map width in pixels
      * The information is only known if setRotation was used
      * \since QGIS 2.8
      */
-    int mapWidth() const;
+    int mapWidth() const { return mWidth; }
 
     /**
-     * Return current map height in pixels
+     * Returns current map height in pixels
      * \since QGIS 2.8
      */
-    int mapHeight() const;
+    int mapHeight() const { return mHeight; }
 
     /**
      * Set map rotation in degrees (clockwise)
@@ -163,10 +224,10 @@ class CORE_EXPORT QgsMapToPixel
     void setMapRotation( double degrees, double cx, double cy );
 
     /**
-     * Return current map rotation in degrees
+     * Returns current map rotation in degrees (clockwise)
      * \since QGIS 2.8
      */
-    double mapRotation() const;
+    double mapRotation() const { return mRotation; }
 
     /**
      * Set parameters for use in transforming coordinates
@@ -183,6 +244,9 @@ class CORE_EXPORT QgsMapToPixel
     //! String representation of the parameters used in the transform
     QString showParameters() const;
 
+    /**
+     * Returns a QTransform encapsulating the map to pixel conversion.
+     */
     QTransform transform() const;
 
     /**
@@ -199,6 +263,23 @@ class CORE_EXPORT QgsMapToPixel
      */
     double yCenter() const { return mYCenter; }
 
+    bool operator==( const QgsMapToPixel &other ) const
+    {
+      return mMapUnitsPerPixel == other.mMapUnitsPerPixel
+             && mWidth == other.mWidth
+             && mHeight == other.mHeight
+             && mRotation == other.mRotation
+             && mXCenter == other.mXCenter
+             && mYCenter == other.mYCenter
+             && mXMin == other.mXMin
+             && mYMin == other.mYMin;
+    }
+
+    bool operator!=( const QgsMapToPixel &other ) const
+    {
+      return !( *this == other );
+    }
+
   private:
     double mMapUnitsPerPixel = 1;
     int mWidth = 1;
@@ -206,8 +287,8 @@ class CORE_EXPORT QgsMapToPixel
     double mRotation = 0.0;
     double mXCenter = 0.5;
     double mYCenter = 0.5;
-    double xMin = 0;
-    double yMin = 0;
+    double mXMin = 0;
+    double mYMin = 0;
     QTransform mMatrix;
 
     bool updateMatrix();

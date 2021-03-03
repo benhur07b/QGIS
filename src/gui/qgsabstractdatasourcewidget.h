@@ -20,15 +20,17 @@
 #define QGSABSTRACTDATASOURCEWIDGET_H
 
 #include "qgis_sip.h"
-#include "qgis.h"
 #include "qgis_gui.h"
 
+#include "qgsproviderguimetadata.h"
 #include "qgsproviderregistry.h"
 #include "qgsguiutils.h"
 #include <QDialog>
 #include <QDialogButtonBox>
 
 class QgsMapCanvas;
+class QgsBrowserModel;
+
 
 /**
  * \ingroup gui
@@ -44,15 +46,19 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
 
   public:
 
-    //! Destructor
-    ~QgsAbstractDataSourceWidget() = default;
-
     /**
      * Store a pointer to the map canvas to retrieve extent and CRS
      * Used to select an appropriate CRS and possibly to retrieve data only in the current extent
      */
     void setMapCanvas( const QgsMapCanvas *mapCanvas );
 
+    /**
+     * Sets a browser \a model to use with the widget.
+     *
+     * \see browserModel()
+     * \since QGIS 3.18
+     */
+    void setBrowserModel( QgsBrowserModel *model );
 
   public slots:
 
@@ -67,13 +73,18 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
      * Concrete classes should implement the right behavior depending on the layer
      * being added.
      */
-    virtual void addButtonClicked() { }
+    virtual void addButtonClicked();
 
     /**
-     * Triggered when the dialog is accepted, call addButtonClicked() and
-     * emit the accepted() signal
+     * Called when this source select widget is being shown in a "new and clean" dialog.
+     *
+     * The data source manager recycles existing source select widgets but will call
+     * this method on every reopening.
+     * This should clear any selection that has previously been done.
+     *
+     * \since QGIS 3.10
      */
-    virtual void okButtonClicked();
+    virtual void reset();
 
   signals:
 
@@ -90,12 +101,37 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
     void addRasterLayer( const QString &rasterLayerPath, const QString &baseName, const QString &providerKey );
 
     /**
+     * Emitted when one or more GDAL supported layers are selected for addition
+     * \param layersList list of layers protocol URIs
+     * \since 3.20
+     */
+    void addRasterLayers( const QStringList &layersList );
+
+    /**
      * Emitted when a vector layer has been selected for addition.
      *
      * If \a providerKey is not specified, the default provider key associated with the source
      * will be used.
      */
     void addVectorLayer( const QString &uri, const QString &layerName, const QString &providerKey = QString() );
+
+    /**
+     * Emitted when a mesh layer has been selected for addition.
+     * \since QGIS 3.4
+     */
+    void addMeshLayer( const QString &url, const QString &baseName, const QString &providerKey );
+
+    /**
+     * Emitted when a vector tile layer has been selected for addition.
+     * \since QGIS 3.14
+     */
+    void addVectorTileLayer( const QString &url, const QString &baseName );
+
+    /**
+     * Emitted when a point cloud layer has been selected for addition.
+     * \since QGIS 3.18
+     */
+    void addPointCloudLayer( const QString &url, const QString &baseName, const QString &providerKey );
 
     /**
      * Emitted when one or more OGR supported layers are selected for addition
@@ -114,9 +150,12 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
      */
     void replaceVectorLayer( const QString &oldId, const QString &source, const QString &name, const QString &provider );
 
-
-    //! Emitted when a progress dialog is shown by the provider dialog
-    void progress( int, int );
+    /**
+     * Emitted when a progress dialog is shown by the provider dialog.
+     *
+     * \deprecated Since QGIS 3.4 this signal is no longer used. Use QgsProxyProgressTask instead to show progress reports.
+     */
+    Q_DECL_DEPRECATED void progress( int, int ) SIP_DEPRECATED;
 
     //! Emitted when a progress dialog is shown by the provider dialog
     void progressMessage( QString message );
@@ -124,28 +163,42 @@ class GUI_EXPORT QgsAbstractDataSourceWidget : public QDialog
     //! Emitted when the ok/add buttons should be enabled/disabled
     void enableButtons( bool enable );
 
+    /**
+     * Emitted when a \a message with \a title and \a level must be shown to the user using the parent visible message bar
+     * \since QGIS 3.14
+     */
+    void pushMessage( const QString &title, const QString &message, const Qgis::MessageLevel level = Qgis::MessageLevel::Info );
+
 
   protected:
 
     //! Constructor
     QgsAbstractDataSourceWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
 
-    //! Return the widget mode
+    //! Returns the widget mode
     QgsProviderRegistry::WidgetMode widgetMode() const;
 
-    //! Return the map canvas (can be null)
+    //! Returns the map canvas (can be NULLPTR)
     const QgsMapCanvas *mapCanvas() const;
+
+    /**
+     * Returns the associated browser model (may be NULLPTR).
+     *
+     * \since QGIS 3.18
+     */
+    QgsBrowserModel *browserModel();
 
     //! Connect the ok and apply/add buttons to the slots
     void setupButtons( QDialogButtonBox *buttonBox );
 
-    //! Return the add Button
+    //! Returns the add Button
     QPushButton *addButton( ) const { return mAddButton; }
 
   private:
     QPushButton *mAddButton  = nullptr;
     QgsProviderRegistry::WidgetMode mWidgetMode;
     QgsMapCanvas const *mMapCanvas = nullptr;
+    QgsBrowserModel *mBrowserModel = nullptr;
 
 };
 

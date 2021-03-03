@@ -19,7 +19,7 @@
 #define QGSFORMANNOTATION_H
 
 #include "qgsannotation.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsfeature.h"
 #include <QWidget>
 #include "qgis_gui.h"
@@ -27,7 +27,7 @@
 /**
  * \class QgsFormAnnotation
  * \ingroup gui
- * An annotation item that embeds a designer form showing the feature attribute
+ * \brief An annotation item that embeds a designer form showing the feature attribute
  * \since QGIS 3.0
 */
 class GUI_EXPORT QgsFormAnnotation: public QgsAnnotation
@@ -38,7 +38,7 @@ class GUI_EXPORT QgsFormAnnotation: public QgsAnnotation
     /**
      * Constructor for QgsFormAnnotation.
      */
-    QgsFormAnnotation( QObject *parent SIP_TRANSFERTHIS = 0 );
+    QgsFormAnnotation( QObject *parent SIP_TRANSFERTHIS = nullptr );
 
     QgsFormAnnotation *clone() const override SIP_FACTORY;
 
@@ -58,8 +58,8 @@ class GUI_EXPORT QgsFormAnnotation: public QgsAnnotation
      */
     QString designerForm() const { return mDesignerForm; }
 
-    virtual void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
-    virtual void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
+    void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
+    void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
 
     void setAssociatedFeature( const QgsFeature &feature ) override;
 

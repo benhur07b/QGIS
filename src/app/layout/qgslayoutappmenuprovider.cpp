@@ -18,6 +18,9 @@
 #include "qgslayoutitemgroup.h"
 #include "qgslayoutdesignerdialog.h"
 #include "qgslayout.h"
+#include "qgslayoutundostack.h"
+#include "qgslayoutpagecollection.h"
+#include "qgslayoutguidewidget.h"
 #include <QMenu>
 #include <QMessageBox>
 
@@ -76,18 +79,59 @@ QMenu *QgsLayoutAppMenuProvider::createContextMenu( QWidget *parent, QgsLayout *
 
     if ( addedGroupAction )
       menu->addSeparator();
+
+    QAction *copyAction = new QAction( tr( "Copy" ), menu );
+    connect( copyAction, &QAction::triggered, this, [this]()
+    {
+      mDesigner->view()->copySelectedItems( QgsLayoutView::ClipboardCopy );
+    } );
+    menu->addAction( copyAction );
+    QAction *cutAction = new QAction( tr( "Cut" ), menu );
+    connect( cutAction, &QAction::triggered, this, [this]()
+    {
+      mDesigner->view()->copySelectedItems( QgsLayoutView::ClipboardCut );
+    } );
+    menu->addAction( cutAction );
+    menu->addSeparator();
+  }
+  else if ( mDesigner->view()->hasItemsInClipboard() )
+  {
+    QAction *pasteAction = new QAction( tr( "Paste" ), menu );
+    connect( pasteAction, &QAction::triggered, this, [this, menu]()
+    {
+      QPointF pt = mDesigner->view()->mapToScene( mDesigner->view()->mapFromGlobal( menu->pos() ) );
+      mDesigner->view()->pasteItems( pt );
+    } );
+    menu->addAction( pasteAction );
+    menu->addSeparator();
   }
 
   // is a page under the mouse?
   QgsLayoutItemPage *page = layout->pageCollection()->pageAtPoint( layoutPoint );
   if ( page )
   {
+    const int pageNumber = layout->pageCollection()->pageNumber( page );
     QAction *pagePropertiesAction = new QAction( tr( "Page Properties…" ), menu );
     connect( pagePropertiesAction, &QAction::triggered, this, [this, page]()
     {
-      mDesigner->showItemOptions( page );
+      mDesigner->showItemOptions( page, true );
     } );
     menu->addAction( pagePropertiesAction );
+
+    if ( mDesigner->guideWidget() )
+    {
+      QAction *manageGuidesAction = new QAction( tr( "Manage Guides for Page…" ), menu );
+      QPointer< QgsLayoutGuideWidget > guideManager( mDesigner->guideWidget() );
+      connect( manageGuidesAction, &QAction::triggered, this, [this, pageNumber, guideManager]()
+      {
+        if ( guideManager )
+        {
+          guideManager->setCurrentPage( pageNumber );
+          mDesigner->showGuideDock( true );
+        }
+      } );
+      menu->addAction( manageGuidesAction );
+    }
     QAction *removePageAction = new QAction( tr( "Remove Page" ), menu );
     connect( removePageAction, &QAction::triggered, this, [layout, page]()
     {
@@ -98,7 +142,22 @@ QMenu *QgsLayoutAppMenuProvider::createContextMenu( QWidget *parent, QgsLayout *
         layout->pageCollection()->deletePage( page );
       }
     } );
+    if ( layout->pageCollection()->pageCount() < 2 )
+      removePageAction->setEnabled( false );
     menu->addAction( removePageAction );
+
+    menu->addSeparator();
+  }
+
+  if ( !selectedItems.empty() )
+  {
+    QAction *itemPropertiesAction = new QAction( tr( "Item Properties…" ), menu );
+    QgsLayoutItem *item = selectedItems.at( 0 );
+    connect( itemPropertiesAction, &QAction::triggered, this, [this, item]()
+    {
+      mDesigner->showItemOptions( item, true );
+    } );
+    menu->addAction( itemPropertiesAction );
   }
 
   return menu;

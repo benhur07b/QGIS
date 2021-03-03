@@ -58,7 +58,7 @@ class QgsGrassModuleOptions
 
     virtual ~QgsGrassModuleOptions() = default;
 
-    //! Get module options as list of arguments for QProcess
+    //! Gets module options as list of arguments for QProcess
     virtual QStringList arguments();
 
     //! Check if output exists
@@ -74,13 +74,13 @@ class QgsGrassModuleOptions
     //  Returns empty string or error message
     virtual QStringList ready() { return QStringList() ; }
 
-    //! Get list of current output maps
+    //! Gets list of current output maps
     virtual QStringList output( int type )
-    { Q_UNUSED( type ); return QStringList(); }
+    { Q_UNUSED( type ) return QStringList(); }
 
     //! Has any output
     virtual bool hasOutput( int type )
-    { Q_UNUSED( type ); return true; }
+    { Q_UNUSED( type ) return true; }
 
     //! Has raster input or output
     virtual bool usesRegion() { return false; }
@@ -93,13 +93,13 @@ class QgsGrassModuleOptions
     // return list of input maps (both raster and vector) outside region
     virtual QStringList checkRegion() { return QStringList() ; }
 
-    //! Get region covering all input maps
+    //! Gets region covering all input maps
     // \param all true all input maps
     // \param all false only the mas which were switched on
     virtual bool inputRegion( struct Cell_head *window, QgsCoordinateReferenceSystem &crs, bool all )
-    { Q_UNUSED( window ); Q_UNUSED( crs ); Q_UNUSED( all ); return false; }
+    { Q_UNUSED( window ) Q_UNUSED( crs ); Q_UNUSED( all ); return false; }
 
-    // ! Flag names
+    //! Flag names
     virtual QStringList flagNames() { return QStringList() ; }
 
     QStringList errors() { return mErrors; }
@@ -148,15 +148,15 @@ class QgsGrassModuleStandardOptions: public QWidget, public QgsGrassModuleOption
       QgsGrassTools *tools, QgsGrassModule *module,
       QgisInterface *iface,
       QString xname, QDomElement confDocElem,
-      bool direct, QWidget *parent = 0, Qt::WindowFlags f = 0 );
+      bool direct, QWidget *parent = nullptr, Qt::WindowFlags f = nullptr );
 
-    //! Get module options as list of arguments for QProcess
+    //! Gets module options as list of arguments for QProcess
     QStringList arguments() override;
 
-    // ! Get item by ID
+    //! Get item by ID
     QgsGrassModuleParam *item( QString id );
 
-    // ! Get item by key
+    //! Get item by key
     QgsGrassModuleParam *itemByKey( QString key );
 
     // Reimplemented methods from QgsGrassModuleOptions
@@ -173,7 +173,7 @@ class QgsGrassModuleStandardOptions: public QWidget, public QgsGrassModuleOption
     QStringList flagNames() override { return mFlagNames; }
 
   public slots:
-    // ! Show/hide advanced options
+    //! Show/hide advanced options
     void switchAdvanced();
 
   private:
@@ -185,8 +185,8 @@ class QgsGrassModuleStandardOptions: public QWidget, public QgsGrassModuleOption
     QDomDocument readInterfaceDescription( const QString &xname, QStringList &errors );
 
     /**
-     * Get region for currently selected map. It will show warning dialog if region could not be read.
-     * \returns true if region was successfully read
+     * Gets region for currently selected map. It will show warning dialog if region could not be read.
+     * \returns TRUE if region was successfully read
      */
     bool getCurrentMapRegion( QgsGrassModuleInput *param, struct Cell_head *window );
 
@@ -206,10 +206,10 @@ class QgsGrassModuleStandardOptions: public QWidget, public QgsGrassModuleOption
     //! List of all flags. Necessary for scripts.
     QStringList mFlagNames;
 
-    // ! Advanced options switch button
+    //! Advanced options switch button
     QPushButton mAdvancedPushButton;
 
-    // ! Advanced options frame
+    //! Advanced options frame
     QFrame mAdvancedFrame;
 };
 

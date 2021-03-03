@@ -21,10 +21,6 @@ __author__ = 'Médéric Ribreux'
 __date__ = 'January 2016'
 __copyright__ = '(C) 2016, Médéric Ribreux'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsProcessing,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterMultipleLayers,
@@ -33,7 +29,6 @@ from qgis.core import (QgsProcessing,
                        QgsProcessingParameterString,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterBoolean,
-                       QgsProcessingOutputFolder,
                        QgsProcessingParameterFileDestination,
                        QgsProcessingParameterFolderDestination)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
@@ -42,7 +37,6 @@ from processing.tools.system import isWindows
 
 
 class retile(GdalAlgorithm):
-
     INPUT = 'INPUT'
     TILE_SIZE_X = 'TILE_SIZE_X'
     TILE_SIZE_Y = 'TILE_SIZE_Y'
@@ -53,6 +47,7 @@ class retile(GdalAlgorithm):
     FORMAT = 'FORMAT'
     RESAMPLING = 'RESAMPLING'
     OPTIONS = 'OPTIONS'
+    EXTRA = 'EXTRA'
     DATA_TYPE = 'DATA_TYPE'
     DELIMITER = 'DELIMITER'
     ONLY_PYRAMIDS = 'ONLY_PYRAMIDS'
@@ -66,11 +61,11 @@ class retile(GdalAlgorithm):
         super().__init__()
 
     def initAlgorithm(self, config=None):
-        self.methods = ((self.tr('Nearest neighbour'), 'near'),
+        self.methods = ((self.tr('Nearest Neighbour'), 'near'),
                         (self.tr('Bilinear'), 'bilinear'),
                         (self.tr('Cubic'), 'cubic'),
-                        (self.tr('Cubic spline'), 'cubicspline'),
-                        (self.tr('Lanczos windowed sinc'), 'lanczos'),)
+                        (self.tr('Cubic Spline'), 'cubicspline'),
+                        (self.tr('Lanczos Windowed Sinc'), 'lanczos'),)
 
         self.addParameter(QgsProcessingParameterMultipleLayers(self.INPUT,
                                                                self.tr('Input files'),
@@ -96,28 +91,35 @@ class retile(GdalAlgorithm):
                                                        minValue=0,
                                                        defaultValue=1))
 
-        params = []
-        params.append(QgsProcessingParameterCrs(self.SOURCE_CRS,
-                                                self.tr('Source coordinate reference system'),
-                                                optional=True))
-        params.append(QgsProcessingParameterEnum(self.RESAMPLING,
-                                                 self.tr('Resampling method'),
-                                                 options=[i[0] for i in self.methods],
-                                                 allowMultiple=False,
-                                                 defaultValue=0))
-        params.append(QgsProcessingParameterString(self.DELIMITER,
-                                                   self.tr('Column delimiter used in the CSV file'),
-                                                   defaultValue=';',
-                                                   optional=True))
+        params = [
+            QgsProcessingParameterCrs(self.SOURCE_CRS,
+                                      self.tr('Source coordinate reference system'),
+                                      optional=True,
+                                      ),
+            QgsProcessingParameterEnum(self.RESAMPLING,
+                                       self.tr('Resampling method'),
+                                       options=[i[0] for i in self.methods],
+                                       allowMultiple=False,
+                                       defaultValue=0),
+            QgsProcessingParameterString(self.DELIMITER,
+                                         self.tr('Column delimiter used in the CSV file'),
+                                         defaultValue=';',
+                                         optional=True)
 
+        ]
         options_param = QgsProcessingParameterString(self.OPTIONS,
-                                                     self.tr('Additional creation parameters'),
+                                                     self.tr('Additional creation options'),
                                                      defaultValue='',
                                                      optional=True)
         options_param.setMetadata({
             'widget_wrapper': {
                 'class': 'processing.algs.gdal.ui.RasterOptionsWidget.RasterOptionsWidgetWrapper'}})
         params.append(options_param)
+
+        params.append(QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True))
 
         params.append(QgsProcessingParameterEnum(self.DATA_TYPE,
                                                  self.tr('Output data type'),
@@ -139,8 +141,6 @@ class retile(GdalAlgorithm):
         self.addParameter(QgsProcessingParameterFolderDestination(self.OUTPUT,
                                                                   self.tr('Output directory')))
 
-        self.addOutput(QgsProcessingOutputFolder(self.OUTPUT, self.tr('Output directory')))
-
         output_csv_param = QgsProcessingParameterFileDestination(self.OUTPUT_CSV,
                                                                  self.tr('CSV file containing the tile(s) georeferencing information'),
                                                                  'CSV files (*.csv)',
@@ -157,26 +157,29 @@ class retile(GdalAlgorithm):
     def group(self):
         return self.tr('Raster miscellaneous')
 
+    def groupId(self):
+        return 'rastermiscellaneous'
+
     def commandName(self):
         return "gdal_retile"
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        arguments = []
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        arguments = [
+            '-ps',
+            str(self.parameterAsInt(parameters, self.TILE_SIZE_X, context)),
+            str(self.parameterAsInt(parameters, self.TILE_SIZE_Y, context)),
 
-        arguments.append('-ps')
-        arguments.append(str(self.parameterAsInt(parameters, self.TILE_SIZE_X, context)))
-        arguments.append(str(self.parameterAsInt(parameters, self.TILE_SIZE_Y, context)))
+            '-overlap',
+            str(self.parameterAsInt(parameters, self.OVERLAP, context)),
 
-        arguments.append('-overlap')
-        arguments.append(str(self.parameterAsInt(parameters, self.OVERLAP, context)))
-
-        arguments.append('-levels')
-        arguments.append(str(self.parameterAsInt(parameters, self.LEVELS, context)))
+            '-levels',
+            str(self.parameterAsInt(parameters, self.LEVELS, context))
+        ]
 
         crs = self.parameterAsCrs(parameters, self.SOURCE_CRS, context)
         if crs.isValid():
             arguments.append('-s_srs')
-            arguments.append(crs.authid())
+            arguments.append(GdalUtils.gdal_crs_string(crs))
 
         arguments.append('-r')
         arguments.append(self.methods[self.parameterAsEnum(parameters, self.RESAMPLING, context)][1])
@@ -186,13 +189,16 @@ class retile(GdalAlgorithm):
 
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         if options:
-            arguments.append('-co')
-            arguments.append(options)
+            arguments.extend(GdalUtils.parseCreationOptions(options))
 
-        if self.parameterAsBool(parameters, self.DIR_FOR_ROW, context):
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
+
+        if self.parameterAsBoolean(parameters, self.DIR_FOR_ROW, context):
             arguments.append('-pyramidOnly')
 
-        if self.parameterAsBool(parameters, self.ONLY_PYRAMIDS, context):
+        if self.parameterAsBoolean(parameters, self.ONLY_PYRAMIDS, context):
             arguments.append('-useDirForEachRow')
 
         csvFile = self.parameterAsFileOutput(parameters, self.OUTPUT_CSV, context)
@@ -202,7 +208,7 @@ class retile(GdalAlgorithm):
             delimiter = self.parameterAsString(parameters, self.DELIMITER, context)
             if delimiter:
                 arguments.append('-csvDelim')
-                arguments.append('"{}"'.format(delimiter))
+                arguments.append(delimiter)
 
         arguments.append('-targetDir')
         arguments.append(self.parameterAsString(parameters, self.OUTPUT, context))
@@ -210,12 +216,4 @@ class retile(GdalAlgorithm):
         layers = [l.source() for l in self.parameterAsLayerList(parameters, self.INPUT, context)]
         arguments.extend(layers)
 
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal_retile.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal_retile.py',
-                        GdalUtils.escapeAndJoin(arguments)]
-
-        return commands
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

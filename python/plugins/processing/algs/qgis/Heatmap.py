@@ -21,21 +21,19 @@ __author__ = 'Nyall Dawson'
 __date__ = 'November 2016'
 __copyright__ = '(C) 2016, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 from collections import OrderedDict
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsFeatureRequest,
+from qgis.core import (QgsApplication,
+                       QgsFeatureRequest,
                        QgsRasterFileWriter,
                        QgsProcessing,
                        QgsProcessingException,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterNumber,
+                       QgsProcessingParameterDistance,
                        QgsProcessingParameterField,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterDefinition,
@@ -49,7 +47,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class Heatmap(QgisAlgorithm):
-
     INPUT = 'INPUT'
     RADIUS = 'RADIUS'
     RADIUS_FIELD = 'RADIUS_FIELD'
@@ -61,13 +58,16 @@ class Heatmap(QgisAlgorithm):
     OUTPUT = 'OUTPUT'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'heatmap.png'))
+        return QgsApplication.getThemeIcon("/heatmap.svg")
 
     def tags(self):
         return self.tr('heatmap,kde,hotspot').split(',')
 
     def group(self):
         return self.tr('Interpolation')
+
+    def groupId(self):
+        return 'interpolation'
 
     def name(self):
         return 'heatmapkerneldensityestimation'
@@ -92,10 +92,9 @@ class Heatmap(QgisAlgorithm):
                                                               self.tr('Point layer'),
                                                               [QgsProcessing.TypeVectorPoint]))
 
-        self.addParameter(QgsProcessingParameterNumber(self.RADIUS,
-                                                       self.tr('Radius (layer units)'),
-                                                       QgsProcessingParameterNumber.Double,
-                                                       100.0, False, 0.0, 9999999999.99))
+        self.addParameter(QgsProcessingParameterDistance(self.RADIUS,
+                                                         self.tr('Radius'),
+                                                         100.0, self.INPUT, False, 0.0))
 
         radius_field_param = QgsProcessingParameterField(self.RADIUS_FIELD,
                                                          self.tr('Radius from field'),
@@ -109,16 +108,15 @@ class Heatmap(QgisAlgorithm):
 
         class ParameterHeatmapPixelSize(QgsProcessingParameterNumber):
 
-            def __init__(self, name='', description='', parent_layer=None, radius_param=None, radius_field_param=None, minValue=None, maxValue=None,
+            def __init__(self, name='', description='', parent_layer=None, radius_param=None, radius_field_param=None, minValue=None,
                          default=None, optional=False):
-                QgsProcessingParameterNumber.__init__(self, name, description, QgsProcessingParameterNumber.Double, default, optional, minValue, maxValue)
+                QgsProcessingParameterNumber.__init__(self, name, description, QgsProcessingParameterNumber.Double, default, optional, minValue)
                 self.parent_layer = parent_layer
                 self.radius_param = radius_param
                 self.radius_field_param = radius_field_param
 
             def clone(self):
-                copy = ParameterHeatmapPixelSize(self.name(), self.description(), self.parent_layer, self.radius_param, self.radius_field_param, self.minimum(), self.maximum(), self.defaultValue((), self.flags() & QgsProcessingParameterDefinition.FlagOptional))
-                return copy
+                return ParameterHeatmapPixelSize(self.name(), self.description(), self.parent_layer, self.radius_param, self.radius_field_param, self.minimum(), self.maximum(), self.defaultValue((), self.flags() & QgsProcessingParameterDefinition.FlagOptional))
 
         pixel_size_param = ParameterHeatmapPixelSize(self.PIXEL_SIZE,
                                                      self.tr('Output raster size'),
@@ -126,7 +124,6 @@ class Heatmap(QgisAlgorithm):
                                                      radius_param=self.RADIUS,
                                                      radius_field_param=self.RADIUS_FIELD,
                                                      minValue=0.0,
-                                                     maxValue=9999999999,
                                                      default=0.1)
         pixel_size_param.setMetadata({
             'widget_wrapper': {
@@ -172,6 +169,8 @@ class Heatmap(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
         radius = self.parameterAsDouble(parameters, self.RADIUS, context)
         kernel_shape = self.parameterAsEnum(parameters, self.KERNEL, context)

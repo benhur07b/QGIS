@@ -45,15 +45,14 @@ class QgsGrassModule : public QWidget, private  Ui::QgsGrassModuleBase
         bool direct = true;
         Description() = default;
         Description( QString lab, bool dir = false ): label( lab ), direct( dir ) { }
-        Description( const Description &desc ) { label = desc.label; direct = desc.direct; }
     };
 
     //! Constructor
     QgsGrassModule( QgsGrassTools *tools, QString moduleName, QgisInterface *iface,
-                    bool direct, QWidget *parent = 0, Qt::WindowFlags f = 0 );
+                    bool direct, QWidget *parent = nullptr, Qt::WindowFlags f = nullptr );
 
 
-    ~QgsGrassModule();
+    ~QgsGrassModule() override;
 
     QString translate( QString string );
 
@@ -72,33 +71,35 @@ class QgsGrassModule : public QWidget, private  Ui::QgsGrassModuleBase
     //! Returns pointer to QGIS interface
     QgisInterface *qgisIface();
 
-    // ! Options widget
+    //! Options widget
     QgsGrassModuleOptions *options() { return mOptions; }
 
-    // ! Get executable + arguments. Executable is returned as first string.
-    // On Window if the module is script the executable will be path to shell
-    // Returns empty list if not found.
+    /**
+     * Get executable + arguments. Executable is returned as first string.
+     * On Window if the module is script the executable will be path to shell
+     * Returns empty list if not found.
+     */
     static QStringList execArguments( QString module );
 
-    //! Get environment for process to start GRASS modules (set PATH)
+    //! Gets environment for process to start GRASS modules (set PATH)
     static QProcessEnvironment processEnvironment( bool direct );
 
     //! Returns true if module is direct
     bool isDirect() { return mDirect; }
 
-    //! Get name of library path environment variable
+    //! Gets name of library path environment variable
     static QString libraryPathVariable();
 
-    //! Set LD_LIBRARY_PATH or equivalent to GRASS Direct library
+    //! Sets LD_LIBRARY_PATH or equivalent to GRASS Direct library
     static void setDirectLibraryPath( QProcessEnvironment &environment );
 
     QStringList errors() { return mErrors; }
 
   signals:
-    // ! emitted when the module started
+    //! emitted when the module started
     void moduleStarted();
 
-    // ! emitted when the module finished
+    //! emitted when the module finished
     void moduleFinished();
 
   public slots:
@@ -131,7 +132,8 @@ class QgsGrassModule : public QWidget, private  Ui::QgsGrassModuleBase
     /**
      * Set progress bar or busy indicator if percent is 100
      * \param percent progress to show in %
-     * \param force to set progress for 100% */
+     * \param force to set progress for 100%
+    */
     void setProgress( int percent, bool force = false );
 
     //! Pointer to the QGIS interface object

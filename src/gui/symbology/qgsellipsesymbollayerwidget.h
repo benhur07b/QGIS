@@ -12,11 +12,11 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef QGSELLIPSESYMBOLLAYERV2WIDGET_H
-#define QGSELLIPSESYMBOLLAYERV2WIDGET_H
+#ifndef QGSELLIPSESYMBOLLAYERWIDGET_H
+#define QGSELLIPSESYMBOLLAYERWIDGET_H
 
 #include "ui_widget_ellipse.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgssymbollayerwidget.h"
 #include "qgis_gui.h"
 
@@ -37,7 +37,7 @@ class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, priva
      * \param vl associated vector layer
      * \param parent parent widget
      */
-    QgsEllipseSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsEllipseSymbolLayerWidget( QgsVectorLayer *vl, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Creates a new QgsSymbolLayerWidget.
@@ -46,8 +46,8 @@ class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, priva
     static QgsSymbolLayerWidget *create( QgsVectorLayer *vl ) SIP_FACTORY { return new QgsEllipseSymbolLayerWidget( vl ); }
 
     // from base class
-    virtual void setSymbolLayer( QgsSymbolLayer *layer ) override;
-    virtual QgsSymbolLayer *symbolLayer() override;
+    void setSymbolLayer( QgsSymbolLayer *layer ) override;
+    QgsSymbolLayer *symbolLayer() override;
 
   protected:
     QgsEllipseSymbolLayer *mLayer = nullptr;
@@ -77,4 +77,4 @@ class GUI_EXPORT QgsEllipseSymbolLayerWidget: public QgsSymbolLayerWidget, priva
     void setOffset();
 };
 
-#endif // QGSELLIPSESYMBOLLAYERV2WIDGET_H
+#endif // QGSELLIPSESYMBOLLAYERWIDGET_H

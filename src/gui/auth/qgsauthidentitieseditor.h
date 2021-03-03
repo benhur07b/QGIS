@@ -18,7 +18,7 @@
 #define QGSAUTHIDENTITIESEDITOR_H
 
 #include <QWidget>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QSslCertificate>
 
 #include "ui_qgsauthidentitieseditor.h"
@@ -29,7 +29,7 @@ class QgsMessageBar;
 
 /**
  * \ingroup gui
- * Widget for viewing and editing authentication identities database
+ * \brief Widget for viewing and editing authentication identities database
  */
 class GUI_EXPORT QgsAuthIdentitiesEditor : public QWidget, private Ui::QgsAuthIdentitiesEditor
 {
@@ -41,7 +41,7 @@ class GUI_EXPORT QgsAuthIdentitiesEditor : public QWidget, private Ui::QgsAuthId
      * Widget for editing authentication configurations directly in database
      * \param parent Parent widget
      */
-    explicit QgsAuthIdentitiesEditor( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsAuthIdentitiesEditor( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
   private slots:
     void populateIdentitiesView();

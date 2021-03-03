@@ -30,7 +30,10 @@
 //
 
 #include "qgscoordinatereferencesystem.h"
-#include <ogr_srs_api.h>
+
+#include <proj.h>
+#include "qgsprojutils.h"
+#include "qgsreadwritelocker.h"
 
 #ifdef DEBUG
 typedef struct OGRSpatialReferenceHS *OGRSpatialReferenceH;
@@ -43,7 +46,6 @@ class QgsCoordinateReferenceSystemPrivate : public QSharedData
   public:
 
     explicit QgsCoordinateReferenceSystemPrivate()
-      : mCRS( OSRNewSpatialReference( nullptr ) )
     {
     }
 
@@ -58,26 +60,23 @@ class QgsCoordinateReferenceSystemPrivate : public QSharedData
       , mSRID( other.mSRID )
       , mAuthId( other.mAuthId )
       , mIsValid( other.mIsValid )
-      , mCRS( nullptr )
-      , mValidationHint( other.mValidationHint )
-      , mWkt( other.mWkt )
+      , mPj()
       , mProj4( other.mProj4 )
+      , mWktPreferred( other.mWktPreferred )
       , mAxisInvertedDirty( other.mAxisInvertedDirty )
       , mAxisInverted( other.mAxisInverted )
+      , mProjObjects()
     {
-      if ( mIsValid )
-      {
-        mCRS = OSRClone( other.mCRS );
-      }
-      else
-      {
-        mCRS = OSRNewSpatialReference( nullptr );
-      }
     }
 
     ~QgsCoordinateReferenceSystemPrivate()
     {
-      OSRDestroySpatialReference( mCRS );
+      QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Read );
+      if ( !mProjObjects.empty() || mPj )
+      {
+        locker.changeMode( QgsReadWriteLocker::Write );
+        cleanPjObjects();
+      }
     }
 
     //! The internal sqlite3 srs.db primary key for this CRS
@@ -89,7 +88,7 @@ class QgsCoordinateReferenceSystemPrivate : public QSharedData
     //! The official proj4 acronym for the projection family
     QString mProjectionAcronym;
 
-    //! The official proj4 acronym for the ellipoid
+    //! The official proj4 acronym for the ellipsoid
     QString mEllipsoidAcronym;
 
     //! Whether this is a geographic or projected coordinate system
@@ -105,19 +104,116 @@ class QgsCoordinateReferenceSystemPrivate : public QSharedData
     QString mAuthId;
 
     //! Whether this CRS is properly defined and valid
-    bool mIsValid = 0;
+    bool mIsValid = false;
 
-    OGRSpatialReferenceH mCRS;
+    // this is the "master" proj object, to be used as a template for new proj objects created on different threads ONLY.
+    // Always use threadLocalProjObject() instead of this.
 
-    QString mValidationHint;
-    mutable QString mWkt;
+  private:
+    QgsProjUtils::proj_pj_unique_ptr mPj;
+    PJ_CONTEXT *mPjParentContext = nullptr;
+
+    void cleanPjObjects()
+    {
+
+      // During destruction of PJ* objects, the errno is set in the underlying
+      // context. Consequently the context attached to the PJ* must still exist !
+      // Which is not necessarily the case currently unfortunately. So
+      // create a temporary dummy context, and attach it to the PJ* before destroying
+      // it
+      PJ_CONTEXT *tmpContext = proj_context_create();
+      for ( auto it = mProjObjects.begin(); it != mProjObjects.end(); ++it )
+      {
+        proj_assign_context( it.value(), tmpContext );
+        proj_destroy( it.value() );
+      }
+      mProjObjects.clear();
+      if ( mPj )
+      {
+        proj_assign_context( mPj.get(), tmpContext );
+        mPj.reset();
+      }
+      proj_context_destroy( tmpContext );
+    }
+
+  public:
+
+    void setPj( QgsProjUtils::proj_pj_unique_ptr obj )
+    {
+      QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Write );
+      cleanPjObjects();
+
+      mPj = std::move( obj );
+      mPjParentContext = QgsProjContext::get();
+    }
+
+    bool hasPj() const
+    {
+      QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Read );
+      return static_cast< bool >( mPj );
+    }
+
     mutable QString mProj4;
+
+    mutable QString mWktPreferred;
 
     //! True if presence of an inverted axis needs to be recalculated
     mutable bool mAxisInvertedDirty = false;
 
     //! Whether this is a coordinate system has inverted axis
     mutable bool mAxisInverted = false;
+
+  private:
+    mutable QReadWriteLock mProjLock{};
+    mutable QMap < PJ_CONTEXT *, PJ * > mProjObjects{};
+
+  public:
+
+    PJ *threadLocalProjObject() const
+    {
+      QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Read );
+      if ( !mPj )
+        return nullptr;
+
+      PJ_CONTEXT *context = QgsProjContext::get();
+      QMap < PJ_CONTEXT *, PJ * >::const_iterator it = mProjObjects.constFind( context );
+
+      if ( it != mProjObjects.constEnd() )
+      {
+        return it.value();
+      }
+
+      // proj object doesn't exist yet, so we need to create
+      locker.changeMode( QgsReadWriteLocker::Write );
+
+      PJ *res = proj_clone( context, mPj.get() );
+      mProjObjects.insert( context, res );
+      return res;
+    }
+
+    // Only meant to be called by QgsCoordinateReferenceSystem::removeFromCacheObjectsBelongingToCurrentThread()
+    bool removeObjectsBelongingToCurrentThread( PJ_CONTEXT *pj_context )
+    {
+      QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Write );
+
+      QMap < PJ_CONTEXT *, PJ * >::iterator it = mProjObjects.find( pj_context );
+      if ( it != mProjObjects.end() )
+      {
+        proj_destroy( it.value() );
+        mProjObjects.erase( it );
+      }
+
+      if ( mPjParentContext == pj_context )
+      {
+        mPj.reset();
+        mPjParentContext = nullptr;
+      }
+
+      return mProjObjects.isEmpty();
+    }
+
+  private:
+    QgsCoordinateReferenceSystemPrivate &operator= ( const QgsCoordinateReferenceSystemPrivate & ) = delete;
 
 };
 

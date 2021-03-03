@@ -147,7 +147,7 @@ void QgsAuthImportCertDialog::validateCertificates()
 {
   mCerts.clear();
   teValidation->clear();
-  teValidation->setStyleSheet( QLatin1String( "" ) );
+  teValidation->setStyleSheet( QString() );
 
   bool valid = false;
   QList<QSslCertificate> certs;
@@ -168,7 +168,8 @@ void QgsAuthImportCertDialog::validateCertificates()
 
   int certssize = certs.size();
 
-  Q_FOREACH ( const QSslCertificate &cert, certs )
+  const auto constCerts = certs;
+  for ( const QSslCertificate &cert : constCerts )
   {
     if ( QgsAuthCertUtils::certIsViable( cert ) )
       ++validcerts;
@@ -192,7 +193,8 @@ void QgsAuthImportCertDialog::validateCertificates()
 
   if ( !nixcerts.isEmpty() )
   {
-    Q_FOREACH ( const QSslCertificate &nixcert, nixcerts )
+    const auto constNixcerts = nixcerts;
+    for ( const QSslCertificate &nixcert : constNixcerts )
     {
       certs.removeOne( nixcert );
     }
@@ -224,7 +226,7 @@ void QgsAuthImportCertDialog::validateCertificates()
 
 void QgsAuthImportCertDialog::btnImportFile_clicked()
 {
-  const QString &fn = getOpenFileName( tr( "Open Certificate File" ),  tr( "PEM (*.pem);;DER (*.der)" ) );
+  const QString &fn = getOpenFileName( tr( "Open Certificate File" ),  tr( "All files (*.*);;PEM (*.pem);;DER (*.der)" ) );
   if ( !fn.isEmpty() )
   {
     leImportFile->setText( fn );
@@ -234,7 +236,7 @@ void QgsAuthImportCertDialog::btnImportFile_clicked()
 
 void QgsAuthImportCertDialog::chkAllowInvalid_toggled( bool checked )
 {
-  Q_UNUSED( checked );
+  Q_UNUSED( checked )
   validateCertificates();
 }
 

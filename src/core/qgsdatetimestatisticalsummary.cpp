@@ -48,7 +48,8 @@ void QgsDateTimeStatisticalSummary::calculate( const QVariantList &values )
 {
   reset();
 
-  Q_FOREACH ( const QVariant &variant, values )
+  const auto constValues = values;
+  for ( const QVariant &variant : constValues )
   {
     addValue( variant );
   }
@@ -57,28 +58,30 @@ void QgsDateTimeStatisticalSummary::calculate( const QVariantList &values )
 
 void QgsDateTimeStatisticalSummary::addValue( const QVariant &value )
 {
+
   if ( value.type() == QVariant::DateTime )
   {
-    testDateTime( value.toDateTime() );
+    testDateTime( value.toDateTime(), value.isNull() );
   }
   else if ( value.type() == QVariant::Date )
   {
     QDate date = value.toDate();
     testDateTime( date.isValid() ? QDateTime( date, QTime( 0, 0, 0 ) )
-                  : QDateTime() );
+                  : QDateTime(), value.isNull() );
   }
   else if ( value.type() == QVariant::Time )
   {
     mIsTimes = true;
     QTime time = value.toTime();
     testDateTime( time.isValid() ? QDateTime( QDate::fromJulianDay( 0 ), time )
-                  : QDateTime() );
+                  : QDateTime(), value.isNull() );
   }
   else //not a date
   {
     mCountMissing++;
     mCount++;
   }
+
   // QTime?
 }
 
@@ -88,11 +91,11 @@ void QgsDateTimeStatisticalSummary::finalize()
   //if statistics are implemented which require a post-calculation step
 }
 
-void QgsDateTimeStatisticalSummary::testDateTime( const QDateTime &dateTime )
+void QgsDateTimeStatisticalSummary::testDateTime( const QDateTime &dateTime, bool isNull )
 {
   mCount++;
 
-  if ( !dateTime.isValid() )
+  if ( !dateTime.isValid() || isNull )
     mCountMissing++;
 
   if ( mStatistics & CountDistinct )

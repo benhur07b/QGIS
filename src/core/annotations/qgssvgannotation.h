@@ -25,7 +25,7 @@
 /**
  * \class QgsSvgAnnotation
  * \ingroup core
- * An annotation which renders the contents of an SVG file.
+ * \brief An annotation which renders the contents of an SVG file.
  * \since QGIS 3.0
  */
 class CORE_EXPORT QgsSvgAnnotation: public QgsAnnotation
@@ -41,8 +41,8 @@ class CORE_EXPORT QgsSvgAnnotation: public QgsAnnotation
 
     QgsSvgAnnotation *clone() const override SIP_FACTORY;
 
-    virtual void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
-    virtual void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
+    void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
+    void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
 
     /**
      * Sets the file path for the source SVG file.

@@ -104,12 +104,12 @@ void QgsAuthSslErrorsDialog::loadUnloadCertificate( bool load )
   grpbxSslErrors->setCollapsed( load );
   if ( !load )
   {
-    QgsDebugMsg( "Unloading certificate and host:port" );
+    QgsDebugMsg( QStringLiteral( "Unloading certificate and host:port" ) );
     clearCertificateConfig();
     return;
   }
   wdgtSslConfig->setEnabled( true );
-  QgsDebugMsg( QString( "Loading certificate for host:port = %1" ).arg( mHostPort ) );
+  QgsDebugMsg( QStringLiteral( "Loading certificate for host:port = %1" ).arg( mHostPort ) );
   wdgtSslConfig->setSslCertificate( mSslConfiguration.peerCertificate(), mHostPort );
   if ( !mSslErrors.isEmpty() )
   {
@@ -137,7 +137,8 @@ void QgsAuthSslErrorsDialog::showCertificateChainInfo()
 
 void QgsAuthSslErrorsDialog::showCertificateChainCAsInfo()
 {
-  for ( const auto &cert : mSslConfiguration.caCertificates() )
+  const QList< QSslCertificate > certificates = mSslConfiguration.caCertificates();
+  for ( const auto &cert : certificates )
   {
     qDebug() << cert.subjectInfo( QSslCertificate::SubjectInfo::CommonName );
   }
@@ -205,13 +206,14 @@ void QgsAuthSslErrorsDialog::populateErrorsList()
 {
   QStringList errs;
   errs.reserve( mSslErrors.size() );
-  Q_FOREACH ( const QSslError &err, mSslErrors )
+  const auto constMSslErrors = mSslErrors;
+  for ( const QSslError &err : constMSslErrors )
   {
     errs <<  QStringLiteral( "* %1: %2" )
          .arg( QgsAuthCertUtils::sslErrorEnumString( err.error() ),
                err.errorString() );
   }
-  teSslErrors->setPlainText( errs.join( QStringLiteral( "\n" ) ) );
+  teSslErrors->setPlainText( errs.join( QLatin1Char( '\n' ) ) );
 }
 
 QPushButton *QgsAuthSslErrorsDialog::ignoreButton()

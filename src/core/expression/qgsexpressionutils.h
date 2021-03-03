@@ -22,10 +22,11 @@
 #include "qgsfeature.h"
 #include "qgsexpression.h"
 #include "qgscolorramp.h"
-#include "qgsvectorlayer.h"
+#include "qgsvectorlayerfeatureiterator.h"
+#include "qgsrasterlayer.h"
 #include "qgsproject.h"
 #include "qgsrelationmanager.h"
-
+#include "qgsvectorlayer.h"
 
 #define ENSURE_NO_EVAL_ERROR   {  if ( parent->hasEvalError() ) return QVariant(); }
 #define SET_EVAL_ERROR(x)   { parent->setEvalErrorString( x ); return QVariant(); }
@@ -36,7 +37,7 @@
 ///////////////////////////////////////////////
 // three-value logic
 
-/// @cond
+/// @cond PRIVATE
 class QgsExpressionUtils
 {
   public:
@@ -187,6 +188,23 @@ class QgsExpressionUtils
       return value.toString();
     }
 
+    /**
+     * Returns an expression value converted to binary (byte array) value.
+     *
+     * An empty byte array will be returned if the value is NULL.
+     *
+     * \since QGIS 3.12
+     */
+    static QByteArray getBinaryValue( const QVariant &value, QgsExpression *parent )
+    {
+      if ( value.type() != QVariant::ByteArray )
+      {
+        parent->setEvalErrorString( QObject::tr( "Value is not a binary value" ) );
+        return QByteArray();
+      }
+      return value.toByteArray();
+    }
+
     static double getDoubleValue( const QVariant &value, QgsExpression *parent )
     {
       bool ok;
@@ -220,7 +238,7 @@ class QgsExpressionUtils
       qlonglong x = value.toLongLong( &ok );
       if ( ok && x >= std::numeric_limits<int>::min() && x <= std::numeric_limits<int>::max() )
       {
-        return x;
+        return static_cast<int>( x );
       }
       else
       {
@@ -350,11 +368,39 @@ class QgsExpressionUtils
       return ml;
     }
 
+    static std::unique_ptr<QgsVectorLayerFeatureSource> getFeatureSource( const QVariant &value, QgsExpression *e )
+    {
+      std::unique_ptr<QgsVectorLayerFeatureSource> featureSource;
+
+      auto getFeatureSource = [ &value, e, &featureSource ]
+      {
+        QgsVectorLayer *layer = getVectorLayer( value, e );
+
+        if ( layer )
+        {
+          featureSource.reset( new QgsVectorLayerFeatureSource( layer ) );
+        }
+      };
+
+      // Make sure we only deal with the vector layer on the main thread where it lives.
+      // Anything else risks a crash.
+      if ( QThread::currentThread() == qApp->thread() )
+        getFeatureSource();
+      else
+        QMetaObject::invokeMethod( qApp, getFeatureSource, Qt::BlockingQueuedConnection );
+
+      return featureSource;
+    }
+
     static QgsVectorLayer *getVectorLayer( const QVariant &value, QgsExpression *e )
     {
       return qobject_cast<QgsVectorLayer *>( getMapLayer( value, e ) );
     }
 
+    static QgsRasterLayer *getRasterLayer( const QVariant &value, QgsExpression *e )
+    {
+      return qobject_cast<QgsRasterLayer *>( getMapLayer( value, e ) );
+    }
 
     static QVariantList getListValue( const QVariant &value, QgsExpression *parent )
     {

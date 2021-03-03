@@ -17,14 +17,14 @@
 #define QGSMULTIEDITTOOLBUTTON_H
 
 #include "qgsfields.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QToolButton>
 #include "qgis_gui.h"
 
 /**
  * \ingroup gui
  * \class QgsMultiEditToolButton
- * A tool button widget which is displayed next to editor widgets in attribute forms, and
+ * \brief A tool button widget which is displayed next to editor widgets in attribute forms, and
  * allows for controlling how the widget behaves and interacts with the form while in multi
  * edit mode.
  * \since QGIS 2.16
@@ -47,7 +47,7 @@ class GUI_EXPORT QgsMultiEditToolButton : public QToolButton
      * Constructor for QgsMultiEditToolButton.
      * \param parent parent object
      */
-    explicit QgsMultiEditToolButton( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsMultiEditToolButton( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Returns the current displayed state of the button.
@@ -55,7 +55,7 @@ class GUI_EXPORT QgsMultiEditToolButton : public QToolButton
     State state() const { return mState; }
 
     /**
-     * Sets the field associated with this button. This is used to customise the widget menu
+     * Sets the field associated with this button. This is used to customize the widget menu
      * and tooltips to match the field properties.
      * \param field associated field
      */
@@ -66,7 +66,6 @@ class GUI_EXPORT QgsMultiEditToolButton : public QToolButton
     /**
      * Sets whether the associated field contains mixed values.
      * \param mixed whether field values are mixed
-     * \see isMixed()
      * \see setIsChanged()
      * \see resetChanges()
      */
@@ -75,7 +74,6 @@ class GUI_EXPORT QgsMultiEditToolButton : public QToolButton
     /**
      * Sets whether the associated field has changed.
      * \param changed whether field has changed
-     * \see isChanged()
      * \see setIsMixed()
      * \see resetChanges()
      */

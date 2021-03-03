@@ -16,7 +16,7 @@
  ***************************************************************************/
 
 #include "qgsbox3d.h"
-
+#include "qgspoint.h"
 
 QgsBox3d::QgsBox3d( double xmin, double ymin, double zmin, double xmax, double ymax, double zmax )
   : mBounds2d( xmin, ymin, xmax, ymax )
@@ -31,6 +31,10 @@ QgsBox3d::QgsBox3d( const QgsPoint &p1, const QgsPoint &p2 )
 {
   mBounds2d.normalize();
 }
+
+QgsBox3d::QgsBox3d( const QgsRectangle &rect )
+  : mBounds2d( rect )
+{}
 
 void QgsBox3d::setXMinimum( double x )
 {
@@ -73,7 +77,7 @@ void QgsBox3d::normalize()
 
 QgsBox3d QgsBox3d::intersect( const QgsBox3d &other ) const
 {
-  QgsRectangle intersect2d = mBounds2d.intersect( &( other.mBounds2d ) );
+  QgsRectangle intersect2d = mBounds2d.intersect( other.mBounds2d );
   double zMin = std::max( mZmin, other.mZmin );
   double zMax = std::min( mZmax, other.mZmax );
   return QgsBox3d( intersect2d.xMinimum(), intersect2d.yMinimum(), zMin,
@@ -112,4 +116,20 @@ bool QgsBox3d::contains( const QgsPoint &p ) const
     return mZmin <= p.z() && p.z() <= mZmax;
   else
     return true;
+}
+
+double QgsBox3d::distanceTo( const  QVector3D &point ) const
+{
+  double dx = std::max( mBounds2d.xMinimum() - point.x(), std::max( 0., point.x() - mBounds2d.xMaximum() ) );
+  double dy = std::max( mBounds2d.yMinimum() - point.y(), std::max( 0., point.y() - mBounds2d.yMaximum() ) );
+  double dz = std::max( mZmin - point.z(), std::max( 0., point.z() - mZmax ) );
+  return sqrt( dx * dx + dy * dy + dz * dz );
+}
+
+
+bool QgsBox3d::operator==( const QgsBox3d &other ) const
+{
+  return mBounds2d == other.mBounds2d &&
+         qgsDoubleNear( mZmin, other.mZmin ) &&
+         qgsDoubleNear( mZmax, other.mZmax );
 }

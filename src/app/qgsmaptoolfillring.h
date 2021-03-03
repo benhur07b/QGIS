@@ -20,7 +20,7 @@
 /**
  * A tool to cut holes into polygon and multipolygon features and fill them
  *  with new feature. Attributes are copied from parent feature.
- * */
+ */
 class APP_EXPORT QgsMapToolFillRing: public QgsMapToolCapture
 {
     Q_OBJECT
@@ -31,7 +31,7 @@ class APP_EXPORT QgsMapToolFillRing: public QgsMapToolCapture
   private:
 
     /**
-     * Return the geometry of the ring under the point p and sets fid to the feature id
+     * Returns the geometry of the ring under the point p and sets fid to the feature id
      */
     QgsGeometry ringUnderPoint( const QgsPointXY &p, QgsFeatureId &fid );
 

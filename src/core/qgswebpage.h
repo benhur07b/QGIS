@@ -80,7 +80,7 @@ class CORE_EXPORT QWebSettings : public QObject
       CaretBrowsingEnabled,
       NotificationsEnabled
     };
-    explicit QWebSettings( QObject *parent = 0 )
+    explicit QWebSettings( QObject *parent = nullptr )
       : QObject( parent )
     {
     }
@@ -120,11 +120,12 @@ class CORE_EXPORT QWebPage : public QObject
       WebModalDialog
     };
 
-    explicit QWebPage( QObject *parent = 0 )
+    explicit QWebPage( QObject *parent = nullptr )
       : QObject( parent )
       , mSettings( new QWebSettings() )
       , mFrame( new QWebFrame() )
     {
+      connect( mFrame, &QWebFrame::loadFinished, this, &QWebPage::loadFinished );
     }
 
     ~QWebPage()
@@ -140,12 +141,12 @@ class CORE_EXPORT QWebPage : public QObject
 
     void setPalette( const QPalette &palette )
     {
-      Q_UNUSED( palette );
+      Q_UNUSED( palette )
     }
 
     void setViewportSize( const QSize &size ) const
     {
-      Q_UNUSED( size );
+      Q_UNUSED( size )
     }
 
     void setLinkDelegationPolicy( LinkDelegationPolicy linkDelegationPolicy )
@@ -162,7 +163,7 @@ class CORE_EXPORT QWebPage : public QObject
 
     void setNetworkAccessManager( QNetworkAccessManager *networkAccessManager )
     {
-      Q_UNUSED( networkAccessManager );
+      Q_UNUSED( networkAccessManager )
     }
 
     QWebFrame *mainFrame() const
@@ -210,8 +211,8 @@ class CORE_EXPORT QWebPage : public QObject
  * \ingroup core
  * \class QgsWebPage
  * \brief QWebPage subclass which redirects JavaScript errors and console output to the QGIS message log.
- * \since QGIS 2.16
  * \note Not available in Python bindings
+ * \since QGIS 2.16
  */
 class CORE_EXPORT QgsWebPage : public QWebPage
 {
@@ -223,7 +224,7 @@ class CORE_EXPORT QgsWebPage : public QWebPage
      * Constructor for QgsWebPage.
      * \param parent parent object
      */
-    explicit QgsWebPage( QObject *parent = 0 )
+    explicit QgsWebPage( QObject *parent = nullptr )
       : QWebPage( parent )
     {}
 
@@ -245,7 +246,7 @@ class CORE_EXPORT QgsWebPage : public QWebPage
 
   protected:
 
-    virtual void javaScriptConsoleMessage( const QString &message, int lineNumber, const QString & ) override
+    void javaScriptConsoleMessage( const QString &message, int lineNumber, const QString & ) override
     {
       if ( mIdentifier.isEmpty() )
         QgsMessageLog::logMessage( tr( "Line %1: %2" ).arg( lineNumber ).arg( message ), tr( "JavaScript" ) );

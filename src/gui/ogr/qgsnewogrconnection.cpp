@@ -23,6 +23,7 @@
 #include "qgsogrhelperfunctions.h"
 #include "qgsapplication.h"
 #include "qgssettings.h"
+#include "qgsgui.h"
 
 #include <ogr_api.h>
 #include <cpl_error.h>
@@ -33,11 +34,20 @@ QgsNewOgrConnection::QgsNewOgrConnection( QWidget *parent, const QString &connTy
   , mOriginalConnName( connName )
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
+
   connect( btnConnect, &QPushButton::clicked, this, &QgsNewOgrConnection::btnConnect_clicked );
+  Q_NOWARN_DEPRECATED_PUSH
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsNewOgrConnection::showHelp );
+  Q_NOWARN_DEPRECATED_POP
+
+  buttonBox->button( QDialogButtonBox::Ok )->setDisabled( true );
+  connect( txtName, &QLineEdit::textChanged, this, &QgsNewOgrConnection::updateOkButtonState );
+  connect( txtHost, &QLineEdit::textChanged, this, &QgsNewOgrConnection::updateOkButtonState );
+  connect( txtDatabase, &QLineEdit::textChanged, this, &QgsNewOgrConnection::updateOkButtonState );
+  connect( txtPort, &QLineEdit::textChanged, this, &QgsNewOgrConnection::updateOkButtonState );
 
   QgsSettings settings;
-  restoreGeometry( settings.value( QStringLiteral( "Windows/OGRDatabaseConnection/geometry" ) ).toByteArray() );
 
   //add database drivers
   QStringList dbDrivers = QgsProviderRegistry::instance()->databaseDrivers().split( ';' );
@@ -57,32 +67,38 @@ QgsNewOgrConnection::QgsNewOgrConnection( QWidget *parent, const QString &connTy
     txtDatabase->setText( settings.value( key + "/database" ).toString() );
     QString port = settings.value( key + "/port" ).toString();
     txtPort->setText( port );
-    txtUsername->setText( settings.value( key + "/username" ).toString() );
-    if ( settings.value( key + "/save" ).toString() == QLatin1String( "true" ) )
+    if ( settings.value( key + "/store_username" ).toString() == QLatin1String( "true" ) )
     {
-      txtPassword->setText( settings.value( key + "/password" ).toString() );
-      chkStorePassword->setChecked( true );
+      mAuthSettingsDatabase->setUsername( settings.value( key + "/username" ).toString() );
+      mAuthSettingsDatabase->setStoreUsernameChecked( true );
     }
+    if ( settings.value( key + "/store_password" ).toString() == QLatin1String( "true" ) )
+    {
+      mAuthSettingsDatabase->setPassword( settings.value( key + "/password" ).toString() );
+      mAuthSettingsDatabase->setStorePasswordChecked( true );
+    }
+    mAuthSettingsDatabase->setConfigId( settings.value( key + "/configid" ).toString() );
     cmbDatabaseTypes->setCurrentIndex( cmbDatabaseTypes->findText( connType ) );
     txtName->setText( connName );
     txtName->setEnabled( false );
     cmbDatabaseTypes->setEnabled( false );
   }
   txtName->setValidator( new QRegExpValidator( QRegExp( "[^\\/]+" ), txtName ) );
-}
-
-QgsNewOgrConnection::~QgsNewOgrConnection()
-{
-  QgsSettings settings;
-  settings.setValue( QStringLiteral( "Windows/OGRDatabaseConnection/geometry" ), saveGeometry() );
+  mAuthSettingsDatabase->setDataprovider( QStringLiteral( "ogr" ) );
+  mAuthSettingsDatabase->showStoreCheckboxes( true );
 }
 
 void QgsNewOgrConnection::testConnection()
 {
   QString uri;
-  uri = createDatabaseURI( cmbDatabaseTypes->currentText(), txtHost->text(),
-                           txtDatabase->text(), txtPort->text(),
-                           txtUsername->text(), txtPassword->text() );
+  uri = createDatabaseURI( cmbDatabaseTypes->currentText(),
+                           txtHost->text(),
+                           txtDatabase->text(),
+                           txtPort->text(),
+                           mAuthSettingsDatabase->configId(),
+                           mAuthSettingsDatabase->username(),
+                           mAuthSettingsDatabase->password(),
+                           true );
   QgsDebugMsg( "Connecting using uri = " + uri );
   OGRRegisterAll();
   OGRDataSourceH       poDS;
@@ -91,11 +107,11 @@ void QgsNewOgrConnection::testConnection()
   poDS = OGROpen( uri.toUtf8().constData(), false, &pahDriver );
   if ( !poDS )
   {
-    QMessageBox::information( this, tr( "Test connection" ), tr( "Connection failed - Check settings and try again.\n\nExtended error information:\n%1" ).arg( QString::fromUtf8( CPLGetLastErrorMsg() ) ) );
+    QMessageBox::information( this, tr( "Test Connection" ), tr( "Connection failed - Check settings and try again.\n\nExtended error information:\n%1" ).arg( QString::fromUtf8( CPLGetLastErrorMsg() ) ) );
   }
   else
   {
-    QMessageBox::information( this, tr( "Test connection" ), tr( "Connection to %1 was successful" ).arg( uri ) );
+    QMessageBox::information( this, tr( "Test Connection" ), tr( "Connection to %1 was successful." ).arg( uri ) );
     OGRReleaseDataSource( poDS );
   }
 }
@@ -105,7 +121,14 @@ void QgsNewOgrConnection::showHelp()
   QgsHelp::openHelp( QStringLiteral( "managing_data_source/opening_data.html#creating-a-stored-connection" ) );
 }
 
-//! Autoconnected SLOTS *
+void QgsNewOgrConnection::updateOkButtonState()
+{
+  bool enabled = !txtName->text().isEmpty();
+  buttonBox->button( QDialogButtonBox::Ok )->setEnabled( enabled );
+}
+
+
+//! Autoconnected SLOTS
 void QgsNewOgrConnection::accept()
 {
   QgsSettings settings;
@@ -133,9 +156,11 @@ void QgsNewOgrConnection::accept()
   settings.setValue( baseKey + "/host", txtHost->text() );
   settings.setValue( baseKey + "/database", txtDatabase->text() );
   settings.setValue( baseKey + "/port", txtPort->text() );
-  settings.setValue( baseKey + "/username", txtUsername->text() );
-  settings.setValue( baseKey + "/password", chkStorePassword->isChecked() ? txtPassword->text() : QLatin1String( "" ) );
-  settings.setValue( baseKey + "/save", chkStorePassword->isChecked() ? "true" : "false" );
+  settings.setValue( baseKey + "/username", mAuthSettingsDatabase->storeUsernameIsChecked() ? mAuthSettingsDatabase->username() : QString() );
+  settings.setValue( baseKey + "/password", mAuthSettingsDatabase->storePasswordIsChecked() ? mAuthSettingsDatabase->password() : QString() );
+  settings.setValue( baseKey + "/store_username", mAuthSettingsDatabase->storeUsernameIsChecked() ? "true" : "false" );
+  settings.setValue( baseKey + "/store_password", mAuthSettingsDatabase->storePasswordIsChecked() ? "true" : "false" );
+  settings.setValue( baseKey + "/configid", mAuthSettingsDatabase->configId() );
 
   QDialog::accept();
 }
@@ -145,4 +170,4 @@ void QgsNewOgrConnection::btnConnect_clicked()
   testConnection();
 }
 
-//! End  Autoconnected SLOTS *
+//! End  Autoconnected SLOTS

@@ -20,7 +20,7 @@
 
 #include <QStandardItemModel>
 
-#include "qgis.h"
+#include "qgswkbtypes.h"
 
 //! Layer Property structure
 struct QgsMssqlLayerProperty
@@ -34,6 +34,7 @@ struct QgsMssqlLayerProperty
   QString     srid;
   bool        isGeography;
   QString     sql;
+  bool        isView;
 };
 
 
@@ -57,7 +58,8 @@ class QgsMssqlTableModel : public QStandardItemModel
 
     /**
      * Sets one or more geometry types to a row. In case of several types, additional rows are inserted.
-       This is for tables where the type is detected later by thread*/
+     * This is for tables where the type is detected later by thread.
+    */
     void setGeometryTypesForTable( QgsMssqlLayerProperty layerProperty );
 
     //! Returns the number of tables in the model
@@ -73,20 +75,22 @@ class QgsMssqlTableModel : public QStandardItemModel
       DbtmPkCol,
       DbtmSelectAtId,
       DbtmSql,
+      DbtmView,
       DbtmColumns
     };
 
     bool setData( const QModelIndex &index, const QVariant &value, int role = Qt::EditRole ) override;
 
-    QString layerURI( const QModelIndex &index, const QString &connInfo, bool useEstimatedMetadata );
-
-    static QIcon iconForWkbType( QgsWkbTypes::Type type );
+    QString layerURI( const QModelIndex &index, const QString &connInfo, bool useEstimatedMetadata, bool disableInvalidGeometryHandling );
 
     static QgsWkbTypes::Type wkbTypeFromMssql( QString dbType );
+
+    void setConnectionName( const QString &connectionName );
 
   private:
     //! Number of tables in the model
     int mTableCount = 0;
+    QString mConnectionName;
 };
 
 #endif

@@ -19,7 +19,7 @@
 #define QGSSUBSTITUTIONLISTWIDGET_H
 
 #include <QDialog>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgspanelwidget.h"
 #include "ui_qgssubstitutionlistwidgetbase.h"
 #include "qgsstringutils.h"
@@ -28,10 +28,10 @@
 /**
  * \class QgsSubstitutionListWidget
  * \ingroup gui
- * A widget which allows users to specify a list of substitutions to apply to a string, with
+ * \brief A widget which allows users to specify a list of substitutions to apply to a string, with
  * options for exporting and importing substitution lists.
- * \since QGIS 3.0
  * \see QgsSubstitutionListDialog
+ * \since QGIS 3.0
  */
 class GUI_EXPORT QgsSubstitutionListWidget : public QgsPanelWidget, private Ui::QgsSubstitutionListWidgetBase
 {
@@ -44,7 +44,7 @@ class GUI_EXPORT QgsSubstitutionListWidget : public QgsPanelWidget, private Ui::
      * Constructor for QgsSubstitutionListWidget.
      * \param parent parent widget
      */
-    QgsSubstitutionListWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsSubstitutionListWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Sets the list of substitutions to show in the widget.
@@ -81,10 +81,10 @@ class GUI_EXPORT QgsSubstitutionListWidget : public QgsPanelWidget, private Ui::
 /**
  * \class QgsSubstitutionListDialog
  * \ingroup gui
- * A dialog which allows users to specify a list of substitutions to apply to a string, with
+ * \brief A dialog which allows users to specify a list of substitutions to apply to a string, with
  * options for exporting and importing substitution lists.
- * \since QGIS 3.0
  * \see QgsSubstitutionListWidget
+ * \since QGIS 3.0
 */
 class GUI_EXPORT QgsSubstitutionListDialog : public QDialog
 {
@@ -97,7 +97,7 @@ class GUI_EXPORT QgsSubstitutionListDialog : public QDialog
      * Constructor for QgsSubstitutionListDialog.
      * \param parent parent widget
      */
-    QgsSubstitutionListDialog( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsSubstitutionListDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Sets the list of substitutions to show in the dialog.

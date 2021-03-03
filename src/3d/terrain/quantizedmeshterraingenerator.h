@@ -1,3 +1,17 @@
+/***************************************************************************
+    quantizedmeshterraingenerator.h
+    ---------------------
+    begin                : July 2017
+    copyright            : (C) 2017 by Martin Dobias
+    email                : wonder dot sk at gmail dot com
+ ***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
 #ifndef QUANTIZEDMESHTERRAINGENERATOR_H
 #define QUANTIZEDMESHTERRAINGENERATOR_H
 
@@ -6,7 +20,7 @@
 
 /**
  * \ingroup 3d
- * Terrain generator using downloaded terrain tiles using quantized mesh specification
+ * \brief Terrain generator using downloaded terrain tiles using quantized mesh specification
  * \since QGIS 3.0
  */
 class QuantizedMeshTerrainGenerator : public QgsTerrainGenerator
@@ -22,10 +36,10 @@ class QuantizedMeshTerrainGenerator : public QgsTerrainGenerator
 
     QgsTerrainGenerator::Type type() const override;
     QgsRectangle extent() const override;
-    virtual void writeXml( QDomElement &elem ) const override;
-    virtual void readXml( const QDomElement &elem ) override;
+    void writeXml( QDomElement &elem ) const override;
+    void readXml( const QDomElement &elem ) override;
 
-    virtual QgsChunkLoader *createChunkLoader( QgsChunkNode *node ) const override SIP_FACTORY;
+    QgsChunkLoader *createChunkLoader( QgsChunkNode *node ) const override SIP_FACTORY;
 
     int terrainBaseX, terrainBaseY, terrainBaseZ;   //!< Coordinates of the base tile
 };

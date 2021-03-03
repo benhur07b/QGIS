@@ -32,12 +32,12 @@ void QgsVersionInfo::checkVersion()
 
 bool QgsVersionInfo::newVersionAvailable() const
 {
-  return mLatestVersion > Qgis::QGIS_VERSION_INT;
+  return mLatestVersion > Qgis::versionInt();
 }
 
 bool QgsVersionInfo::isDevelopmentVersion() const
 {
-  return Qgis::QGIS_VERSION_INT > mLatestVersion;
+  return Qgis::versionInt() > mLatestVersion;
 }
 
 void QgsVersionInfo::versionReplyFinished()
@@ -61,7 +61,11 @@ void QgsVersionInfo::versionReplyFinished()
       pos += contentFlag.length();
 
       versionMessage = versionMessage.mid( pos );
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
       QStringList parts = versionMessage.split( '|', QString::SkipEmptyParts );
+#else
+      QStringList parts = versionMessage.split( '|', Qt::SkipEmptyParts );
+#endif
       // check the version from the  server against our version
       mLatestVersion = parts[0].toInt();
       mDownloadInfo = parts.value( 1 );

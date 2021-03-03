@@ -108,7 +108,7 @@ Session::Session(QObject* parent) :
     connect( _emulation,&Emulation::lockPtyRequest,_shellProcess,&Pty::lockPty );
     connect( _emulation,&Emulation::useUtf8Request,_shellProcess,&Pty::setUtf8Mode );
 
-    connect( _shellProcess,static_cast<void ( QProcess::* )( int )>( &QProcess::finished ), this, &Session::done );
+    connect( _shellProcess,static_cast<void ( QProcess::* )( int,  QProcess::ExitStatus)>( &QProcess::finished ), this, &Session::done );
     // not in kprocess anymore connect( _shellProcess,SIGNAL(done(int)), this, SLOT(done(int)) );
 
     //setup timer for monitoring session activity
@@ -134,9 +134,9 @@ WId Session::windowId() const
 	// On Qt5, requesting window IDs breaks QQuickWidget and the likes,
 	// for example, see the following bug reports:
 	//
-	// https://bugreports.qt-project.org/browse/QTBUG-41779
-	// https://bugreports.qt-project.org/browse/QTBUG-40765
-	// https://bugreports.qt-project.org/browse/QTBUG-41942
+	// https://bugreports.qt.io/browse/QTBUG-41779
+	// https://bugreports.qt.io/browse/QTBUG-40765
+	// https://bugreports.qt.io/browse/QTBUG-41942
 
 #if QT_VERSION >= QT_VERSION_CHECK(5, 0, 0)
   return 0;
@@ -288,7 +288,7 @@ void Session::run()
      * Thats bad for BSD as its /usr/local/bin/bash there - its also bad for arch as its /usr/bin/bash there too!
      * So i added a check to see if /bin/bash exists - if no then we use $SHELL - if that does not exist either, we fall back to /bin/sh
      * As far as i know /bin/sh exists on every unix system.. You could also just put some ifdef __FREEBSD__ here but i think these 2 filechecks are worth
-     * their computing time on any system - especially with the problem on arch linux beeing there too.
+     * their computing time on any system - especially with the problem on arch linux being there too.
      */
     QString exec = QFile::encodeName(_program);
     // if 'exec' is not specified, fall back to default shell.  if that
@@ -485,8 +485,7 @@ void Session::monitorTimerDone()
 void Session::activityStateSet(int state)
 {
     if (state==NOTIFYBELL) {
-        QString s;
-        s.sprintf("Bell in session '%s'",_nameTitle.toUtf8().data());
+        QString s = QStringLiteral("Bell in session '%1'").arg(_nameTitle);
 
         emit bellRequest( s );
     } else if (state==NOTIFYACTIVITY) {
@@ -619,7 +618,7 @@ QString Session::profileKey() const
     return _profileKey;
 }
 
-void Session::done(int exitStatus)
+void Session::done(int exitCode, QProcess::ExitStatus exitStatus)
 {
     if (!_autoClose) {
         _userTitle = ("This session is done. Finished");
@@ -628,20 +627,17 @@ void Session::done(int exitStatus)
     }
 
     QString message;
-    if (!_wantedClose || exitStatus != 0) {
+    if (!_wantedClose || exitCode != 0) {
 
-        if (_shellProcess->exitStatus() == QProcess::NormalExit) {
-            message.sprintf("Session '%s' exited with status %d.",
-                          _nameTitle.toUtf8().data(), exitStatus);
+        if (exitStatus == QProcess::NormalExit) {
+            message = QStringLiteral("Session '%1' exited with code %2.").arg(_nameTitle).arg(exitCode);
         } else {
-            message.sprintf("Session '%s' crashed.",
-                          _nameTitle.toUtf8().data());
+            message = QStringLiteral("Session '%1' crashed.").arg(_nameTitle);
         }
     }
 
-    if ( !_wantedClose && _shellProcess->exitStatus() != QProcess::NormalExit )
-        message.sprintf("Session '%s' exited unexpectedly.",
-                        _nameTitle.toUtf8().data());
+    if ( !_wantedClose && exitStatus != QProcess::NormalExit )
+        message = QStringLiteral("Session '%1' exited unexpectedly.").arg(_nameTitle);
     else
         emit finished();
 

@@ -1,112 +1,80 @@
-INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/auth
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/raster
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/gui
-  ${CMAKE_SOURCE_DIR}/src/gui/auth
+include_directories(
+
   ${CMAKE_BINARY_DIR}/src/ui
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
 )
 
-INCLUDE_DIRECTORIES(SYSTEM
-  ${GEOS_INCLUDE_DIR}
-)
-
-IF (WITH_GUI)
-  INCLUDE_DIRECTORIES(SYSTEM
+if (WITH_GUI)
+  include_directories(SYSTEM
     ${QSCINTILLA_INCLUDE_DIR}
   )
-ENDIF ()
+endif()
 
 ###############################################################################
 
-SET (AFS_SRCS
-  qgsarcgisrestutils.cpp
-  qgsafsdataitems.cpp
+set (AFS_SRCS
   qgsafsfeatureiterator.cpp
   qgsafsprovider.cpp
-  qgsafsproviderextern.cpp
   qgsafsshareddata.cpp
+  qgsarcgisrestdataitems.cpp
 )
-SET (AFS_MOC_HDRS
-  qgsarcgisrestutils.h
-  qgsafsdataitems.h
-  qgsafsprovider.h
-  qgsafsshareddata.h
-)
-
-IF (WITH_GUI)
-  SET(AFS_SRCS ${AFS_SRCS}
-    qgsafssourceselect.cpp
-    qgsarcgisservicesourceselect.cpp
+if (WITH_GUI)
+  set(AFS_SRCS ${AFS_SRCS}
+    qgsarcgisrestdataitemguiprovider.cpp
+    qgsarcgisrestprovidergui.cpp
+    qgsarcgisrestsourceselect.cpp
+    qgsarcgisrestsourcewidget.cpp
+    qgsnewarcgisrestconnection.cpp
   )
-  SET(AFS_MOC_HDRS ${AFS_MOC_HDRS}
-    qgsafssourceselect.h
-    qgsarcgisservicesourceselect.h
-  )
-ENDIF ()
+endif()
 
-QT5_WRAP_CPP (AFS_MOC_SRCS ${AFS_MOC_HDRS})
+add_library (arcgisfeatureserverprovider_a STATIC ${AFS_SRCS})
+add_library(arcgisfeatureserverprovider MODULE ${AFS_SRCS})
 
-ADD_LIBRARY(arcgisfeatureserverprovider MODULE ${AFS_SRCS} ${AFS_MOC_SRCS})
+# require c++17
+target_compile_features(arcgisfeatureserverprovider_a PRIVATE cxx_std_17)
+target_compile_features(arcgisfeatureserverprovider PRIVATE cxx_std_17)
 
-TARGET_LINK_LIBRARIES(arcgisfeatureserverprovider
+target_link_libraries(arcgisfeatureserverprovider
   qgis_core
+  ${QCA_LIBRARY}
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES(arcgisfeatureserverprovider
+target_link_libraries (arcgisfeatureserverprovider_a
+  qgis_core
+  ${QCA_LIBRARY}
+)
+
+if (WITH_GUI)
+  target_link_libraries(arcgisfeatureserverprovider
     qgis_gui
   )
-ENDIF ()
+  target_link_libraries(arcgisfeatureserverprovider_a
+    qgis_gui
+  )
+  add_dependencies(arcgisfeatureserverprovider ui)
+  add_dependencies(arcgisfeatureserverprovider_a ui)
+endif()
 
-INSTALL (TARGETS arcgisfeatureserverprovider
+install (TARGETS arcgisfeatureserverprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})
 
 ###############################################################################
 
-SET (AMS_SRCS
-  qgsarcgisrestutils.cpp
-  qgsamsdataitems.cpp
+set (AMS_SRCS
   qgsamsprovider.cpp
-  qgsamsproviderextern.cpp
-)
-SET (AMS_MOC_HDRS
-  qgsarcgisrestutils.h
-  qgsamsdataitems.h
-  qgsamsprovider.h
 )
 
-IF (WITH_GUI)
-  SET(AMS_SRCS ${AMS_SRCS}
-    qgsamssourceselect.cpp
-    qgsarcgisservicesourceselect.cpp
-  )
-  SET(AMS_MOC_HDRS ${AMS_MOC_HDRS}
-    qgsamssourceselect.h
-    qgsarcgisservicesourceselect.h
-  )
-ENDIF ()
+add_library(arcgismapserverprovider MODULE ${AMS_SRCS})
 
-QT5_WRAP_CPP (AMS_MOC_SRCS ${AMS_MOC_HDRS})
+# require c++17
+target_compile_features(arcgismapserverprovider PRIVATE cxx_std_17)
 
-ADD_LIBRARY(arcgismapserverprovider MODULE ${AMS_SRCS} ${AMS_MOC_SRCS})
-
-TARGET_LINK_LIBRARIES(arcgismapserverprovider
+target_link_libraries(arcgismapserverprovider
   qgis_core
+  ${QCA_LIBRARY}
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES(arcgismapserverprovider
-    qgis_gui
-  )
-ENDIF ()
-
-INSTALL (TARGETS arcgismapserverprovider
+install (TARGETS arcgismapserverprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})

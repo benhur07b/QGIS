@@ -20,7 +20,7 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 
 ///@cond PRIVATE
@@ -38,16 +38,19 @@ class QgsDropGeometryAlgorithm : public QgsProcessingFeatureBasedAlgorithm
     QString displayName() const override;
     QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsDropGeometryAlgorithm *createInstance() const override SIP_FACTORY;
     QgsCoordinateReferenceSystem outputCrs( const QgsCoordinateReferenceSystem &inputCrs ) const override;
+    bool supportInPlaceEdit( const QgsMapLayer *layer ) const override;
 
   protected:
 
     QString outputName() const override;
     QgsWkbTypes::Type outputWkbType( QgsWkbTypes::Type inputWkbType ) const override;
     QgsFeatureRequest request() const override;
-    QgsFeature processFeature( const QgsFeature &feature, QgsProcessingFeedback *feedback ) override;
+    QgsProcessingFeatureSource::Flag sourceFlags() const override;
+    QgsFeatureList processFeature( const QgsFeature &feature, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
 };
 
 ///@endcond PRIVATE

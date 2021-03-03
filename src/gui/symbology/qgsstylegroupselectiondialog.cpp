@@ -17,6 +17,7 @@
 
 #include "qgsstylegroupselectiondialog.h"
 #include "qgsstyle.h"
+#include "qgsgui.h"
 
 #include <QStandardItemModel>
 #include <QStandardItem>
@@ -28,16 +29,24 @@ QgsStyleGroupSelectionDialog::QgsStyleGroupSelectionDialog( QgsStyle *style, QWi
 {
   setupUi( this );
 
+  QgsGui::enableAutoGeometryRestore( this );
+
   QStandardItemModel *model = new QStandardItemModel( groupTree );
   groupTree->setModel( model );
 
-  QStandardItem *allSymbols = new QStandardItem( tr( "All Symbols" ) );
+  QStandardItem *favSymbols = new QStandardItem( tr( "Favorites" ) );
+  favSymbols->setData( "favorites", Qt::UserRole + 2 );
+  favSymbols->setEditable( false );
+  setBold( favSymbols );
+  model->appendRow( favSymbols );
+
+  QStandardItem *allSymbols = new QStandardItem( tr( "All" ) );
   allSymbols->setData( "all", Qt::UserRole + 2 );
   allSymbols->setEditable( false );
   setBold( allSymbols );
   model->appendRow( allSymbols );
 
-  QStandardItem *tags = new QStandardItem( QLatin1String( "" ) ); //require empty name to get first order groups
+  QStandardItem *tags = new QStandardItem( QString() ); //require empty name to get first order groups
   tags->setData( "tagsheader", Qt::UserRole + 2 );
   tags->setEditable( false );
   tags->setFlags( tags->flags() & ~Qt::ItemIsSelectable );
@@ -80,18 +89,20 @@ void QgsStyleGroupSelectionDialog::setBold( QStandardItem *item )
   item->setFont( font );
 }
 
-
 void QgsStyleGroupSelectionDialog::groupTreeSelectionChanged( const QItemSelection &selected, const QItemSelection &deselected )
 {
-  QModelIndex index;
-  QModelIndexList selectedItems = selected.indexes();
-  QModelIndexList deselectedItems = deselected.indexes();
+  const QModelIndexList selectedItems = selected.indexes();
+  const QModelIndexList deselectedItems = deselected.indexes();
 
-  Q_FOREACH ( index, deselectedItems )
+  for ( const QModelIndex &index : deselectedItems )
   {
     if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "tagssheader" ) )
     {
       // Ignore: it's the group header
+    }
+    else if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "favorites" ) )
+    {
+      emit favoritesDeselected();
     }
     else if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "all" ) )
     {
@@ -111,11 +122,16 @@ void QgsStyleGroupSelectionDialog::groupTreeSelectionChanged( const QItemSelecti
       emit tagDeselected( index.data().toString() );
     }
   }
-  Q_FOREACH ( index, selectedItems )
+  const auto constSelectedItems = selectedItems;
+  for ( const QModelIndex &index : constSelectedItems )
   {
     if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "tagssheader" ) )
     {
       // Ignore: it's the group header
+    }
+    else if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "favorites" ) )
+    {
+      emit favoritesSelected();
     }
     else if ( index.data( Qt::UserRole + 2 ).toString() == QLatin1String( "all" ) )
     {
@@ -137,12 +153,12 @@ void QgsStyleGroupSelectionDialog::groupTreeSelectionChanged( const QItemSelecti
   }
 }
 
-
 void QgsStyleGroupSelectionDialog::buildTagTree( QStandardItem *&parent )
 {
   QStringList tags = mStyle->tags();
   tags.sort();
-  Q_FOREACH ( const QString &tag, tags )
+  const auto constTags = tags;
+  for ( const QString &tag : constTags )
   {
     QStandardItem *item = new QStandardItem( tag );
     item->setData( mStyle->tagId( tag ) );
@@ -151,4 +167,3 @@ void QgsStyleGroupSelectionDialog::buildTagTree( QStandardItem *&parent )
     parent->appendRow( item );
   }
 }
-

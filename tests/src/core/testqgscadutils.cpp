@@ -22,6 +22,7 @@
 #include "qgssnappingutils.h"
 #include "qgsvectorlayer.h"
 
+
 /**
  * \ingroup UnitTests
  * This is a unit test for the QgsCadUtils class.
@@ -30,11 +31,7 @@ class TestQgsCadUtils : public QObject
 {
     Q_OBJECT
   public:
-    TestQgsCadUtils()
-    {}
-    ~TestQgsCadUtils()
-    {
-    }
+    TestQgsCadUtils() = default;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -92,7 +89,7 @@ void TestQgsCadUtils::initTestCase()
   QgsSnappingConfig snapConfig;
   snapConfig.setEnabled( true );
   snapConfig.setMode( QgsSnappingConfig::AllLayers );
-  snapConfig.setType( QgsSnappingConfig::VertexAndSegment );
+  snapConfig.setTypeFlag( static_cast<QgsSnappingConfig::SnappingTypeFlag>( QgsSnappingConfig::VertexFlag | QgsSnappingConfig::SegmentFlag ) );
   snapConfig.setTolerance( 1.0 );
 
   mMapSettings.setExtent( QgsRectangle( 0, 0, 100, 100 ) );
@@ -102,6 +99,8 @@ void TestQgsCadUtils::initTestCase()
   mSnappingUtils = new QgsSnappingUtils;
   mSnappingUtils->setConfig( snapConfig );
   mSnappingUtils->setMapSettings( mMapSettings );
+
+  mSnappingUtils->locatorForLayer( mLayerPolygon )->init();
 }
 
 //runs after all tests
@@ -211,14 +210,14 @@ void TestQgsCadUtils::testCommonAngle()
   // without common angle
   QgsCadUtils::AlignMapPointOutput res0 = QgsCadUtils::alignMapPoint( QgsPointXY( 40, 20.1 ), context );
   QVERIFY( res0.valid );
-  QCOMPARE( res0.softLockCommonAngle, -1 );
+  QCOMPARE( res0.softLockCommonAngle, -1.0 );
   QCOMPARE( res0.finalMapPoint, QgsPointXY( 40, 20.1 ) );
 
   // common angle
   context.commonAngleConstraint = QgsCadUtils::AlignMapPointConstraint( true, false, 90 );
   QgsCadUtils::AlignMapPointOutput res1 = QgsCadUtils::alignMapPoint( QgsPointXY( 40, 20.1 ), context );
   QVERIFY( res1.valid );
-  QCOMPARE( res1.softLockCommonAngle, 0 );
+  QCOMPARE( res1.softLockCommonAngle, 0.0 );
   QCOMPARE( res1.finalMapPoint, QgsPointXY( 40, 20 ) );
 
   // common angle + angle  (make sure that angle constraint has priority)
@@ -226,7 +225,7 @@ void TestQgsCadUtils::testCommonAngle()
   context.angleConstraint = QgsCadUtils::AlignMapPointConstraint( true, false, 45 );
   QgsCadUtils::AlignMapPointOutput res2 = QgsCadUtils::alignMapPoint( QgsPointXY( 40, 20.1 ), context );
   QVERIFY( res2.valid );
-  QCOMPARE( res2.softLockCommonAngle, -1 );
+  QCOMPARE( res2.softLockCommonAngle, -1.0 );
   QCOMPARE( res2.finalMapPoint, QgsPointXY( 35.05, 25.05 ) );
 
   // common angle rel
@@ -235,7 +234,7 @@ void TestQgsCadUtils::testCommonAngle()
   context.cadPointList[1] = QgsPointXY( 40, 20 );
   QgsCadUtils::AlignMapPointOutput res3 = QgsCadUtils::alignMapPoint( QgsPointXY( 50.1, 29.9 ), context );
   QVERIFY( res3.valid );
-  QCOMPARE( res3.softLockCommonAngle, 90 );
+  QCOMPARE( res3.softLockCommonAngle, 90.0 );
   QCOMPARE( res3.finalMapPoint, QgsPointXY( 50, 30 ) );
 }
 
@@ -246,7 +245,7 @@ void TestQgsCadUtils::testDistance()
   // without distance constraint
   QgsCadUtils::AlignMapPointOutput res0 = QgsCadUtils::alignMapPoint( QgsPointXY( 45, 20 ), context );
   QVERIFY( res0.valid );
-  QCOMPARE( res0.softLockCommonAngle, -1 );
+  QCOMPARE( res0.softLockCommonAngle, -1.0 );
   QCOMPARE( res0.finalMapPoint, QgsPointXY( 45, 20 ) );
 
   // dist

@@ -32,7 +32,7 @@ class QgsLocatorProxyModel;
 /**
  * \class QgsLocatorModel
  * \ingroup core
- * An abstract list model for displaying the results of locator searches.
+ * \brief An abstract list model for displaying the results of locator searches.
  *
  * Note that this class should generally be used with a QgsLocatorProxyModel
  * in order to ensure correct sorting of results by priority and match level.
@@ -45,6 +45,8 @@ class CORE_EXPORT QgsLocatorModel : public QAbstractTableModel
 
   public:
 
+    static const int NoGroup = 9999;
+
     //! Custom model roles
     enum Role
     {
@@ -53,6 +55,8 @@ class CORE_EXPORT QgsLocatorModel : public QAbstractTableModel
       ResultFilterPriorityRole, //!< Result priority, used by QgsLocatorProxyModel for sorting roles.
       ResultScoreRole, //!< Result match score, used by QgsLocatorProxyModel for sorting roles.
       ResultFilterNameRole, //!< Associated filter name which created the result
+      ResultFilterGroupSortingRole, //!< Group results within the same filter results
+      ResultActionsRole, //!< The actions to be shown for the given result in a context menu
     };
 
     /**
@@ -78,6 +82,7 @@ class CORE_EXPORT QgsLocatorModel : public QAbstractTableModel
     int columnCount( const QModelIndex &parent = QModelIndex() ) const override;
     QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
     Qt::ItemFlags flags( const QModelIndex &index ) const override;
+    QHash<int, QByteArray> roleNames() const override;
 
   public slots:
 
@@ -99,10 +104,13 @@ class CORE_EXPORT QgsLocatorModel : public QAbstractTableModel
       QgsLocatorResult result;
       QString filterTitle;
       QgsLocatorFilter *filter = nullptr;
+      QString groupTitle = QString();
+      int groupSorting = 0;
     };
 
     QList<Entry> mResults;
     QSet<QString> mFoundResultsFromFilterNames;
+    QMap<QgsLocatorFilter *, QStringList> mFoundResultsFilterGroups;
     bool mDeferredClear = false;
     QTimer mDeferredClearTimer;
 };
@@ -110,7 +118,7 @@ class CORE_EXPORT QgsLocatorModel : public QAbstractTableModel
 /**
  * \class QgsLocatorAutomaticModel
  * \ingroup core
- * A QgsLocatorModel which has is associated directly with a
+ * \brief A QgsLocatorModel which has is associated directly with a
  * QgsLocator, and is automatically populated with results
  * from locator searches.
  *
@@ -176,7 +184,7 @@ class CORE_EXPORT QgsLocatorAutomaticModel : public QgsLocatorModel
 /**
  * \class QgsLocatorProxyModel
  * \ingroup core
- * A sort proxy model for QgsLocatorModel, which automatically sorts
+ * \brief A sort proxy model for QgsLocatorModel, which automatically sorts
  * results by precedence.
  * \since QGIS 3.0
  */

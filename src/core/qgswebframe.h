@@ -40,7 +40,7 @@ class CORE_EXPORT QWebFrame : public QObject
     Q_OBJECT
 
   public:
-    QWebFrame( QObject *parent = 0 )
+    QWebFrame( QObject *parent = nullptr )
       : QObject( parent )
     {
 
@@ -48,19 +48,20 @@ class CORE_EXPORT QWebFrame : public QObject
 
     void setZoomFactor( qreal factor )
     {
-      Q_UNUSED( factor );
+      Q_UNUSED( factor )
     }
 
     void setScrollBarPolicy( Qt::Orientation orientation, Qt::ScrollBarPolicy scrollbarpolicy )
     {
-      Q_UNUSED( orientation );
-      Q_UNUSED( scrollbarpolicy );
+      Q_UNUSED( orientation )
+      Q_UNUSED( scrollbarpolicy )
     }
 
     void setHtml( const QString &html, const QUrl &url = QUrl() )
     {
-      Q_UNUSED( html );
-      Q_UNUSED( url );
+      Q_UNUSED( html )
+      Q_UNUSED( url )
+      emit loadFinished( true );
     }
 
     QSize contentsSize() const
@@ -84,6 +85,8 @@ class CORE_EXPORT QWebFrame : public QObject
     }
 
   signals:
+    void loadFinished( bool ok );
+
     void javaScriptWindowObjectCleared();
 /// @endcond
 };

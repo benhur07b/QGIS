@@ -21,16 +21,13 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtCore import QFileInfo
 
 from qgis.core import (QgsProcessing,
+                       QgsProcessingException,
+                       QgsProcessingParameterDefinition,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBand,
                        QgsProcessingParameterString,
@@ -44,11 +41,11 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class polygonize(GdalAlgorithm):
-
     INPUT = 'INPUT'
     BAND = 'BAND'
     FIELD = 'FIELD'
     EIGHT_CONNECTEDNESS = 'EIGHT_CONNECTEDNESS'
+    EXTRA = 'EXTRA'
     OUTPUT = 'OUTPUT'
 
     def __init__(self):
@@ -58,6 +55,7 @@ class polygonize(GdalAlgorithm):
         self.addParameter(QgsProcessingParameterRasterLayer(self.INPUT, self.tr('Input layer')))
         self.addParameter(QgsProcessingParameterBand(self.BAND,
                                                      self.tr('Band number'),
+                                                     1,
                                                      parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterString(self.FIELD,
                                                        self.tr('Name of the field to create'),
@@ -65,6 +63,13 @@ class polygonize(GdalAlgorithm):
         self.addParameter(QgsProcessingParameterBoolean(self.EIGHT_CONNECTEDNESS,
                                                         self.tr('Use 8-connectedness'),
                                                         defaultValue=False))
+
+        extra_param = QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True)
+        extra_param.setFlags(extra_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(extra_param)
 
         self.addParameter(QgsProcessingParameterVectorDestination(self.OUTPUT,
                                                                   self.tr('Vectorized'),
@@ -79,19 +84,29 @@ class polygonize(GdalAlgorithm):
     def group(self):
         return self.tr('Raster conversion')
 
+    def groupId(self):
+        return 'rasterconversion'
+
     def icon(self):
         return QIcon(os.path.join(pluginPath, 'images', 'gdaltools', 'polygonize.png'))
 
-    def getConsoleCommands(self, parameters, context, feedback):
+    def commandName(self):
+        return 'gdal_polygonize'
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         arguments = []
         inLayer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if inLayer is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
         arguments.append(inLayer.source())
 
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
         output, outFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
         arguments.append(output)
 
-        if self.parameterAsBool(parameters, self.EIGHT_CONNECTEDNESS, context):
+        if self.parameterAsBoolean(parameters, self.EIGHT_CONNECTEDNESS, context):
             arguments.append('-8')
 
         arguments.append('-b')
@@ -100,15 +115,13 @@ class polygonize(GdalAlgorithm):
         if outFormat:
             arguments.append('-f {}'.format(outFormat))
 
-        arguments.append(GdalUtils.ogrLayerName(output))
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
+
+        layerName = GdalUtils.ogrOutputLayerName(output)
+        if layerName:
+            arguments.append(layerName)
         arguments.append(self.parameterAsString(parameters, self.FIELD, context))
 
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal_polygonize.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal_polygonize.py',
-                        GdalUtils.escapeAndJoin(arguments)]
-
-        return commands
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

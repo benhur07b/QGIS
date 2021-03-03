@@ -32,6 +32,8 @@
 #include "qgsogrutils.h"
 #include "qgsapplication.h"
 
+#include "qgsprovidermetadata.h"
+
 #include <QString>
 #include <QStringList>
 #include <QDomElement>
@@ -60,7 +62,7 @@ struct QgsWcsAuthorization
     , mAuthCfg( authcfg )
   {}
 
-  //! set authorization header
+  //! Sets authorization header
   bool setAuthorization( QNetworkRequest &request ) const
   {
     if ( !mAuthCfg.isEmpty() )
@@ -74,7 +76,7 @@ struct QgsWcsAuthorization
     return true;
   }
 
-  //! set authorization reply
+  //! Sets authorization reply
   bool setAuthorizationReply( QNetworkReply *reply ) const
   {
     if ( !mAuthCfg.isEmpty() )
@@ -95,38 +97,43 @@ struct QgsWcsAuthorization
 };
 
 /**
-
-  \brief Data provider for OGC WCS layers.
-
-  This provider implements the
-  interface defined in the QgsDataProvider class to provide access to spatial
-  data residing in a OGC Web Map Service.
-
+ *
+ * \brief Data provider for OGC WCS layers.
+ *
+ * This provider implements the
+ * interface defined in the QgsDataProvider class to provide access to spatial
+ * data residing in a OGC Web Map Service.
+ *
 */
-class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
+class QgsWcsProvider final: public QgsRasterDataProvider, QgsGdalProviderBase
 {
     Q_OBJECT
 
   public:
 
+    static QString WCS_KEY;
+    static QString WCS_DESCRIPTION;
+
     /**
      * Constructor for the provider.
      *
-     * \param   uri   HTTP URL of the Web Server.  If needed a proxy will be used
+     * \param uri HTTP URL of the Web Server.  If needed a proxy will be used
      *                otherwise we contact the host directly.
-     *
+     * \param options generic data provider options
      */
-    explicit QgsWcsProvider( const QString &uri = QString() );
+    explicit QgsWcsProvider( const QString &uri, const QgsDataProvider::ProviderOptions &providerOptions, QgsDataProvider::ReadFlags flags );
 
+    //! copy constructor
+    explicit QgsWcsProvider( const QgsWcsProvider &other, const QgsDataProvider::ProviderOptions &providerOptions );
 
-    virtual ~QgsWcsProvider();
+    ~QgsWcsProvider() override;
 
     QgsWcsProvider *clone() const override;
 
-    virtual QgsCoordinateReferenceSystem crs() const override;
+    QgsCoordinateReferenceSystem crs() const override;
 
     /**
-     * Get the coverage format used in the transfer from the WCS server
+     * Gets the coverage format used in the transfer from the WCS server
      */
     QString format() const;
 
@@ -144,14 +151,14 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
 
     // TODO: Document this better.
 
-    void readBlock( int bandNo, QgsRectangle  const &viewExtent, int width, int height, void *data, QgsRasterBlockFeedback *feedback = nullptr ) override;
+    bool readBlock( int bandNo, QgsRectangle  const &viewExtent, int width, int height, void *data, QgsRasterBlockFeedback *feedback = nullptr ) override;
 
-    void readBlock( int bandNo, int xBlock, int yBlock, void *block ) override;
+    bool readBlock( int bandNo, int xBlock, int yBlock, void *block ) override;
 
     //! Download cache
     void getCache( int bandNo, QgsRectangle  const &viewExtent, int width, int height, QString crs = QString(), QgsRasterBlockFeedback *feedback = nullptr ) const;
 
-    virtual QgsRectangle extent() const override;
+    QgsRectangle extent() const override;
 
     bool isValid() const override;
 
@@ -160,7 +167,7 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
      */
     virtual QString baseUrl() const;
 
-    //! get WCS version string
+    //! Gets WCS version string
     QString wcsVersion();
 
     // Reimplemented QgsRasterDataProvider virtual methods
@@ -173,14 +180,14 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
     int yBlockSize() const override;
     int xSize() const override;
     int ySize() const override;
-    QString metadata() override;
+    QString htmlMetadata() override;
     QgsRasterIdentifyResult identify( const QgsPointXY &point, QgsRaster::IdentifyFormat format, const QgsRectangle &boundingBox = QgsRectangle(), int width = 0, int height = 0, int dpi = 96 ) override;
     QString lastErrorTitle() override;
     QString lastError() override;
     QString lastErrorFormat() override;
     QString name() const override;
     QString description() const override;
-    void reloadData() override;
+    QgsRasterDataProvider::ProviderCapabilities providerCapabilities() const override;
     QList<QgsColorRampShader::ColorRampItem> colorTable( int bandNo )const override;
 
     int colorInterpretation( int bandNo ) const override;
@@ -204,7 +211,7 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
     /**
      * \brief Calculates the combined extent of the layers selected by layersDrawn
      *
-     * \retval false if the capabilities document could not be retrieved or parsed -
+     * \returns false if the capabilities document could not be retrieved or parsed -
      *         see lastError() for more info
      */
     bool calculateExtent() const;
@@ -222,7 +229,7 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
     /**
      * \brief Prepare the URI so that we can later simply append param=value
      * \param uri uri to prepare
-     * \retval prepared uri
+     * \returns prepared uri
      */
     QString prepareUri( QString uri ) const;
 
@@ -290,8 +297,9 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
 
     /**
      * \brief Gdal data types used to represent data in in QGIS,
-               may be longer than source data type to keep nulls
-               indexed from 0 */
+     *          may be longer than source data type to keep nulls
+     *          indexed from 0.
+     */
     QList<GDALDataType> mGdalDataType;
 
     //! GDAL source data types, indexed from 0
@@ -393,6 +401,11 @@ class QgsWcsProvider : public QgsRasterDataProvider, QgsGdalProviderBase
 
     QNetworkRequest::CacheLoadControl mCacheLoadControl = QNetworkRequest::PreferNetwork;
 
+    /**
+     * Clears cache
+    */
+    void reloadProviderData() override;
+
 };
 
 //! Handler for downloading of coverage data - output is written to mCachedData
@@ -401,7 +414,7 @@ class QgsWcsDownloadHandler : public QObject
     Q_OBJECT
   public:
     QgsWcsDownloadHandler( const QUrl &url, QgsWcsAuthorization &auth, QNetworkRequest::CacheLoadControl cacheLoadControl, QByteArray &cachedData, const QString &wcsVersion, QgsError &cachedError, QgsRasterBlockFeedback *feedback );
-    ~QgsWcsDownloadHandler();
+    ~QgsWcsDownloadHandler() override;
 
     void blockingDownload();
 
@@ -427,6 +440,13 @@ class QgsWcsDownloadHandler : public QObject
     static int sErrors; // this should be ideally per-provider...?
 };
 
+class QgsWcsProviderMetadata final: public QgsProviderMetadata
+{
+  public:
+    QgsWcsProviderMetadata();
+    QgsWcsProvider *createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options, QgsDataProvider::ReadFlags flags = QgsDataProvider::ReadFlags() ) override;
+    QList<QgsDataItemProvider *> dataItemProviders() const override;
+};
 
 #endif
 

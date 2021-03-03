@@ -17,6 +17,7 @@
 #include "qgstest.h"
 #include <QObject>
 #include <QTemporaryFile>
+#include <QTemporaryDir>
 #include <QUrl>
 #include <QEventLoop>
 #include <QTimer>
@@ -51,7 +52,7 @@ class TestQgsFileDownloader: public QObject
     {
       mError = true;
       errorMessages.sort();
-      mErrorMessage = errorMessages.join( QStringLiteral( ";" ) );
+      mErrorMessage = errorMessages.join( QLatin1Char( ';' ) );
     }
     //! Called when data ready to be processed
     void downloadProgress( qint64 bytesReceived, qint64 bytesTotal )
@@ -73,6 +74,7 @@ class TestQgsFileDownloader: public QObject
     void testCanceledDownload();
     void testInvalidUrl();
     void testBlankUrl();
+    void testLacksWritePermissionsError();
 #ifndef QT_NO_SSL
     void testSslError_data();
     void testSslError();
@@ -131,7 +133,7 @@ void TestQgsFileDownloader::init()
   mCompleted = false;
   mExited = false;
   mTempFile = new QTemporaryFile();
-  Q_ASSERT( mTempFile->open() );
+  QVERIFY( mTempFile->open() );
   mTempFile->close();
 }
 
@@ -202,7 +204,7 @@ void TestQgsFileDownloader::testInvalidUrl()
 void TestQgsFileDownloader::testBlankUrl()
 {
   QVERIFY( ! mTempFile->fileName().isEmpty() );
-  makeCall( QUrl( QLatin1String( "" ) ), mTempFile->fileName() );
+  makeCall( QUrl( QString() ), mTempFile->fileName() );
   QVERIFY( mExited );
   QVERIFY( !mCompleted );
   QVERIFY( mError );
@@ -235,6 +237,22 @@ void TestQgsFileDownloader::testSslError()
   QVERIFY( mError );
   QVERIFY( !mCanceled );
 }
+
+void TestQgsFileDownloader::testLacksWritePermissionsError()
+{
+  QTemporaryDir dir;
+  QFile tmpDir( dir.path( ) );
+  tmpDir.setPermissions( tmpDir.permissions() & ~( QFile::Permission::WriteGroup |  QFile::Permission::WriteUser | QFile::Permission::WriteOther | QFile::Permission::WriteOwner ) );
+  QVERIFY( ! tmpDir.isWritable() );
+  QString fileName( dir.path() + '/' + QStringLiteral( "tmp.bin" ) );
+  makeCall( QUrl( QStringLiteral( "http://www.qgis.org" ) ), fileName );
+  QVERIFY( mExited );
+  QVERIFY( !mCompleted );
+  QVERIFY( mError );
+  QVERIFY( !mCanceled );
+  QVERIFY( ! QFileInfo::exists( fileName ) );
+}
+
 
 #endif
 

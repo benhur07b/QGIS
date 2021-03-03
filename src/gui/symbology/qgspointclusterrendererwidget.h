@@ -19,7 +19,7 @@
 #define QGSPOINTCLUSTERRENDERERWIDGET_H
 
 #include "ui_qgspointclusterrendererwidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrendererwidget.h"
 #include "qgsexpressioncontextgenerator.h"
 #include "qgis_gui.h"
@@ -29,7 +29,7 @@ class QgsPointClusterRenderer;
 /**
  * \class QgsPointClusterRendererWidget
  * \ingroup gui
- * A widget which allows configuration of the properties for a QgsPointClusterRenderer.
+ * \brief A widget which allows configuration of the properties for a QgsPointClusterRenderer.
  * \since QGIS 3.0
  */
 
@@ -56,7 +56,7 @@ class GUI_EXPORT QgsPointClusterRendererWidget: public QgsRendererWidget, public
      */
     QgsPointClusterRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
 
-    ~QgsPointClusterRendererWidget();
+    ~QgsPointClusterRendererWidget() override;
 
     QgsFeatureRenderer *renderer() override;
     void setContext( const QgsSymbolWidgetContext &context ) override;

@@ -17,32 +17,66 @@
 
 #include <QBoxLayout>
 #include <Qt3DExtras/Qt3DWindow>
+#include <Qt3DRender/QRenderCapture>
+#include <Qt3DLogic/QFrameAction>
+#include <QMouseEvent>
+
 
 #include "qgscameracontroller.h"
 #include "qgs3dmapsettings.h"
 #include "qgs3dmapscene.h"
-
+#include "qgs3dmaptool.h"
+#include "qgswindow3dengine.h"
+#include "qgs3dnavigationwidget.h"
+#include "qgsproject.h"
+#include "qgsprojectviewsettings.h"
+#include "qgssettings.h"
+#include "qgstemporalcontroller.h"
+#include "qgsflatterraingenerator.h"
+#include "qgsonlineterraingenerator.h"
+#include "qgsray3d.h"
+#include "qgs3dutils.h"
+#include "qgsoffscreen3dengine.h"
 
 Qgs3DMapCanvas::Qgs3DMapCanvas( QWidget *parent )
   : QWidget( parent )
-  , mWindow3D( nullptr )
-  , mContainer( nullptr )
-  , mMap( nullptr )
-  , mScene( nullptr )
 {
-  mWindow3D = new Qt3DExtras::Qt3DWindow;
-  mContainer = QWidget::createWindowContainer( mWindow3D );
+  QgsSettings setting;
+  mEngine = new QgsWindow3DEngine( this );
+
+  connect( mEngine, &QgsAbstract3DEngine::imageCaptured, [ = ]( const QImage & image )
+  {
+    image.save( mCaptureFileName, mCaptureFileFormat.toLocal8Bit().data() );
+    mEngine->setRenderCaptureEnabled( false );
+    emit savedAsImage( mCaptureFileName );
+  } );
+
+  mContainer = QWidget::createWindowContainer( mEngine->window() );
+  mNavigationWidget = new Qgs3DNavigationWidget( this );
 
   QHBoxLayout *hLayout = new QHBoxLayout( this );
-  hLayout->setMargin( 0 );
+  hLayout->setContentsMargins( 0, 0, 0, 0 );
   hLayout->addWidget( mContainer, 1 );
+  hLayout->addWidget( mNavigationWidget );
+  this->setOnScreenNavigationVisibility(
+    setting.value( QStringLiteral( "/3D/navigationWidget/visibility" ), true, QgsSettings::Gui ).toBool()
+  );
 
-  mWindow3D->setCursor( Qt::OpenHandCursor );
+  mEngine->window()->setCursor( Qt::OpenHandCursor );
+  mEngine->window()->installEventFilter( this );
+
+  mEngine->setSize( mContainer->size() );
 }
 
 Qgs3DMapCanvas::~Qgs3DMapCanvas()
 {
+  if ( mMapTool )
+    mMapTool->deactivate();
+  // make sure the scene is deleted while map settings object is still alive
+  delete mScene;
+  mScene = nullptr;
   delete mMap;
+  mMap = nullptr;
 }
 
 void Qgs3DMapCanvas::resizeEvent( QResizeEvent *ev )
@@ -54,6 +88,8 @@ void Qgs3DMapCanvas::resizeEvent( QResizeEvent *ev )
 
   QRect viewportRect( QPoint( 0, 0 ), size() );
   mScene->cameraController()->setViewport( viewportRect );
+
+  mEngine->setSize( viewportRect.size() );
 }
 
 void Qgs3DMapCanvas::setMap( Qgs3DMapSettings *map )
@@ -63,21 +99,199 @@ void Qgs3DMapCanvas::setMap( Qgs3DMapSettings *map )
   Q_ASSERT( !mScene );
 
   QRect viewportRect( QPoint( 0, 0 ), size() );
-  Qgs3DMapScene *newScene = new Qgs3DMapScene( *map, mWindow3D->defaultFrameGraph(), mWindow3D->renderSettings(), mWindow3D->camera(), viewportRect );
+  Qgs3DMapScene *newScene = new Qgs3DMapScene( *map, mEngine );
 
-  mWindow3D->setRootEntity( newScene );
+  mEngine->setSize( viewportRect.size() );
+  mEngine->setRootEntity( newScene );
 
   if ( mScene )
+  {
     mScene->deleteLater();
+  }
   mScene = newScene;
+  connect( mScene, &Qgs3DMapScene::fpsCountChanged, this, &Qgs3DMapCanvas::fpsCountChanged );
+  connect( mScene, &Qgs3DMapScene::fpsCounterEnabledChanged, this, &Qgs3DMapCanvas::fpsCounterEnabledChanged );
 
   delete mMap;
   mMap = map;
 
   resetView();
+
+  // Connect the camera to the navigation widget.
+  connect( cameraController(), &QgsCameraController::cameraChanged, mNavigationWidget, &Qgs3DNavigationWidget::updateFromCamera );
+  connect( cameraController(), &QgsCameraController::setCursorPosition, this, [ = ]( QPoint point )
+  {
+    QCursor::setPos( mapToGlobal( point ) );
+  } );
+  connect( cameraController(), &QgsCameraController::cameraMovementSpeedChanged, mMap, &Qgs3DMapSettings::setCameraMovementSpeed );
+  connect( cameraController(), &QgsCameraController::cameraMovementSpeedChanged, this, &Qgs3DMapCanvas::cameraNavigationSpeedChanged );
+  connect( cameraController(), &QgsCameraController::navigationModeHotKeyPressed, this, &Qgs3DMapCanvas::onNavigationModeHotKeyPressed );
+
+  emit mapSettingsChanged();
 }
 
-void Qgs3DMapCanvas::resetView()
+QgsCameraController *Qgs3DMapCanvas::cameraController()
 {
+  return mScene ? mScene->cameraController() : nullptr;
+}
+
+void Qgs3DMapCanvas::resetView( bool resetExtent )
+{
+  if ( resetExtent )
+  {
+    if ( map()->terrainGenerator()->type() == QgsTerrainGenerator::Flat ||
+         map()->terrainGenerator()->type() == QgsTerrainGenerator::Online )
+    {
+      const QgsReferencedRectangle extent = QgsProject::instance()->viewSettings()->fullExtent();
+      QgsCoordinateTransform ct( extent.crs(), map()->crs(), QgsProject::instance()->transformContext() );
+      ct.setBallparkTransformsAreAppropriate( true );
+      QgsRectangle rect;
+      try
+      {
+        rect = ct.transformBoundingBox( extent );
+      }
+      catch ( QgsCsException & )
+      {
+        rect = extent;
+      }
+      map()->terrainGenerator()->setExtent( rect );
+
+      // reproject terrain's extent to map CRS
+      QgsRectangle te = map()->terrainGenerator()->extent();
+      QgsCoordinateTransform terrainToMapTransform( map()->terrainGenerator()->crs(), map()->crs(), QgsProject::instance() );
+      te = terrainToMapTransform.transformBoundingBox( te );
+
+      QgsPointXY center = te.center();
+      map()->setOrigin( QgsVector3D( center.x(), center.y(), 0 ) );
+    }
+  }
+
   mScene->viewZoomFull();
+}
+
+void Qgs3DMapCanvas::setViewFromTop( const QgsPointXY &center, float distance, float rotation )
+{
+  float worldX = center.x() - mMap->origin().x();
+  float worldY = center.y() - mMap->origin().y();
+  mScene->cameraController()->setViewFromTop( worldX, -worldY, distance, rotation );
+}
+
+void Qgs3DMapCanvas::saveAsImage( const QString fileName, const QString fileFormat )
+{
+  if ( !fileName.isEmpty() )
+  {
+    mCaptureFileName = fileName;
+    mCaptureFileFormat = fileFormat;
+    mEngine->setRenderCaptureEnabled( true );
+    // Setup a frame action that is used to wait until next frame
+    Qt3DLogic::QFrameAction *screenCaptureFrameAction = new Qt3DLogic::QFrameAction;
+    mScene->addComponent( screenCaptureFrameAction );
+    // Wait to have the render capture enabled in the next frame
+    connect( screenCaptureFrameAction, &Qt3DLogic::QFrameAction::triggered, [ = ]( float )
+    {
+      mEngine->requestCaptureImage();
+      mScene->removeComponent( screenCaptureFrameAction );
+      screenCaptureFrameAction->deleteLater();
+    } );
+  }
+}
+
+void Qgs3DMapCanvas::setMapTool( Qgs3DMapTool *tool )
+{
+  if ( tool == mMapTool )
+    return;
+
+  // For Camera Control tool
+  if ( mMapTool && !tool )
+  {
+    mScene->cameraController()->setEnabled( true );
+    mEngine->window()->setCursor( Qt::OpenHandCursor );
+  }
+  else if ( !mMapTool && tool )
+  {
+    mScene->cameraController()->setEnabled( tool->allowsCameraControls() );
+  }
+
+  if ( mMapTool )
+    mMapTool->deactivate();
+
+  mMapTool = tool;
+
+  if ( mMapTool )
+  {
+    mMapTool->activate();
+    mEngine->window()->setCursor( mMapTool->cursor() );
+  }
+
+}
+
+bool Qgs3DMapCanvas::eventFilter( QObject *watched, QEvent *event )
+{
+  if ( watched != mEngine->window() )
+    return false;
+
+  if ( event->type() == QEvent::ShortcutOverride )
+  {
+    // if the camera controller will handle a key event, don't allow it to propagate
+    // outside of the 3d window or it may be grabbed by a parent window level shortcut
+    // and accordingly never be received by the camera controller
+    if ( cameraController() && cameraController()->willHandleKeyEvent( static_cast< QKeyEvent * >( event ) ) )
+    {
+      event->accept();
+      return true;
+    }
+    return false;
+  }
+
+  if ( !mMapTool )
+    return false;
+
+  switch ( event->type() )
+  {
+    case QEvent::MouseButtonPress:
+      mMapTool->mousePressEvent( static_cast<QMouseEvent *>( event ) );
+      break;
+    case QEvent::MouseButtonRelease:
+      mMapTool->mouseReleaseEvent( static_cast<QMouseEvent *>( event ) );
+      break;
+    case QEvent::MouseMove:
+      mMapTool->mouseMoveEvent( static_cast<QMouseEvent *>( event ) );
+      break;
+    default:
+      break;
+  }
+  return false;
+}
+
+void Qgs3DMapCanvas::setOnScreenNavigationVisibility( bool visibility )
+{
+  mNavigationWidget->setVisible( visibility );
+  QgsSettings setting;
+  setting.setValue( QStringLiteral( "/3D/navigationWidget/visibility" ), visibility, QgsSettings::Gui );
+}
+
+void Qgs3DMapCanvas::setTemporalController( QgsTemporalController *temporalController )
+{
+  if ( mTemporalController )
+    disconnect( mTemporalController, &QgsTemporalController::updateTemporalRange, this, &Qgs3DMapCanvas::updateTemporalRange );
+
+  mTemporalController = temporalController;
+  connect( mTemporalController, &QgsTemporalController::updateTemporalRange, this, &Qgs3DMapCanvas::updateTemporalRange );
+}
+
+void Qgs3DMapCanvas::updateTemporalRange( const QgsDateTimeRange &temporalrange )
+{
+  mMap->setTemporalRange( temporalrange );
+  mScene->updateTemporal();
+}
+
+QSize Qgs3DMapCanvas::windowSize() const
+{
+  return mEngine->size();
+}
+
+void Qgs3DMapCanvas::onNavigationModeHotKeyPressed( QgsCameraController::NavigationMode mode )
+{
+  mMap->setCameraNavigationMode( mode );
+  mScene->cameraController()->setCameraNavigationMode( mode );
 }

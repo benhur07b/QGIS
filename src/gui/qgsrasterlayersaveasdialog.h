@@ -51,13 +51,14 @@ class GUI_EXPORT QgsRasterLayerSaveAsDialog: public QDialog, private Ui::QgsRast
       UserResolution
     };
 
+    //! Constructor for QgsRasterLayerSaveAsDialog
     QgsRasterLayerSaveAsDialog( QgsRasterLayer *rasterLayer,
                                 QgsRasterDataProvider *sourceProvider,
                                 const QgsRectangle &currentExtent,
                                 const QgsCoordinateReferenceSystem &layerCrs,
                                 const QgsCoordinateReferenceSystem &currentCrs,
                                 QWidget *parent SIP_TRANSFERTHIS = nullptr,
-                                Qt::WindowFlags f = 0 );
+                                Qt::WindowFlags f = Qt::WindowFlags() );
 
     Mode mode() const;
     int nColumns() const;
@@ -67,8 +68,29 @@ class GUI_EXPORT QgsRasterLayerSaveAsDialog: public QDialog, private Ui::QgsRast
     int maximumTileSizeX() const;
     int maximumTileSizeY() const;
     bool tileMode() const;
+
+    /**
+     * Returns TRUE if the "add to canvas" checkbox is checked.
+     *
+     * \see setAddToCanvas()
+     */
     bool addToCanvas() const;
+
+    /**
+     * Sets whether the  "add to canvas" checkbox should be \a checked.
+     *
+     * \see addToCanvas()
+     * \since QGIS 3.6
+     */
+    void setAddToCanvas( bool checked );
+
     QString outputFileName() const;
+
+    /**
+     * Name of the output layer within GeoPackage file
+     * \since QGIS 3.4
+     */
+    QString outputLayerName() const;
     QString outputFormat() const;
     QgsCoordinateReferenceSystem outputCrs();
     QStringList createOptions() const;
@@ -85,12 +107,10 @@ class GUI_EXPORT QgsRasterLayerSaveAsDialog: public QDialog, private Ui::QgsRast
     void hideOutput();
 
   public slots:
-    virtual void accept() override { if ( validate() ) return QDialog::accept(); }
+    void accept() override;
 
   private slots:
     void mRawModeRadioButton_toggled( bool );
-    void mBrowseButton_clicked();
-    void mSaveAsLineEdit_textChanged( const QString &text );
     void mFormatComboBox_currentIndexChanged( const QString &text );
     void mResolutionRadioButton_toggled( bool ) { toggleResolutionSize(); }
     void mOriginalResolutionPushButton_clicked() { setOriginalResolution(); }
@@ -138,7 +158,12 @@ class GUI_EXPORT QgsRasterLayerSaveAsDialog: public QDialog, private Ui::QgsRast
     double noDataCellValue( int row, int column ) const;
     void adjustNoDataCellWidth( int row, int column );
     bool validate() const;
+    // Returns true if the output layer already exists.
+    bool outputLayerExists() const;
 
+    void insertAvailableOutputFormats();
+
+    friend class TestQgsRasterLayerSaveAsDialog;
 };
 
 

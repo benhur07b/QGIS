@@ -114,13 +114,15 @@ bool QgsRegularPolygon::operator !=( const QgsRegularPolygon &rp ) const
 bool QgsRegularPolygon::isEmpty() const
 {
   return ( ( mNumberSides < 3 ) ||
+           ( mCenter.isEmpty() ) ||
+           ( mFirstVertex.isEmpty() ) ||
            ( mCenter == mFirstVertex )
          );
 }
 
 void QgsRegularPolygon::setCenter( const QgsPoint &center )
 {
-  double azimuth = mCenter.azimuth( mFirstVertex );
+  double azimuth = mFirstVertex.isEmpty() ? 0 : mCenter.azimuth( mFirstVertex );
   // TODO: double inclination = mCenter.inclination(mFirstVertex);
   mCenter = center;
   mFirstVertex = center.project( mRadius, azimuth );
@@ -129,7 +131,7 @@ void QgsRegularPolygon::setCenter( const QgsPoint &center )
 void QgsRegularPolygon::setRadius( const double radius )
 {
   mRadius = std::fabs( radius );
-  double azimuth = mCenter.azimuth( mFirstVertex );
+  double azimuth = mFirstVertex.isEmpty() ? 0 : mCenter.azimuth( mFirstVertex );
   // TODO: double inclination = mCenter.inclination(mFirstVertex);
   mFirstVertex = mCenter.project( mRadius, azimuth );
 }
@@ -221,9 +223,9 @@ QgsTriangle QgsRegularPolygon::toTriangle() const
   return QgsTriangle( pts.at( 0 ), pts.at( 1 ), pts.at( 2 ) );
 }
 
-QList<QgsTriangle> QgsRegularPolygon::triangulate() const
+QVector<QgsTriangle> QgsRegularPolygon::triangulate() const
 {
-  QList<QgsTriangle> l_tri;
+  QVector<QgsTriangle> l_tri;
   if ( isEmpty() )
   {
     return l_tri;

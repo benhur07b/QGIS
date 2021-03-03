@@ -15,21 +15,21 @@
 
 #include "qgsaabb.h"
 
-QgsAABB::QgsAABB()
-  : xMin( 0 ), yMin( 0 ), zMin( 0 ), xMax( 0 ), yMax( 0 ), zMax( 0 )
-{
-}
-
 QgsAABB::QgsAABB( float xMin, float yMin, float zMin, float xMax, float yMax, float zMax )
-  : xMin( xMin ), yMin( yMin ), zMin( zMin ), xMax( xMax ), yMax( yMax ), zMax( zMax )
+  : xMin( xMin )
+  , yMin( yMin )
+  , zMin( zMin )
+  , xMax( xMax )
+  , yMax( yMax )
+  , zMax( zMax )
 {
   // normalize coords
   if ( this->xMax < this->xMin )
-    qSwap( this->xMin, this->xMax );
+    std::swap( this->xMin, this->xMax );
   if ( this->yMax < this->yMin )
-    qSwap( this->yMin, this->yMax );
+    std::swap( this->yMin, this->yMax );
   if ( this->zMax < this->zMin )
-    qSwap( this->zMin, this->zMax );
+    std::swap( this->zMin, this->zMax );
 }
 
 bool QgsAABB::intersects( const QgsAABB &other ) const
@@ -49,13 +49,13 @@ bool QgsAABB::intersects( float x, float y, float z ) const
 
 float QgsAABB::distanceFromPoint( float x, float y, float z ) const
 {
-  float dx = qMax( xMin - x, qMax( 0.f, x - xMax ) );
-  float dy = qMax( yMin - y, qMax( 0.f, y - yMax ) );
-  float dz = qMax( zMin - z, qMax( 0.f, z - zMax ) );
+  float dx = std::max( xMin - x, std::max( 0.f, x - xMax ) );
+  float dy = std::max( yMin - y, std::max( 0.f, y - yMax ) );
+  float dz = std::max( zMin - z, std::max( 0.f, z - zMax ) );
   return sqrt( dx * dx + dy * dy + dz * dz );
 }
 
-float QgsAABB::distanceFromPoint( const QVector3D &v ) const
+float QgsAABB::distanceFromPoint( QVector3D v ) const
 {
   return distanceFromPoint( v.x(), v.y(), v.z() );
 }
@@ -91,4 +91,9 @@ QList<QVector3D> QgsAABB::verticesForLines() const
     }
   }
   return vertices;
+}
+
+QString QgsAABB::toString() const
+{
+  return QStringLiteral( "X %1 - %2  Y %3 - %4  Z %5 - %6" ).arg( xMin ).arg( xMax ).arg( yMin ).arg( yMax ).arg( zMin ).arg( zMax );
 }

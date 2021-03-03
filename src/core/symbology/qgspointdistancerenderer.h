@@ -28,7 +28,7 @@ class QgsSpatialIndex;
 /**
  * \class QgsPointDistanceRenderer
  * \ingroup core
- * An abstract base class for distance based point renderers (e.g., clusterer and displacement renderers).
+ * \brief An abstract base class for distance based point renderers (e.g., clusterer and displacement renderers).
  * QgsPointDistanceRenderer handles calculation of point clusters using a distance based threshold.
  * Subclasses must implement drawGroup() to handle the rendering of individual point clusters
  * in the desired style.
@@ -47,7 +47,7 @@ class CORE_EXPORT QgsPointDistanceRenderer: public QgsFeatureRenderer
          * Constructor for GroupedFeature.
         * \param feature feature
         * \param symbol base symbol for rendering feature (owned by GroupedFeature)
-        * \param isSelected set to true if feature is selected and should be rendered in a selected state
+        * \param isSelected set to TRUE if feature is selected and should be rendered in a selected state
         * \param label optional label text, or empty string for no label
         */
         GroupedFeature( const QgsFeature &feature, QgsMarkerSymbol *symbol SIP_TRANSFER, bool isSelected, const QString &label = QString() )
@@ -83,27 +83,29 @@ class CORE_EXPORT QgsPointDistanceRenderer: public QgsFeatureRenderer
      */
     QgsPointDistanceRenderer( const QString &rendererName, const QString &labelAttributeName = QString() );
 
-    virtual void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props = QgsStringMap() ) const override;
-    bool renderFeature( QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) override;
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
-    virtual QgsFeatureRenderer::Capabilities capabilities() override;
-    virtual QgsSymbolList symbols( QgsRenderContext &context ) override;
-    virtual QgsSymbol *symbolForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
-    virtual QgsSymbol *originalSymbolForFeature( QgsFeature &feat, QgsRenderContext &context ) override;
-    virtual QgsSymbolList symbolsForFeature( QgsFeature &feat, QgsRenderContext &context ) override;
-    virtual QgsSymbolList originalSymbolsForFeature( QgsFeature &feat, QgsRenderContext &context ) override;
-    virtual QSet< QString > legendKeysForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
-    virtual bool willRenderFeature( QgsFeature &feat, QgsRenderContext &context ) override;
-    virtual void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
+    void toSld( QDomDocument &doc, QDomElement &element, const QVariantMap &props = QVariantMap() ) const override;
+    bool renderFeature( const QgsFeature &feature, QgsRenderContext &context, int layer = -1, bool selected = false, bool drawVertexMarker = false ) override SIP_THROW( QgsCsException );
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool filterNeedsGeometry() const override;
+    QgsFeatureRenderer::Capabilities capabilities() override;
+    QgsSymbolList symbols( QgsRenderContext &context ) const override;
+    QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QgsSymbol *originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QgsSymbolList symbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QgsSymbolList originalSymbolsForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    bool willRenderFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
     void stopRender( QgsRenderContext &context ) override;
-    virtual QgsLegendSymbolList legendSymbolItems() const override;
+    QgsLegendSymbolList legendSymbolItems() const override;
     void setEmbeddedRenderer( QgsFeatureRenderer *r SIP_TRANSFER ) override;
     const QgsFeatureRenderer *embeddedRenderer() const override;
     void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER ) override;
     bool legendSymbolItemsCheckable() const override;
     bool legendSymbolItemChecked( const QString &key ) override;
     void checkLegendSymbolItem( const QString &key, bool state ) override;
-    virtual QString filter( const QgsFields &fields = QgsFields() ) override;
+    QString filter( const QgsFields &fields = QgsFields() ) override;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
     /**
      * Sets the attribute name for labeling points.
@@ -298,11 +300,11 @@ class CORE_EXPORT QgsPointDistanceRenderer: public QgsFeatureRenderer
     void drawGroup( const ClusteredGroup &group, QgsRenderContext &context );
 
     /**
-     * Returns first symbol from the embedded renderer for a feature or nullptr if none
+     * Returns first symbol from the embedded renderer for a feature or NULLPTR if none
      * \param feature source feature
      * \param context target render context
     */
-    QgsMarkerSymbol *firstSymbolForFeature( QgsFeature &feature, QgsRenderContext &context );
+    QgsMarkerSymbol *firstSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context );
 
     /**
      * Creates an expression context scope for a clustered group, with variables reflecting the group's properties.

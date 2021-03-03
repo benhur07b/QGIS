@@ -18,44 +18,58 @@
 #include "qgsgeometryrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 
 QgsMapToolCircle2Points::QgsMapToolCircle2Points( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolAddCircle( parentTool, canvas, mode )
 {
+  mToolName = tr( "Add circle from 2 points" );
 }
 
 void QgsMapToolCircle2Points::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
 
   if ( e->button() == Qt::LeftButton )
   {
-    mPoints.append( mapPoint );
+    if ( mPoints.isEmpty() )
+      mPoints.append( point );
 
-    if ( !mPoints.isEmpty() && !mTempRubberBand )
+    if ( !mTempRubberBand )
     {
-      mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
       mTempRubberBand->show();
     }
   }
   else if ( e->button() == Qt::RightButton )
   {
-    deactivate();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    mPoints.append( point );
+
+    release( e );
   }
 }
 
 void QgsMapToolCircle2Points::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   if ( mTempRubberBand )
   {
-    mCircle = QgsCircle().from2Points( mPoints.at( 0 ), mapPoint );
+    mCircle = QgsCircle().from2Points( mPoints.at( 0 ), point );
     mTempRubberBand->setGeometry( mCircle.toCircularString( true ) );
   }
 }

@@ -34,11 +34,15 @@ namespace Qt3DCore
   class QEntity;
 }
 
+#define SIP_NO_FILE
+
 #include <QObject>
 
 /**
  * \ingroup 3d
- * Base class for chunk queue jobs. Job implementations start their work when they are created
+ * \brief  Base class for chunk queue jobs.
+ *
+ * Job implementations start their work when they are created
  * and all work is done asynchronously, i.e. constructor should exit as soon as possible and
  * all work should be done in a worker thread. Once the job is done, finished() signal is emitted
  * and will be processed by the parent chunked entity.
@@ -63,8 +67,11 @@ class QgsChunkQueueJob : public QObject
     QgsChunkNode *chunk() { return mNode; }
 
     /**
-     * Request that the job gets canceled.
-     * Returns only after the async job has been stopped.
+     * Requests that the job gets canceled. The implementation should _not_ wait until
+     * the asynchronous job is terminated - it should only indicate to the async code that
+     * is should finish as soon as possible. It is responsibility of the object's destructor
+     * to make sure that the async code has been terminated before deleting the object.
+     *
      * The signal finished() will not be emitted afterwards.
      */
     virtual void cancel();
@@ -79,8 +86,9 @@ class QgsChunkQueueJob : public QObject
 
 /**
  * \ingroup 3d
- * Base class for factories of chunk queue jobs. Derived classes need to implement createJob()
- * method that will create a specific job for given chunk node.
+ * \brief Base class for factories of chunk queue jobs.
+ *
+ * Derived classes need to implement createJob() method that will create a specific job for given chunk node.
  * \since QGIS 3.0
  */
 class QgsChunkQueueJobFactory

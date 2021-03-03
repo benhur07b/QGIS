@@ -18,14 +18,43 @@
 
 #include "qgis_3d.h"
 
+#include <QPointer>
+#include <QRect>
 #include <Qt3DCore/QEntity>
-#include <Qt3DInput>
-#include <Qt3DRender>
+#include <Qt3DInput/QMouseEvent>
 
+namespace Qt3DInput
+{
+  class QKeyEvent;
+  class QKeyboardDevice;
+  class QKeyboardHandler;
+  class QMouseEvent;
+  class QMouseDevice;
+  class QMouseHandler;
+  class QWheelEvent;
+}
+
+namespace Qt3DRender
+{
+  class QCamera;
+  class QPickEvent;
+}
+
+#include "qgscamerapose.h"
+
+class QDomDocument;
+class QDomElement;
+
+class QgsCameraPose;
+class QgsTerrainEntity;
+class QgsVector3D;
+
+#define SIP_NO_FILE
 
 /**
  * \ingroup 3d
- * Object that controls camera movement based on user input
+ * \brief Object that controls camera movement based on user input
+ * \note Not available in Python bindings
  * \since QGIS 3.0
  */
 class _3D_EXPORT QgsCameraController : public Qt3DCore::QEntity
@@ -33,6 +62,25 @@ class _3D_EXPORT QgsCameraController : public Qt3DCore::QEntity
     Q_OBJECT
     Q_PROPERTY( Qt3DRender::QCamera *camera READ camera WRITE setCamera NOTIFY cameraChanged )
     Q_PROPERTY( QRect viewport READ viewport WRITE setViewport NOTIFY viewportChanged )
+  public:
+
+    //! The navigation mode used by the camera
+    enum NavigationMode
+    {
+      TerrainBasedNavigation, //!< The default navigation based on the terrain
+      WalkNavigation //!< Uses WASD keys or arrows to navigate in walking (first person) manner
+    };
+    Q_ENUM( NavigationMode )
+
+    //! Vertical axis inversion options
+    enum VerticalAxisInversion
+    {
+      Never, //!< Never invert vertical axis movements
+      WhenDragging, //!< Invert vertical axis movements when dragging in first person modes
+      Always, //!< Always invert vertical axis movements
+    };
+    Q_ENUM( VerticalAxisInversion )
+
   public:
     //! Constructs the camera controller with optional parent node that will take ownership
     QgsCameraController( Qt3DCore::QNode *parent = nullptr );
@@ -43,32 +91,168 @@ class _3D_EXPORT QgsCameraController : public Qt3DCore::QEntity
     QRect viewport() const { return mViewport; }
 
     /**
-     * Connects to object picker attached to terrain entity. Called internally from 3D scene.
-     * This allows camera controller understand how far from the camera is the terrain under mouse cursor
+     * Returns the navigation mode used by the camera controller.
+     * \since QGIS 3.18
      */
-    void addTerrainPicker( Qt3DRender::QObjectPicker *picker );
+    QgsCameraController::NavigationMode cameraNavigationMode() const { return mCameraNavigationMode; }
+
+    /**
+     * Returns the camera movement speed
+     * \since QGIS 3.18
+     */
+    double cameraMovementSpeed() const { return mCameraMovementSpeed; }
+
+    /**
+     * Sets the camera movement speed
+     * \since QGIS 3.18
+     */
+    void setCameraMovementSpeed( double movementSpeed );
+
+    /**
+     * Returns the vertical axis inversion behavior.
+     * \since QGIS 3.18
+     */
+    QgsCameraController::VerticalAxisInversion verticalAxisInversion() const { return mVerticalAxisInversion; }
+
+    /**
+     * Sets the vertical axis \a inversion behavior.
+     * \since QGIS 3.18
+     */
+    void setVerticalAxisInversion( QgsCameraController::VerticalAxisInversion inversion );
+
+    /**
+     * Connects to object picker attached to terrain entity. Called internally from 3D scene.
+     * This allows camera controller understand how far from the camera is the terrain under mouse cursor.
+     * Also it allows adjustment of camera's view center to a point on terrain.
+     */
+    void setTerrainEntity( QgsTerrainEntity *te );
+
     //! Assigns camera that should be controlled by this class. Called internally from 3D scene.
     void setCamera( Qt3DRender::QCamera *camera );
     //! Sets viewport rectangle. Called internally from 3D canvas. Allows conversion of mouse coordinates.
-    void setViewport( const QRect &viewport );
+    void setViewport( QRect viewport );
     //! Called internally from 3D scene when a new frame is generated. Updates camera according to keyboard/mouse input
     void frameTriggered( float dt );
 
     //! Move camera back to the initial position (looking down towards origin of world's coordinates)
     void resetView( float distance );
 
+    //! Sets camera to look down towards given point in world coordinate, in given distance from plane with zero elevation
+    void setViewFromTop( float worldX, float worldY, float distance, float yaw = 0 );
+
+    //! Returns the point in the world coordinates towards which the camera is looking
+    QgsVector3D lookingAtPoint() const;
+
+    /**
+     * Sets the complete camera configuration: the point towards it is looking (in 3D world coordinates), the distance
+     * of the camera from the point, pitch angle in degrees (0 = looking from the top, 90 = looking from the side) and
+     * yaw angle in degrees.
+     * \since QGIS 3.4
+     */
+    void setLookingAtPoint( const QgsVector3D &point, float distance, float pitch, float yaw );
+
+    /**
+     * Sets camera pose
+     * \since QGIS 3.4
+     */
+    void setCameraPose( const QgsCameraPose &camPose );
+
+    /**
+     * Returns camera pose
+     * \since QGIS 3.4
+     */
+    QgsCameraPose cameraPose() const { return mCameraPose; }
+
+    /**
+     * Returns distance of the camera from the point it is looking at.
+     * \since QGIS 3.4
+     */
+    float distance() const { return mCameraPose.distanceFromCenterPoint(); }
+
+    /**
+     * Returns pitch angle in degrees (0 = looking from the top, 90 = looking from the side).
+     * The angle should range from 0 to 180.
+     * \since QGIS 3.4
+     */
+    float pitch() const { return mCameraPose.pitchAngle(); }
+
+    /**
+     * Returns yaw angle in degrees.  Yaw value of zero means the camera is pointing towards north.
+     * The angle should range from 0 to 360.
+     * \since QGIS 3.4
+     */
+    float yaw() const { return mCameraPose.headingAngle(); }
+
+    //! Writes camera configuration to the given DOM element
+    QDomElement writeXml( QDomDocument &doc ) const;
+    //! Reads camera configuration from the given DOM element
+    void readXml( const QDomElement &elem );
+
+    //! Zoom the map by \a factor
+    void zoom( float factor );
+    //! Tilt up the view by \a deltaPitch around the view center (camera moves)
+    void tiltUpAroundViewCenter( float deltaPitch );
+    //! Rotate clockwise the view by \a deltaYaw around the view center (camera moves)
+    void rotateAroundViewCenter( float deltaYaw );
+    //! Set camera heading to \a angle (used for rotating the view)
+    void setCameraHeadingAngle( float angle );
+    //! Move the map by \a tx and \a ty
+    void moveView( float tx, float ty );
+
+    /**
+     * Returns TRUE if the camera controller will handle the specified key \a event,
+     * preventing it from being instead handled by parents of the 3D window before
+     * the controller ever receives it.
+     */
+    bool willHandleKeyEvent( QKeyEvent *event );
+
+  public slots:
+
+    /**
+     * Sets the navigation mode used by the camera controller.
+     * \since QGIS 3.18
+     */
+    void setCameraNavigationMode( QgsCameraController::NavigationMode navigationMode );
+
   private:
-    void setCameraData( float x, float y, float dist, float pitch = 0, float yaw = 0 );
+    void rotateCamera( float diffPitch, float diffYaw );
+    void updateCameraFromPose( bool centerPointChanged = false );
+    void moveCameraPositionBy( const QVector3D &posDiff );
 
   signals:
     //! Emitted when camera has been updated
     void cameraChanged();
     //! Emitted when viewport rectangle has been updated
     void viewportChanged();
+    //! Emitted when the navigation mode is changed using the hotkey ctrl + ~
+    void navigationModeHotKeyPressed( QgsCameraController::NavigationMode mode );
+
+    /**
+     * Emitted whenever the camera movement speed is changed by the controller.
+     */
+    void cameraMovementSpeedChanged( double speed );
+
+    /**
+     * Emitted when the mouse cursor position should be moved to the specified \a point
+     * on the map viewport.
+     */
+    void setCursorPosition( QPoint point );
 
   private slots:
     void onPositionChanged( Qt3DInput::QMouseEvent *mouse );
+    void onWheel( Qt3DInput::QWheelEvent *wheel );
+    void onMousePressed( Qt3DInput::QMouseEvent *mouse );
+    void onMouseReleased( Qt3DInput::QMouseEvent *mouse );
+    void onKeyPressed( Qt3DInput::QKeyEvent *event );
+    void onKeyReleased( Qt3DInput::QKeyEvent *event );
     void onPickerMousePressed( Qt3DRender::QPickEvent *pick );
+    void applyFlyModeKeyMovements();
+
+  private:
+    void onKeyPressedFlyNavigation( Qt3DInput::QKeyEvent *event );
+    void onKeyPressedTerrainNavigation( Qt3DInput::QKeyEvent *event );
+    void onPositionChangedFlyNavigation( Qt3DInput::QMouseEvent *mouse );
+    void onPositionChangedTerrainNavigation( Qt3DInput::QMouseEvent *mouse );
 
   private:
     //! Camera that is being controlled
@@ -76,80 +260,32 @@ class _3D_EXPORT QgsCameraController : public Qt3DCore::QEntity
     //! used for computation of translation when dragging mouse
     QRect mViewport;
     //! height of terrain when mouse button was last pressed - for camera control
-    float mLastPressedHeight;
+    float mLastPressedHeight = 0;
 
-    struct CameraData
-    {
-      float x = 0, y = 0;  // ground point towards which the camera is looking
-      float dist = 40;  // distance of camera from the point it is looking at
-      float pitch = 0; // aircraft nose up/down (0 = looking straight down to the plane)
-      float yaw = 0;   // aircraft nose left/right
+    QPointer<QgsTerrainEntity> mTerrainEntity;
 
-      bool operator==( const CameraData &other ) const
-      {
-        return x == other.x && y == other.y && dist == other.dist && pitch == other.pitch && yaw == other.yaw;
-      }
-      bool operator!=( const CameraData &other ) const
-      {
-        return !operator==( other );
-      }
-
-      void setCamera( Qt3DRender::QCamera *camera )
-      {
-        // basic scene setup:
-        // - x grows to the right
-        // - z grows to the bottom
-        // - y grows towards camera
-        // so a point on the plane (x',y') is transformed to (x,-z) in our 3D world
-        camera->setUpVector( QVector3D( 0, 0, -1 ) );
-        camera->setPosition( QVector3D( x, dist, y ) );
-        camera->setViewCenter( QVector3D( x, 0, y ) );
-        camera->rotateAboutViewCenter( QQuaternion::fromEulerAngles( pitch, yaw, 0 ) );
-      }
-
-    };
-
-    CameraData mCameraData;
+    //! Keeps definition of the camera's position and towards where it is looking
+    QgsCameraPose mCameraPose;
 
     //! Last mouse position recorded
     QPoint mMousePos;
-    //! Mouse position used in the previous frame
-    QPoint mLastMousePos;
+    bool mMousePressed = false;
+    Qt3DInput::QMouseEvent::Buttons mPressedButton = Qt3DInput::QMouseEvent::Buttons::NoButton;
 
     //! Delegates mouse events to the attached MouseHandler objects
     Qt3DInput::QMouseDevice *mMouseDevice = nullptr;
-
     Qt3DInput::QKeyboardDevice *mKeyboardDevice = nullptr;
 
     Qt3DInput::QMouseHandler *mMouseHandler = nullptr;
+    Qt3DInput::QKeyboardHandler *mKeyboardHandler = nullptr;
+    NavigationMode mCameraNavigationMode = NavigationMode::TerrainBasedNavigation;
+    VerticalAxisInversion mVerticalAxisInversion = WhenDragging;
+    double mCameraMovementSpeed = 5.0;
 
-    /**
-     * Allows us to define a set of actions that we wish to use
-     * (it is a component that can be attached to 3D scene)
-     */
-    Qt3DInput::QLogicalDevice *mLogicalDevice = nullptr;
-
-    Qt3DInput::QAction *mLeftMouseButtonAction = nullptr;
-    Qt3DInput::QActionInput *mLeftMouseButtonInput = nullptr;
-
-    Qt3DInput::QAction *mMiddleMouseButtonAction = nullptr;
-    Qt3DInput::QActionInput *mMiddleMouseButtonInput = nullptr;
-
-    Qt3DInput::QAction *mRightMouseButtonAction = nullptr;
-    Qt3DInput::QActionInput *mRightMouseButtonInput = nullptr;
-
-    Qt3DInput::QAction *mShiftAction = nullptr;
-    Qt3DInput::QActionInput *mShiftInput = nullptr;
-
-    Qt3DInput::QAxis *mWheelAxis = nullptr;
-    Qt3DInput::QAnalogAxisInput *mMouseWheelInput = nullptr;
-
-    Qt3DInput::QAxis *mTxAxis = nullptr;
-    Qt3DInput::QAxis *mTyAxis = nullptr;
-    Qt3DInput::QButtonAxisInput *mKeyboardTxPosInput = nullptr;
-    Qt3DInput::QButtonAxisInput *mKeyboardTyPosInput = nullptr;
-    Qt3DInput::QButtonAxisInput *mKeyboardTxNegInput = nullptr;
-    Qt3DInput::QButtonAxisInput *mKeyboardTyNegInput = nullptr;
+    QSet< int > mDepressedKeys;
+    bool mCaptureFpsMouseMovements = false;
+    bool mIgnoreNextMouseMove = false;
+    QTimer *mFpsNavTimer = nullptr;
 };
 
 #endif // QGSCAMERACONTROLLER_H

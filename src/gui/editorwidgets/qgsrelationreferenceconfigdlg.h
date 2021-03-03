@@ -36,8 +36,8 @@ class GUI_EXPORT QgsRelationReferenceConfigDlg : public QgsEditorConfigWidget, p
 
   public:
     explicit QgsRelationReferenceConfigDlg( QgsVectorLayer *vl, int fieldIdx, QWidget *parent );
-    virtual QVariantMap config() override;
-    virtual void setConfig( const QVariantMap &config ) override;
+    QVariantMap config() override;
+    void setConfig( const QVariantMap &config ) override;
 
   private:
     void loadFields();
@@ -51,6 +51,11 @@ class GUI_EXPORT QgsRelationReferenceConfigDlg : public QgsEditorConfigWidget, p
     void relationChanged( int idx );
     void mAddFilterButton_clicked();
     void mRemoveFilterButton_clicked();
+
+    /**
+     * Opens an expression dialog and sets its value as filter expression for the relation reference.
+     */
+    void mEditExpression_clicked();
 };
 
 #endif // QGSRELATIONREFERENCECONFIGDLGBASE_H

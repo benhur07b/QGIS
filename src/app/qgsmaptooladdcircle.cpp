@@ -22,11 +22,15 @@
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
 #include "qgisapp.h"
+#include "qgssnapindicator.h"
 
 QgsMapToolAddCircle::QgsMapToolAddCircle( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode )
   : QgsMapToolCapture( canvas, QgisApp::instance()->cadDockWidget(), mode )
   , mParentTool( parentTool )
+  , mSnapIndicator( std::make_unique< QgsSnapIndicator>( canvas ) )
 {
+  mToolName = tr( "Add circle" );
+
   clean();
   connect( QgisApp::instance(), &QgisApp::newProject, this, &QgsMapToolAddCircle::stopCapturing );
   connect( QgisApp::instance(), &QgisApp::projectRead, this, &QgsMapToolAddCircle::stopCapturing );
@@ -50,6 +54,28 @@ void QgsMapToolAddCircle::keyPressEvent( QKeyEvent *e )
     if ( mParentTool )
       mParentTool->keyPressEvent( e );
   }
+
+  if ( e && e->key() == Qt::Key_Backspace )
+  {
+    if ( mPoints.size() == 1 )
+    {
+
+      if ( mTempRubberBand )
+      {
+        delete mTempRubberBand;
+        mTempRubberBand = nullptr;
+      }
+
+      mPoints.clear();
+    }
+    else if ( mPoints.size() > 1 )
+    {
+      mPoints.removeLast();
+
+    }
+    if ( mParentTool )
+      mParentTool->keyPressEvent( e );
+  }
 }
 
 void QgsMapToolAddCircle::keyReleaseEvent( QKeyEvent *e )
@@ -68,7 +94,21 @@ void QgsMapToolAddCircle::deactivate()
   }
 
   mParentTool->clearCurve();
-  mParentTool->addCurve( mCircle.toCircularString() );
+
+  // keep z value from the first snapped point
+  std::unique_ptr<QgsCircularString> lineString( mCircle.toCircularString() );
+  for ( const QgsPoint &point : qgis::as_const( mPoints ) )
+  {
+    if ( QgsWkbTypes::hasZ( point.wkbType() ) &&
+         point.z() != defaultZValue() )
+    {
+      lineString->dropZValue();
+      lineString->addZValue( point.z() );
+      break;
+    }
+  }
+
+  mParentTool->addCurve( lineString.release() );
   clean();
 
   QgsMapToolCapture::deactivate();
@@ -96,4 +136,18 @@ void QgsMapToolAddCircle::clean()
   }
 
   mCircle = QgsCircle();
+
+  QgsVectorLayer *vLayer = static_cast<QgsVectorLayer *>( QgisApp::instance()->activeLayer() );
+  if ( vLayer )
+    mLayerType = vLayer->geometryType();
+}
+
+void QgsMapToolAddCircle::release( QgsMapMouseEvent *e )
+{
+  deactivate();
+  if ( mParentTool )
+  {
+    mParentTool->canvasReleaseEvent( e );
+  }
+  activate();
 }

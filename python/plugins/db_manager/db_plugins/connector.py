@@ -30,6 +30,9 @@ from .plugin import DbError, ConnectionError
 class DBConnector(object):
 
     def __init__(self, uri):
+        """Creates a new DB connector
+        """
+
         self.connection = None
         self._uri = uri
 
@@ -41,6 +44,9 @@ class DBConnector(object):
 
     def uri(self):
         return QgsDataSourceUri(self._uri.uri(False))
+
+    def cancel(self):
+        pass
 
     def publicUri(self):
         publicUri = QgsDataSourceUri.removePassword(self._uri.uri(False))
@@ -169,8 +175,6 @@ class DBConnector(object):
             raise ConnectionError(e)
 
         except self.execution_error_types() as e:
-            # do the rollback to avoid a "current transaction aborted, commands ignored" errors
-            self._rollback()
             raise DbError(e)
 
     def _get_cursor_columns(self, c):
@@ -184,12 +188,11 @@ class DBConnector(object):
     @classmethod
     def quoteId(self, identifier):
         if hasattr(identifier, '__iter__') and not isinstance(identifier, str):
-            ids = list()
-            for i in identifier:
-                if i is None or i == "":
-                    continue
-                ids.append(self.quoteId(i))
-            return u'.'.join(ids)
+            return u'.'.join(
+                self.quoteId(i)
+                for i in identifier
+                if i is not None and i != ""
+            )
 
         identifier = str(
             identifier) if identifier is not None else str()  # make sure it's python unicode string
@@ -199,12 +202,11 @@ class DBConnector(object):
     def quoteString(self, txt):
         """ make the string safe - replace ' with '' """
         if hasattr(txt, '__iter__') and not isinstance(txt, str):
-            txts = list()
-            for i in txt:
-                if i is None:
-                    continue
-                txts.append(self.quoteString(i))
-            return u'.'.join(txts)
+            return u'.'.join(
+                self.quoteString(i)
+                for i in txt
+                if i is not None
+            )
 
         txt = str(txt) if txt is not None else str()  # make sure it's python unicode string
         return u"'%s'" % txt.replace("'", "''")
@@ -230,5 +232,14 @@ class DBConnector(object):
         except ImportError:
             return []
 
+    def getComment(self, tablename, field):
+        """Returns the comment for a field"""
+        return ''
+
+    def commentTable(self, schema, tablename, comment=None):
+        """Comment the table"""
+        pass
+
     def getQueryBuilderDictionary(self):
+
         return {}

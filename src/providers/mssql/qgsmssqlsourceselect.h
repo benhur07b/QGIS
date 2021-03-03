@@ -71,13 +71,15 @@ class QgsMssqlSourceSelect : public QgsAbstractDataSourceWidget, private Ui::Qgs
     //! Constructor
     QgsMssqlSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
 
-    ~QgsMssqlSourceSelect();
+    ~QgsMssqlSourceSelect() override;
     //! Populate the connection list combo box
     void populateConnectionList();
     //! String list containing the selected tables
     QStringList selectedTables();
     //! Connection info (database, host, user, password)
     QString connectionInfo();
+
+    void reset() override;
 
   signals:
     void addGeometryColumn( const QgsMssqlLayerProperty & );
@@ -129,7 +131,7 @@ class QgsMssqlSourceSelect : public QgsAbstractDataSourceWidget, private Ui::Qgs
     typedef QList<geomPair> geomCol;
 
     // queue another query for the thread
-    void addSearchGeometryColumn( const QString &connectionName, const QgsMssqlLayerProperty &layerProperty, bool estimateMetadata );
+    void addSearchGeometryColumn( const QString &service, const QString &host, const QString &database, const QString &username, const QString &password, const QgsMssqlLayerProperty &layerProperty, bool estimateMetadata );
 
     // Set the position of the database connection list to the last
     // used one.

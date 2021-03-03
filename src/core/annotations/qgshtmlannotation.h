@@ -28,7 +28,7 @@ class QgsWebPage;
 /**
  * \class QgsHtmlAnnotation
  * \ingroup core
- * An annotation item that embeds HTML content.
+ * \brief An annotation item that embeds HTML content.
  * \since QGIS 3.0
 */
 
@@ -41,8 +41,6 @@ class CORE_EXPORT QgsHtmlAnnotation: public QgsAnnotation
      * Constructor for QgsHtmlAnnotation.
      */
     QgsHtmlAnnotation( QObject *parent SIP_TRANSFERTHIS = nullptr );
-
-    ~QgsHtmlAnnotation() = default;
 
     QgsHtmlAnnotation *clone() const override SIP_FACTORY;
 
@@ -60,8 +58,8 @@ class CORE_EXPORT QgsHtmlAnnotation: public QgsAnnotation
      */
     QString sourceFile() const { return mHtmlFile; }
 
-    virtual void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
-    virtual void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
+    void writeXml( QDomElement &elem, QDomDocument &doc, const QgsReadWriteContext &context ) const override;
+    void readXml( const QDomElement &itemElem, const QgsReadWriteContext &context ) override;
 
     void setAssociatedFeature( const QgsFeature &feature ) override;
 

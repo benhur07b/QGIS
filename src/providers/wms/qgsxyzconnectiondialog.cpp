@@ -15,43 +15,69 @@
 
 #include "qgsxyzconnectiondialog.h"
 #include "qgsxyzconnection.h"
+#include "qgsgui.h"
+#include "qgsxyzsourcewidget.h"
+
+#include <QMessageBox>
 
 QgsXyzConnectionDialog::QgsXyzConnectionDialog( QWidget *parent )
   : QDialog( parent )
 {
   setupUi( this );
+  QgsGui::enableAutoGeometryRestore( this );
 
-  // Behavior for min and max zoom checkbox
-  connect( mCheckBoxZMin, &QCheckBox::toggled, mSpinZMin, &QSpinBox::setEnabled );
-  connect( mCheckBoxZMax, &QCheckBox::toggled, mSpinZMax, &QSpinBox::setEnabled );
+  mSourceWidget = new QgsXyzSourceWidget();
+  QHBoxLayout *hlayout = new QHBoxLayout();
+  hlayout->addWidget( mSourceWidget );
+  mConnectionGroupBox->setLayout( hlayout );
+
+  buttonBox->button( QDialogButtonBox::Ok )->setDisabled( true );
+  connect( mEditName, &QLineEdit::textChanged, this, &QgsXyzConnectionDialog::updateOkButtonState );
+  connect( mSourceWidget, &QgsXyzSourceWidget::validChanged, this, &QgsXyzConnectionDialog::updateOkButtonState );
 }
 
 void QgsXyzConnectionDialog::setConnection( const QgsXyzConnection &conn )
 {
   mEditName->setText( conn.name );
-  mEditUrl->setText( conn.url );
-  mCheckBoxZMin->setChecked( conn.zMin != -1 );
-  mSpinZMin->setValue( conn.zMin != -1 ? conn.zMin : 0 );
-  mCheckBoxZMax->setChecked( conn.zMax != -1 );
-  mSpinZMax->setValue( conn.zMax != -1 ? conn.zMax : 18 );
-  mAuthSettings->setUsername( conn.username );
-  mAuthSettings->setPassword( conn.password );
-  mEditReferer->setText( conn.referer );
-  mAuthSettings->setConfigId( conn.authCfg );
+  mSourceWidget->setUrl( conn.url );
+  mSourceWidget->setZMin( conn.zMin );
+  mSourceWidget->setZMax( conn.zMax );
+  mSourceWidget->setUsername( conn.username );
+  mSourceWidget->setPassword( conn.password );
+  mSourceWidget->setReferer( conn.referer );
+  mSourceWidget->setTilePixelRatio( conn.tilePixelRatio );
+  mSourceWidget->setAuthCfg( conn.authCfg );
 }
 
 QgsXyzConnection QgsXyzConnectionDialog::connection() const
 {
   QgsXyzConnection conn;
   conn.name = mEditName->text();
-  conn.url = mEditUrl->text();
-  if ( mCheckBoxZMin->isChecked() )
-    conn.zMin = mSpinZMin->value();
-  if ( mCheckBoxZMax->isChecked() )
-    conn.zMax = mSpinZMax->value();
-  conn.username = mAuthSettings->username();
-  conn.password = mAuthSettings->password();
-  conn.referer = mEditReferer->text();
-  conn.authCfg = mAuthSettings->configId( );
+  conn.url = mSourceWidget->url();
+  conn.zMin = mSourceWidget->zMin();
+  conn.zMax = mSourceWidget->zMax();
+  conn.username = mSourceWidget->username();
+  conn.password = mSourceWidget->password();
+  conn.referer = mSourceWidget->referer();
+  conn.tilePixelRatio = mSourceWidget->tilePixelRatio();
+  conn.authCfg = mSourceWidget->authcfg( );
   return conn;
+}
+
+void QgsXyzConnectionDialog::updateOkButtonState()
+{
+  bool enabled = !mEditName->text().isEmpty() && !mSourceWidget->url().isEmpty();
+  buttonBox->button( QDialogButtonBox::Ok )->setEnabled( enabled );
+}
+
+void QgsXyzConnectionDialog::accept()
+{
+  if ( mSourceWidget->zMin() != -1
+       && mSourceWidget->zMax() != -1
+       && mSourceWidget->zMax() < mSourceWidget->zMin() )
+  {
+    QMessageBox::warning( this, tr( "Connection Properties" ), tr( "The maximum zoom level (%1) cannot be lower than the minimum zoom level (%2)." ).arg( mSourceWidget->zMax() ).arg( mSourceWidget->zMin() ) );
+    return;
+  }
+  QDialog::accept();
 }

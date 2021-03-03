@@ -21,14 +21,12 @@ __author__ = 'Giovanni Manghi'
 __date__ = 'January 2015'
 __copyright__ = '(C) 2015, Giovanni Manghi'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 from qgis.core import (QgsProcessing,
                        QgsProcessingParameterDefinition,
+                       QgsProcessingParameterDistance,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterString,
+                       QgsProcessingException,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterVectorDestination)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
@@ -36,7 +34,6 @@ from processing.algs.gdal.GdalUtils import GdalUtils
 
 
 class OffsetCurve(GdalAlgorithm):
-
     INPUT = 'INPUT'
     GEOMETRY = 'GEOMETRY'
     DISTANCE = 'DISTANCE'
@@ -53,10 +50,10 @@ class OffsetCurve(GdalAlgorithm):
         self.addParameter(QgsProcessingParameterString(self.GEOMETRY,
                                                        self.tr('Geometry column name'),
                                                        defaultValue='geometry'))
-        self.addParameter(QgsProcessingParameterNumber(self.DISTANCE,
-                                                       self.tr('Offset distance (left-sided: positive, right-sided: negative)'),
-                                                       type=QgsProcessingParameterNumber.Double,
-                                                       defaultValue=10))
+        self.addParameter(QgsProcessingParameterDistance(self.DISTANCE,
+                                                         self.tr('Offset distance (left-sided: positive, right-sided: negative)'),
+                                                         parentParameterName=self.INPUT,
+                                                         defaultValue=10))
 
         options_param = QgsProcessingParameterString(self.OPTIONS,
                                                      self.tr('Additional creation options'),
@@ -78,38 +75,42 @@ class OffsetCurve(GdalAlgorithm):
     def group(self):
         return self.tr('Vector geoprocessing')
 
+    def groupId(self):
+        return 'vectorgeoprocessing'
+
     def commandName(self):
         return 'ogr2ogr'
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        fields = self.parameterAsSource(parameters, self.INPUT, context).fields()
-        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback)
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
+        fields = source.fields()
+        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback, executing)
         geometry = self.parameterAsString(parameters, self.GEOMETRY, context)
         distance = self.parameterAsDouble(parameters, self.DISTANCE, context)
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
 
         output, outputFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
 
-        other_fields = []
-        for f in fields:
-            if f.name() == geometry:
-                continue
-            other_fields.append(f.name())
+        other_fields_exist = any(
+            True for f in fields
+            if f.name() != geometry
+        )
 
-        if other_fields:
-            other_fields = ', {}'.format(','.join(other_fields))
-        else:
-            other_fields = ''
+        other_fields = ',*' if other_fields_exist else ''
 
-        arguments = []
-        arguments.append(output)
-        arguments.append(ogrLayer)
-        arguments.append('-dialect')
-        arguments.append('sqlite')
-        arguments.append('-sql')
-
-        sql = "SELECT ST_OffsetCurve({}, {}) AS {}{} FROM '{}'".format(geometry, distance, geometry, other_fields, layerName)
+        arguments = [
+            output,
+            ogrLayer,
+            '-dialect',
+            'sqlite',
+            '-sql'
+        ]
+        sql = 'SELECT ST_OffsetCurve({}, {}) AS {}{} FROM "{}"'.format(geometry, distance, geometry, other_fields, layerName)
         arguments.append(sql)
 
         if options:

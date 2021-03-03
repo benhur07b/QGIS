@@ -4,7 +4,7 @@
   Define WMS service utility functions
   ------------------------------------
   begin                : December 20 , 2016
-  copyright            : (C) 2007 by Marco Hugentobler  ( parts fron qgswmshandler)
+  copyright            : (C) 2007 by Marco Hugentobler  ( parts from qgswmshandler)
                          (C) 2014 by Alessandro Pasotti ( parts from qgswmshandler)
                          (C) 2016 by David Marteau
   email                : marco dot hugentobler at karto dot baug dot ethz dot ch
@@ -24,13 +24,12 @@
 #define QGSWMSUTILS_H
 
 #include "qgsmodule.h"
-#include "qgswmsserviceexception.h"
 
 class QgsRectangle;
 
 /**
  * \ingroup server
- * WMS implementation
+ * \brief WMS implementation
  */
 
 //! WMS implementation
@@ -44,16 +43,12 @@ namespace QgsWms
     PNG8,
     PNG16,
     PNG1,
-    JPEG
+    JPEG,
+    WEBP
   };
 
   /**
-   * Return the highest version supported by this implementation
-   */
-  QString ImplementationVersion();
-
-  /**
-   * Return WMS service URL
+   * Returns WMS service URL
    */
   QUrl serviceUrl( const QgsServerRequest &request, const QgsProject *project );
 
@@ -68,21 +63,6 @@ namespace QgsWms
    */
   void writeImage( QgsServerResponse &response, QImage &img, const QString &formatStr,
                    int imageQuality = -1 );
-
-  /**
-   * Parse bbox parameter
-   * \param bboxstr the bbox string as comma separated values
-   * \returns QgsRectangle
-   *
-   * If the parsing fail then an empty bbox is returned
-   */
-  QgsRectangle parseBbox( const QString &bboxstr );
-
-  /**
-   * Reads the layers and style lists from the parameters LAYERS and STYLES
-   */
-  void readLayersAndStyles( const QgsServerRequest::Parameters &parameters, QStringList &layersList, QStringList &stylesList );
-
 } // namespace QgsWms
 
 #endif

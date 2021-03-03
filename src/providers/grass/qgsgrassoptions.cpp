@@ -71,7 +71,7 @@ QgsGrassOptions::QgsGrassOptions( QWidget *parent )
   mModulesDebugCheckBox->setChecked( QgsGrass::modulesDebug() );
 
   // Browser
-  QgsRasterProjector::Precision crsTransform = ( QgsRasterProjector::Precision ) settings.value( mImportSettingsPath + "/crsTransform", QgsRasterProjector::Approximate ).toInt();
+  QgsRasterProjector::Precision crsTransform = settings.enumValue( mImportSettingsPath + "/crsTransform", QgsRasterProjector::Approximate );
   mCrsTransformationComboBox->addItem( QgsRasterProjector::precisionLabel( QgsRasterProjector::Approximate ), QgsRasterProjector::Approximate );
   mCrsTransformationComboBox->addItem( QgsRasterProjector::precisionLabel( QgsRasterProjector::Exact ), QgsRasterProjector::Exact );
   mCrsTransformationComboBox->setCurrentIndex( mCrsTransformationComboBox->findData( crsTransform ) );
@@ -96,7 +96,7 @@ void QgsGrassOptions::mGisbaseBrowseButton_clicked()
   // For Mac, GISBASE folder may be inside GRASS bundle. Use Qt file dialog
   // since Mac native dialog doesn't allow user to browse inside bundles.
   gisbase = QFileDialog::getExistingDirectory(
-              0, QObject::tr( "Choose GRASS installation path (GISBASE)" ), gisbase,
+              nullptr, QObject::tr( "Choose GRASS installation path (GISBASE)" ), gisbase,
               QFileDialog::DontUseNativeDialog );
   if ( !gisbase.isEmpty() )gisbaseChanged();
   {
@@ -155,8 +155,8 @@ void QgsGrassOptions::saveOptions()
   QgsGrass::instance()->setModulesDebug( mModulesDebugCheckBox->isChecked() );
 
   // Browser
-  settings.setValue( mImportSettingsPath + "/crsTransform",
-                     mCrsTransformationComboBox->currentData().toInt() );
+  settings.setEnumValue( mImportSettingsPath + "/crsTransform",
+                         ( QgsRasterProjector::Precision )mCrsTransformationComboBox->currentData().toInt() );
 
   settings.setValue( mImportSettingsPath + "/external", mImportExternalCheckBox->isChecked() );
 

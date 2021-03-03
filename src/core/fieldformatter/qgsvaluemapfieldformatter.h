@@ -21,7 +21,8 @@
 
 /**
  * \ingroup core
- * Field formatter for a ValueMap field.
+ * \brief Field formatter for a ValueMap field.
+ *
  * A value relation field formatter looks up the values a map.
  *
  * The map is defined in the configuration as dictionary under the key "map".
@@ -49,13 +50,15 @@ class CORE_EXPORT QgsValueMapFieldFormatter : public QgsFieldFormatter
     /**
       * Default constructor of field formatter for a value map field.
       */
-    QgsValueMapFieldFormatter() = default;
+    QgsValueMapFieldFormatter();
 
-    virtual QString id() const override;
+    QString id() const override;
 
-    virtual QString representValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
+    QString representValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
 
-    virtual QVariant sortValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
+    QVariant sortValue( QgsVectorLayer *layer, int fieldIndex, const QVariantMap &config, const QVariant &cache, const QVariant &value ) const override;
+
+    QVariantList availableValues( const QVariantMap &config, int countLimit, const QgsFieldFormatterContext &context ) const override;
 };
 
 #endif // QGSVALUEMAPFIELDKIT_H

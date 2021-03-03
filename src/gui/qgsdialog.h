@@ -24,11 +24,11 @@
 #include <QDialogButtonBox>
 #include <QLayout>
 #include "qgis_gui.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 
 /**
  * \ingroup gui
- * A generic dialog with layout and button box
+ * \brief A generic dialog with layout and button box
  */
 class GUI_EXPORT QgsDialog : public QDialog
 {

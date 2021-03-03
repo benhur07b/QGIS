@@ -27,6 +27,18 @@ QgsPolygon::QgsPolygon()
   mWkbType = QgsWkbTypes::Polygon;
 }
 
+///@cond DOXYGEN_SHUTTUP
+QgsPolygon::QgsPolygon( QgsLineString *exterior, const QList<QgsLineString *> &rings )
+{
+  setExteriorRing( exterior );
+  for ( QgsLineString *ring : rings )
+  {
+    addInteriorRing( ring );
+  }
+  clearCache();
+}
+///@endcond
+
 QString QgsPolygon::geometryType() const
 {
   return QStringLiteral( "Polygon" );
@@ -34,7 +46,7 @@ QString QgsPolygon::geometryType() const
 
 QgsPolygon *QgsPolygon::createEmptyWithSameType() const
 {
-  auto result = qgis::make_unique< QgsPolygon >();
+  auto result = std::make_unique< QgsPolygon >();
   result->mWkbType = mWkbType;
   return result.release();
 }
@@ -109,7 +121,7 @@ bool QgsPolygon::fromWkb( QgsConstWkbPtr &wkbPtr )
   return true;
 }
 
-QByteArray QgsPolygon::asWkb() const
+int QgsPolygon::wkbSize( QgsAbstractGeometry::WkbFlags ) const
 {
   int binarySize = sizeof( char ) + sizeof( quint32 ) + sizeof( quint32 );
 
@@ -123,11 +135,39 @@ QByteArray QgsPolygon::asWkb() const
     binarySize += sizeof( quint32 ) + curve->numPoints() * ( 2 + curve->is3D() + curve->isMeasure() ) * sizeof( double );
   }
 
+  return binarySize;
+}
+
+QByteArray QgsPolygon::asWkb( QgsAbstractGeometry::WkbFlags flags ) const
+{
   QByteArray wkbArray;
-  wkbArray.resize( binarySize );
+  wkbArray.resize( QgsPolygon::wkbSize() );
   QgsWkbPtr wkb( wkbArray );
   wkb << static_cast<char>( QgsApplication::endian() );
-  wkb << static_cast<quint32>( wkbType() );
+
+  QgsWkbTypes::Type type = wkbType();
+  if ( flags & FlagExportTrianglesAsPolygons )
+  {
+    switch ( type )
+    {
+      case QgsWkbTypes::Triangle:
+        type = QgsWkbTypes::Polygon;
+        break;
+      case QgsWkbTypes::TriangleZ:
+        type = QgsWkbTypes::PolygonZ;
+        break;
+      case QgsWkbTypes::TriangleM:
+        type = QgsWkbTypes::PolygonM;
+        break;
+      case QgsWkbTypes::TriangleZM:
+        type = QgsWkbTypes::PolygonZM;
+        break;
+      default:
+        break;
+    }
+  }
+  wkb << static_cast<quint32>( type );
+
   wkb << static_cast<quint32>( ( nullptr != mExteriorRing ) + mInteriorRings.size() );
   if ( mExteriorRing )
   {
@@ -223,8 +263,9 @@ QgsAbstractGeometry *QgsPolygon::boundary() const
   else
   {
     QgsMultiLineString *multiLine = new QgsMultiLineString();
-    multiLine->addGeometry( mExteriorRing->clone() );
     int nInteriorRings = mInteriorRings.size();
+    multiLine->reserve( nInteriorRings + 1 );
+    multiLine->addGeometry( mExteriorRing->clone() );
     for ( int i = 0; i < nInteriorRings; ++i )
     {
       multiLine->addGeometry( mInteriorRings.at( i )->clone() );
@@ -239,7 +280,7 @@ double QgsPolygon::pointDistanceToBoundary( double x, double y ) const
     return std::numeric_limits< double >::quiet_NaN();
 
   bool inside = false;
-  double minimumDistance = DBL_MAX;
+  double minimumDistance = std::numeric_limits<double>::max();
   double minDistX = 0.0;
   double minDistY = 0.0;
 
@@ -260,7 +301,7 @@ double QgsPolygon::pointDistanceToBoundary( double x, double y ) const
            ( x < ( bX - aX ) * ( y - aY ) / ( bY - aY ) + aX ) )
         inside = !inside;
 
-      minimumDistance = std::min( minimumDistance, QgsGeometryUtils::sqrDistToLine( x, y, aX, aY, bX, bY, minDistX, minDistY, 4 * DBL_EPSILON ) );
+      minimumDistance = std::min( minimumDistance, QgsGeometryUtils::sqrDistToLine( x, y, aX, aY, bX, bY, minDistX, minDistY, 4 * std::numeric_limits<double>::epsilon() ) );
     }
   }
 

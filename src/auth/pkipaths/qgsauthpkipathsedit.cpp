@@ -63,34 +63,7 @@ bool QgsAuthPkiPathsEdit::validateConfig()
   }
 
   // check for issue date validity, then notify status
-  QSslCertificate cert;
-  QFile file( certpath );
-  QFileInfo fileinfo( file );
-  QString ext( fileinfo.fileName().remove( fileinfo.completeBaseName() ).toLower() );
-  if ( ext.isEmpty() )
-  {
-    writePkiMessage( lePkiPathsMsg, tr( "Certificate file has no extension" ), Invalid );
-    return validityChange( false );
-  }
-
-  QFile::OpenMode openflags( QIODevice::ReadOnly );
-  QSsl::EncodingFormat encformat( QSsl::Der );
-  if ( ext == QLatin1String( ".pem" ) )
-  {
-    openflags |= QIODevice::Text;
-    encformat = QSsl::Pem;
-  }
-
-  if ( file.open( openflags ) )
-  {
-    cert = QSslCertificate( file.readAll(), encformat );
-    file.close();
-  }
-  else
-  {
-    writePkiMessage( lePkiPathsMsg, tr( "Failed to read certificate file" ), Invalid );
-    return validityChange( false );
-  }
+  QSslCertificate cert( QgsAuthCertUtils::certFromFile( certpath ) );
 
   if ( cert.isNull() )
   {
@@ -135,8 +108,8 @@ void QgsAuthPkiPathsEdit::loadConfig( const QgsStringMap &configmap )
   lePkiPathsCert->setText( configmap.value( QStringLiteral( "certpath" ) ) );
   lePkiPathsKey->setText( configmap.value( QStringLiteral( "keypath" ) ) );
   lePkiPathsKeyPass->setText( configmap.value( QStringLiteral( "keypass" ) ) );
-  cbAddCas->setChecked( configmap.value( QStringLiteral( "addcas" ), QStringLiteral( "false " ) ) == QStringLiteral( "true" ) );
-  cbAddRootCa->setChecked( configmap.value( QStringLiteral( "addrootca" ), QStringLiteral( "false " ) ) == QStringLiteral( "true" ) );
+  cbAddCas->setChecked( configmap.value( QStringLiteral( "addcas" ), QStringLiteral( "false " ) ) == QLatin1String( "true" ) );
+  cbAddRootCa->setChecked( configmap.value( QStringLiteral( "addrootca" ), QStringLiteral( "false " ) ) == QLatin1String( "true" ) );
 
   validateConfig();
 }
@@ -159,7 +132,7 @@ void QgsAuthPkiPathsEdit::clearConfig()
 void QgsAuthPkiPathsEdit::clearPkiMessage( QLineEdit *lineedit )
 {
   lineedit->clear();
-  lineedit->setStyleSheet( QLatin1String( "" ) );
+  lineedit->setStyleSheet( QString() );
 }
 
 void QgsAuthPkiPathsEdit::writePkiMessage( QLineEdit *lineedit, const QString &msg, Validity valid )
@@ -187,20 +160,20 @@ void QgsAuthPkiPathsEdit::writePkiMessage( QLineEdit *lineedit, const QString &m
 void QgsAuthPkiPathsEdit::clearPkiPathsCertPath()
 {
   lePkiPathsCert->clear();
-  lePkiPathsCert->setStyleSheet( QLatin1String( "" ) );
+  lePkiPathsCert->setStyleSheet( QString() );
 }
 
 void QgsAuthPkiPathsEdit::clearPkiPathsKeyPath()
 {
   lePkiPathsKey->clear();
-  lePkiPathsKey->setStyleSheet( QLatin1String( "" ) );
+  lePkiPathsKey->setStyleSheet( QString() );
 }
 
 
 void QgsAuthPkiPathsEdit::clearPkiPathsKeyPass()
 {
   lePkiPathsKeyPass->clear();
-  lePkiPathsKeyPass->setStyleSheet( QLatin1String( "" ) );
+  lePkiPathsKeyPass->setStyleSheet( QString() );
   chkPkiPathsPassShow->setChecked( false );
 }
 
@@ -212,7 +185,7 @@ void QgsAuthPkiPathsEdit::chkPkiPathsPassShow_stateChanged( int state )
 void QgsAuthPkiPathsEdit::btnPkiPathsCert_clicked()
 {
   const QString &fn = QgsAuthGuiUtils::getOpenFileName( this, tr( "Open Client Certificate File" ),
-                      tr( "PEM (*.pem);;DER (*.der)" ) );
+                      tr( "All files (*.*);;PEM (*.pem);;DER (*.der)" ) );
   if ( !fn.isEmpty() )
   {
     lePkiPathsCert->setText( fn );
@@ -223,7 +196,7 @@ void QgsAuthPkiPathsEdit::btnPkiPathsCert_clicked()
 void QgsAuthPkiPathsEdit::btnPkiPathsKey_clicked()
 {
   const QString &fn = QgsAuthGuiUtils::getOpenFileName( this, tr( "Open Private Key File" ),
-                      tr( "PEM (*.pem);;DER (*.der)" ) );
+                      tr( "All files (*.*);;PEM (*.pem);;DER (*.der)" ) );
   if ( !fn.isEmpty() )
   {
     lePkiPathsKey->setText( fn );

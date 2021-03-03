@@ -20,7 +20,7 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 
 class QgsProcessingFeedback;
@@ -30,31 +30,33 @@ class QgsProcessingFeedback;
 /**
  * Native file downloader algorithm.
  */
-class QgsFileDownloaderAlgorithm : public QgsProcessingAlgorithm, public QObject
+class QgsFileDownloaderAlgorithm : public QObject, public QgsProcessingAlgorithm
 {
+    Q_OBJECT
+
   public:
     QgsFileDownloaderAlgorithm() = default;
     void initAlgorithm( const QVariantMap &configuration = QVariantMap() ) override;
     QString name() const override;
     QString displayName() const override;
-    virtual QStringList tags() const override;
+    QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsFileDownloaderAlgorithm *createInstance() const override SIP_FACTORY;
 
   protected:
 
-    virtual QVariantMap processAlgorithm( const QVariantMap &parameters,
-                                          QgsProcessingContext &context, QgsProcessingFeedback * ) override;
+    QVariantMap processAlgorithm( const QVariantMap &parameters,
+                                  QgsProcessingContext &context, QgsProcessingFeedback * ) override;
 
   private:
     QString mTotal;
     QString mReceived;
     QgsProcessingFeedback *mFeedback = nullptr;
     QString mLastReport;
-    void reportErrors( QStringList errors );
+    void reportErrors( const QStringList &errors );
     void receiveProgressFromDownloader( qint64 bytesReceived, qint64 bytesTotal );
-    static QString humanSize( qint64 bytes );
     void sendProgressFeedback();
 };
 

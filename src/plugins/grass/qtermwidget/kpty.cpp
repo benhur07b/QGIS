@@ -28,6 +28,8 @@
 
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)
+#define HAVE_UTEMPTER
+#define HAVE_UTMPX
 #define HAVE_LOGIN
 #define HAVE_LIBUTIL_H
 #endif
@@ -269,8 +271,8 @@ bool KPty::open()
     // Linux device names, FIXME: Trouble on other systems?
     for (const char * s3 = "pqrstuvwxyzabcde"; *s3; s3++) {
         for (const char * s4 = "0123456789abcdef"; *s4; s4++) {
-            ptyName = QString().sprintf("/dev/pty%c%c", *s3, *s4).toUtf8();
-            d->ttyName = QString().sprintf("/dev/tty%c%c", *s3, *s4).toUtf8();
+            ptyName = QStringLiteral("/dev/pty%1%2").arg(*s3).arg(*s4).toUtf8();
+            d->ttyName = QStringLiteral("/dev/tty%1%2").arg(*s3).arg(*s4).toUtf8();
 
             d->masterFd = ::open(ptyName.data(), O_RDWR);
             if (d->masterFd >= 0) {
@@ -492,7 +494,7 @@ void KPty::login(const char * user, const char * remotehost)
     Q_D(KPty);
 
     addToUtmp(d->ttyName, remotehost, d->masterFd);
-    Q_UNUSED(user);
+    Q_UNUSED(user)
 #else
 # ifdef HAVE_UTMPX
     struct utmpx l_struct;

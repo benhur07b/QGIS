@@ -17,7 +17,7 @@
 #ifndef QGSLAYOUTVIEW_H
 #define QGSLAYOUTVIEW_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprevieweffect.h" // for QgsPreviewEffect::PreviewMode
 #include "qgis_gui.h"
 #include "qgslayoutitempage.h"
@@ -36,10 +36,11 @@ class QgsLayoutViewToolTemporaryMousePan;
 class QgsLayoutRuler;
 class QgsLayoutViewMenuProvider;
 class QgsLayoutViewSnapMarker;
+class QgsLayoutReportSectionLabel;
 
 /**
  * \ingroup gui
- * A graphical widget to display and interact with QgsLayouts.
+ * \brief A graphical widget to display and interact with QgsLayouts.
  *
  * QgsLayoutView manages the layout interaction tools and mouse/key events.
  *
@@ -48,6 +49,15 @@ class QgsLayoutViewSnapMarker;
 class GUI_EXPORT QgsLayoutView: public QGraphicsView
 {
 
+#ifdef SIP_RUN
+    SIP_CONVERT_TO_SUBCLASS_CODE
+    if ( qobject_cast<QgsLayoutView *>( sipCpp ) )
+      sipType = sipType_QgsLayoutView;
+    else
+      sipType = NULL;
+    SIP_END
+#endif
+
     Q_OBJECT
 
     Q_PROPERTY( QgsLayout *currentLayout READ currentLayout WRITE setCurrentLayout NOTIFY layoutSet )
@@ -55,10 +65,27 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
 
   public:
 
+    //! Clipboard operations
+    enum ClipboardOperation
+    {
+      ClipboardCut, //!< Cut items
+      ClipboardCopy, //!< Copy items
+    };
+
+    //! Paste modes
+    enum PasteMode
+    {
+      PasteModeCursor, //!< Paste items at cursor position
+      PasteModeCenter, //!< Paste items in center of view
+      PasteModeInPlace, //!< Paste items in place
+    };
+
     /**
      * Constructor for QgsLayoutView.
      */
     QgsLayoutView( QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    ~QgsLayoutView() override;
 
     /**
      * Returns the current layout associated with the view.
@@ -105,20 +132,20 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
 
     /**
      * Sets whether a preview effect should be used to alter the view's appearance.
-     * \param enabled Set to true to enable the preview effect on the view.
+     * \param enabled Set to TRUE to enable the preview effect on the view.
      * \see setPreviewMode()
      */
     void setPreviewModeEnabled( bool enabled );
 
     /**
-     * Returns true if a preview effect is being used to alter the view's appearance.
+     * Returns TRUE if a preview effect is being used to alter the view's appearance.
      * \see setPreviewModeEnabled()
      */
     bool previewModeEnabled() const;
 
     /**
      * Sets the preview \a mode which should be used to modify the view's appearance. Preview modes are only used
-     * if previewModeEnabled() is true.
+     * if previewModeEnabled() is TRUE.
      * \see setPreviewModeEnabled()
      * \see previewMode()
      */
@@ -126,7 +153,7 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
 
     /**
      * Returns the preview mode which may be used to modify the view's appearance. Preview modes are only used
-     * if previewModeEnabled() is true.
+     * if previewModeEnabled() is TRUE.
      * \see setPreviewMode()
      * \see previewModeEnabled()
      */
@@ -162,7 +189,7 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
     void setMenuProvider( QgsLayoutViewMenuProvider *provider SIP_TRANSFER );
 
     /**
-    * Returns the provider for context menus. Returned value may be nullptr if no provider is set.
+    * Returns the provider for context menus. Returned value may be NULLPTR if no provider is set.
     * \see setMenuProvider()
     */
     QgsLayoutViewMenuProvider *menuProvider() const;
@@ -207,6 +234,66 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
      * \see distributeSelectedItems()
      */
     void resizeSelectedItems( QgsLayoutAligner::Resize resize );
+
+    /**
+     * Cuts or copies the selected items, respecting the specified \a operation.
+     * \see copyItems()
+     * \see pasteItems()
+     */
+    void copySelectedItems( ClipboardOperation operation );
+
+    /**
+     * Cuts or copies the a list of \a items, respecting the specified \a operation.
+     * \see copySelectedItems()
+     * \see pasteItems()
+     */
+    void copyItems( const QList< QgsLayoutItem * > &items, ClipboardOperation operation );
+
+    /**
+     * Pastes items from clipboard, using the specified \a mode.
+     *
+     * A list of pasted items is returned.
+     *
+     * \see copySelectedItems()
+     * \see hasItemsInClipboard()
+     */
+    QList< QgsLayoutItem * > pasteItems( PasteMode mode );
+
+    /**
+     * Pastes items from clipboard, at the specified \a layoutPoint,
+     * in layout units.
+     *
+     * A list of pasted items is returned.
+     *
+     * \see copySelectedItems()
+     * \see hasItemsInClipboard()
+     */
+    QList< QgsLayoutItem * > pasteItems( QPointF layoutPoint );
+
+    /**
+     * Returns TRUE if the current clipboard contains layout items.
+     * \see pasteItems()
+     */
+    bool hasItemsInClipboard() const;
+
+    /**
+     * Returns the delta (in layout coordinates) by which to move items
+     * for the given key \a event.
+     */
+    QPointF deltaForKeyEvent( QKeyEvent *event );
+
+    /**
+     * Sets whether widget repainting should be allowed for the view. This is
+     * used to temporarily halt painting while exporting layouts.
+     * \note Not available in Python bindings.
+     */
+    void setPaintingEnabled( bool enabled ); SIP_SKIP
+
+    /**
+     * Sets a section \a label, to display above the first page shown in the
+     * view.
+     */
+    void setSectionLabel( const QString &label );
 
   public slots:
 
@@ -353,8 +440,15 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
 
     /**
      * Deletes all selected items.
+     * \see deleteItems()
      */
     void deleteSelectedItems();
+
+    /**
+     * Delete the specified \a items.
+     * \see deleteSelectedItems()
+     */
+    void deleteItems( const QList< QgsLayoutItem * > &items );
 
     /**
      * Groups all selected items.
@@ -400,12 +494,12 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
     void toolSet( QgsLayoutViewTool *tool );
 
     /**
-     * Is emitted whenever the zoom level of the view is changed.
+     * Emitted whenever the zoom level of the view is changed.
      */
     void zoomLevelChanged();
 
     /**
-     * Is emitted when the mouse cursor coordinates change within the view.
+     * Emitted when the mouse cursor coordinates change within the view.
      * The \a layoutPoint argument indicates the cursor position within
      * the layout coordinate system.
      */
@@ -432,6 +526,12 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
      */
     void itemFocused( QgsLayoutItem *item );
 
+    /**
+     * Emitted in the destructor when the view is about to be deleted,
+     * but is still in a perfectly valid state.
+     */
+    void willBeDeleted();
+
   protected:
     void mousePressEvent( QMouseEvent *event ) override;
     void mouseReleaseEvent( QMouseEvent *event ) override;
@@ -442,8 +542,12 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
     void keyReleaseEvent( QKeyEvent *event ) override;
     void resizeEvent( QResizeEvent *event ) override;
     void scrollContentsBy( int dx, int dy ) override;
+    void dragEnterEvent( QDragEnterEvent *e ) override;
+    void paintEvent( QPaintEvent *event ) override;
 
   private slots:
+
+    void invalidateCachedRenders();
 
   private:
 
@@ -462,14 +566,17 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
     QgsLayoutRuler *mVerticalRuler = nullptr;
     std::unique_ptr< QgsLayoutViewMenuProvider > mMenuProvider;
 
-    std::unique_ptr< QgsLayoutViewSnapMarker > mSnapMarker;
+    QgsLayoutViewSnapMarker *mSnapMarker = nullptr;
+    QgsLayoutReportSectionLabel *mSectionLabel = nullptr;
 
-    std::unique_ptr< QGraphicsLineItem > mHorizontalSnapLine;
-    std::unique_ptr< QGraphicsLineItem > mVerticalSnapLine;
+    QGraphicsLineItem *mHorizontalSnapLine = nullptr;
+    QGraphicsLineItem *mVerticalSnapLine = nullptr;
 
     int mCurrentPage = 0;
 
     QgsPreviewEffect *mPreviewEffect = nullptr;
+
+    bool mPaintingEnabled = true;
 
     friend class TestQgsLayoutView;
     friend class QgsLayoutMouseHandles;
@@ -481,7 +588,7 @@ class GUI_EXPORT QgsLayoutView: public QGraphicsView
 /**
  * \ingroup gui
  *
- * Interface for a QgsLayoutView context menu.
+ * \brief Interface for a QgsLayoutView context menu.
  *
  * Implementations of this interface can be made to allow QgsLayoutView
  * instances to provide custom context menus (opened upon right-click).
@@ -494,7 +601,7 @@ class GUI_EXPORT QgsLayoutViewMenuProvider
   public:
     virtual ~QgsLayoutViewMenuProvider() = default;
 
-    //! Return a newly created menu instance (or null pointer on error)
+    //! Returns a newly created menu instance (or NULLPTR on error)
     virtual QMenu *createContextMenu( QWidget *parent SIP_TRANSFER, QgsLayout *layout, QPointF layoutPoint ) const = 0 SIP_FACTORY;
 };
 
@@ -505,7 +612,7 @@ class GUI_EXPORT QgsLayoutViewMenuProvider
 
 /**
  * \ingroup gui
- * A simple graphics item rendered as an 'x'.
+ * \brief A simple graphics item rendered as an 'x'.
  */
 class GUI_EXPORT QgsLayoutViewSnapMarker : public QGraphicsRectItem
 {

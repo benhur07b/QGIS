@@ -16,24 +16,21 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import range
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
-
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
 
 import os
 import random
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsFeatureRequest,
+from qgis.core import (QgsApplication,
+                       QgsFeatureRequest,
                        QgsProcessingException,
                        QgsProcessingUtils,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterVectorLayer,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterField,
@@ -47,7 +44,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class RandomSelectionWithinSubsets(QgisAlgorithm):
-
     INPUT = 'INPUT'
     METHOD = 'METHOD'
     NUMBER = 'NUMBER'
@@ -55,13 +51,22 @@ class RandomSelectionWithinSubsets(QgisAlgorithm):
     OUTPUT = 'OUTPUT'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'sub_selection.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmSelectRandom.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmSelectRandom.svg")
 
     def group(self):
         return self.tr('Vector selection')
 
+    def groupId(self):
+        return 'vectorselection'
+
     def __init__(self):
         super().__init__()
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagNoThreading | QgsProcessingAlgorithm.FlagNotAvailableInStandaloneTool
 
     def initAlgorithm(self, config=None):
         self.methods = [self.tr('Number of selected features'),
@@ -76,7 +81,7 @@ class RandomSelectionWithinSubsets(QgisAlgorithm):
         self.addParameter(QgsProcessingParameterNumber(self.NUMBER,
                                                        self.tr('Number/percentage of selected features'),
                                                        QgsProcessingParameterNumber.Integer,
-                                                       10, False, 0.0, 999999999999.0))
+                                                       10, False, 0.0))
         self.addOutput(QgsProcessingOutputVectorLayer(self.OUTPUT, self.tr('Selected (stratified random)')))
 
     def name(self):
@@ -110,7 +115,7 @@ class RandomSelectionWithinSubsets(QgisAlgorithm):
 
         total = 100.0 / (featureCount * len(unique)) if featureCount else 1
 
-        if not len(unique) == featureCount:
+        if len(unique) != featureCount:
             classes = defaultdict(list)
 
             features = layer.getFeatures(QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry).setSubsetOfAttributes([index]))
@@ -119,15 +124,18 @@ class RandomSelectionWithinSubsets(QgisAlgorithm):
                 if feedback.isCanceled():
                     break
 
-                classes[feature.attributes()[index]].append(feature.id())
+                classes[feature[index]].append(feature.id())
                 feedback.setProgress(int(i * total))
 
             selran = []
-            for subset in classes.values():
+            for k, subset in classes.items():
                 if feedback.isCanceled():
                     break
 
                 selValue = value if method != 1 else int(round(value * len(subset), 0))
+                if selValue > len(subset):
+                    selValue = len(subset)
+                    feedback.reportError(self.tr('Subset "{}" is smaller than requested number of features.'.format(k)))
                 selran.extend(random.sample(subset, selValue))
 
             layer.selectByIds(selran)

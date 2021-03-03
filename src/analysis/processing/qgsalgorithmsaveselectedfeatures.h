@@ -20,7 +20,7 @@
 
 #define SIP_NO_FILE
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsprocessingalgorithm.h"
 
 ///@cond PRIVATE
@@ -39,13 +39,18 @@ class QgsSaveSelectedFeatures : public QgsProcessingAlgorithm
     QString displayName() const override;
     QStringList tags() const override;
     QString group() const override;
+    QString groupId() const override;
     QString shortHelpString() const override;
     QgsSaveSelectedFeatures *createInstance() const override SIP_FACTORY;
 
   protected:
+    bool prepareAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+    QVariantMap processAlgorithm( const QVariantMap &parameters,
+                                  QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
 
-    virtual QVariantMap processAlgorithm( const QVariantMap &parameters,
-                                          QgsProcessingContext &context, QgsProcessingFeedback *feedback ) override;
+  private:
+    QgsFeatureIds mSelection;
+
 };
 
 ///@endcond PRIVATE

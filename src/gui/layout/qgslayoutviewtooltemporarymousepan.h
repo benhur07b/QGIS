@@ -16,13 +16,13 @@
 #ifndef QGSLAYOUTVIEWTOOLTEMPORARYMOUSEPAN_H
 #define QGSLAYOUTVIEWTOOLTEMPORARYMOUSEPAN_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtool.h"
 
 /**
  * \ingroup gui
- * Layout view tool for temporarily panning a layout while a mouse button is depressed.
+ * \brief Layout view tool for temporarily panning a layout while a mouse button is depressed.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLayoutViewToolTemporaryMousePan : public QgsLayoutViewTool

@@ -43,22 +43,21 @@ bool QgsRasterChecker::runTest( const QString &verifiedKey, QString verifiedUri,
   mReport += QLatin1String( "\n\n" );
 
   //QgsRasterDataProvider* verifiedProvider = QgsRasterLayer::loadProvider( verifiedKey, verifiedUri );
-  QgsRasterDataProvider *verifiedProvider = dynamic_cast< QgsRasterDataProvider * >( QgsProviderRegistry::instance()->createProvider( verifiedKey, verifiedUri ) );
+  QgsDataProvider::ProviderOptions options;
+  QgsRasterDataProvider *verifiedProvider = qobject_cast< QgsRasterDataProvider * >( QgsProviderRegistry::instance()->createProvider( verifiedKey, verifiedUri, options ) );
   if ( !verifiedProvider || !verifiedProvider->isValid() )
   {
     error( QStringLiteral( "Cannot load provider %1 with URI: %2" ).arg( verifiedKey, verifiedUri ), mReport );
-    ok = false;
+    return false;
   }
 
   //QgsRasterDataProvider* expectedProvider = QgsRasterLayer::loadProvider( expectedKey, expectedUri );
-  QgsRasterDataProvider *expectedProvider = dynamic_cast< QgsRasterDataProvider * >( QgsProviderRegistry::instance()->createProvider( expectedKey, expectedUri ) );
+  QgsRasterDataProvider *expectedProvider = qobject_cast< QgsRasterDataProvider * >( QgsProviderRegistry::instance()->createProvider( expectedKey, expectedUri, options ) );
   if ( !expectedProvider || !expectedProvider->isValid() )
   {
     error( QStringLiteral( "Cannot load provider %1 with URI: %2" ).arg( expectedKey, expectedUri ), mReport );
-    ok = false;
+    return false;
   }
-
-  if ( !ok ) return false;
 
   mReport += QStringLiteral( "Verified URI: %1<br>" ).arg( verifiedUri.replace( '&', QLatin1String( "&amp;" ) ) );
   mReport += QStringLiteral( "Expected URI: %1<br>" ).arg( expectedUri.replace( '&', QLatin1String( "&amp;" ) ) );
@@ -141,8 +140,8 @@ bool QgsRasterChecker::runTest( const QString &verifiedKey, QString verifiedUri,
 
     int width = expectedProvider->xSize();
     int height = expectedProvider->ySize();
-    QgsRasterBlock *expectedBlock = expectedProvider->block( band, expectedProvider->extent(), width, height );
-    QgsRasterBlock *verifiedBlock = verifiedProvider->block( band, expectedProvider->extent(), width, height );
+    std::unique_ptr< QgsRasterBlock > expectedBlock( expectedProvider->block( band, expectedProvider->extent(), width, height ) );
+    std::unique_ptr< QgsRasterBlock > verifiedBlock( verifiedProvider->block( band, expectedProvider->extent(), width, height ) );
 
     if ( !expectedBlock || !expectedBlock->isValid() ||
          !verifiedBlock || !verifiedBlock->isValid() )
@@ -166,7 +165,7 @@ bool QgsRasterChecker::runTest( const QString &verifiedKey, QString verifiedUri,
         QString valStr;
         if ( compare( verifiedVal, expectedVal, 0 ) )
         {
-          valStr = QStringLiteral( "%1" ).arg( verifiedVal );
+          valStr = QString::number( verifiedVal );
         }
         else
         {
@@ -181,9 +180,6 @@ bool QgsRasterChecker::runTest( const QString &verifiedKey, QString verifiedUri,
     htmlTable += QLatin1String( "</table>" );
 
     mReport += htmlTable;
-
-    delete expectedBlock;
-    delete verifiedBlock;
   }
   delete verifiedProvider;
   delete expectedProvider;

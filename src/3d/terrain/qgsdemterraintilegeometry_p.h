@@ -27,6 +27,8 @@
 // version without notice, or even be removed.
 //
 
+#define SIP_NO_FILE
+
 #include <Qt3DExtras/qt3dextras_global.h>
 #include <Qt3DRender/qgeometry.h>
 #include <QSize>
@@ -41,27 +43,41 @@ namespace Qt3DRender
 
 } // Qt3DRender
 
+namespace QgsRayCastingUtils
+{
+  class Ray3D;
+}
 
 /**
  * \ingroup 3d
- * Stores attributes and vertex/index buffers for one terrain tile based on DEM.
+ * \brief Stores attributes and vertex/index buffers for one terrain tile based on DEM.
  * \since QGIS 3.0
  */
 class DemTerrainTileGeometry : public Qt3DRender::QGeometry
 {
+    Q_OBJECT
+
   public:
 
     /**
      * Constructs a terrain tile geometry. Resolution is the number of vertices on one side of the tile,
      * heightMap is array of float values with one height value for each vertex
      */
-    explicit DemTerrainTileGeometry( int resolution, float skirtHeight, const QByteArray &heightMap, QNode *parent = nullptr );
-    ~DemTerrainTileGeometry() = default;
+    explicit DemTerrainTileGeometry( int resolution, float side, float vertScale, float skirtHeight, const QByteArray &heightMap, QNode *parent = nullptr );
+
+    bool rayIntersection( const QgsRayCastingUtils::Ray3D &ray, const QMatrix4x4 &worldTransform, QVector3D &intersectionPoint );
+
+    Qt3DRender::QAttribute *positionAttribute() { return mPositionAttribute; }
+    Qt3DRender::QAttribute *normalAttribute() { return mNormalAttribute; }
+    Qt3DRender::QAttribute *texCoordsAttribute() { return mTexCoordAttribute; }
+    Qt3DRender::QAttribute *indexAttribute() { return mIndexAttribute; }
 
   private:
     void init();
 
     int mResolution;
+    float mSide;
+    float mVertScale;
     float mSkirtHeight;
     QByteArray mHeightMap;
     Qt3DRender::QAttribute *mPositionAttribute = nullptr;

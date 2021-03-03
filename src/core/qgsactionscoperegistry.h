@@ -23,16 +23,21 @@
 
 /**
  * \ingroup core
- * The action scope registry is an application wide registry that
+ * \brief The action scope registry is an application wide registry that
  * contains a list of available action scopes.
+ *
  * Some scopes are available by default, additional ones can be registered
  * at runtime by plugins or custom applications.
  *
  * To get access use the QgsApplication:
  *
- * ```
+ * \code{.cpp}
  * QgsApplication::actionScopeRegistry()
- * ```
+ * \endcode
+ *
+ * \code{.py}
+ * QgsApplication.actionScopeRegistry()
+ * \endcode
  *
  * \since QGIS 3.0
  */
@@ -54,7 +59,7 @@ class CORE_EXPORT QgsActionScopeRegistry : public QObject
     explicit QgsActionScopeRegistry( QObject *parent = nullptr );
 
     /**
-     * Get all registered action scopes.
+     * Gets all registered action scopes.
      *
      * \since QGIS 3.0
      */
@@ -75,7 +80,7 @@ class CORE_EXPORT QgsActionScopeRegistry : public QObject
     void unregisterActionScope( const QgsActionScope &actionScope );
 
     /**
-     * Get an action scope by its id.
+     * Gets an action scope by its id.
      *
      * \since QGIS 3.0
      */

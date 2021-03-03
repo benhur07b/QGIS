@@ -25,7 +25,7 @@
 /**
  * \ingroup core
  *
- * An expression with an additional enabled flag.
+ * \brief An expression with an additional enabled flag.
  *
  * This can be used for configuration options where an expression can be enabled
  * or disabled but when disabled it shouldn't lose it's information for the case
@@ -77,8 +77,10 @@ class CORE_EXPORT QgsOptionalExpression : public QgsOptional<QgsExpression>
 };
 
 
-#if defined(Q_OS_WIN)
-template CORE_EXPORT QgsOptional<QgsExpression>;
+#if defined(_MSC_VER)
+#ifndef SIP_RUN
+template class CORE_EXPORT QgsOptional<QgsExpression>;
+#endif
 #endif
 
 

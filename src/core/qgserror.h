@@ -27,7 +27,7 @@
 
 /**
  * \ingroup core
- * QgsErrorMessage represents single error message.
+ * \brief QgsErrorMessage represents single error message.
 */
 class CORE_EXPORT QgsErrorMessage
 {
@@ -39,8 +39,8 @@ class CORE_EXPORT QgsErrorMessage
       Html
     };
 
-    QgsErrorMessage()
-    {}
+    //! Constructor for QgsErrorMessage
+    QgsErrorMessage() = default;
 
     /**
      * Constructor.
@@ -69,14 +69,11 @@ class CORE_EXPORT QgsErrorMessage
     QString mFile;
     QString mFunction;
     int mLine = 0;
-
-    //! Message format
-    Format mFormat = Text;
 };
 
 /**
  * \ingroup core
- * QgsError is container for error messages (report). It may contain chain
+ * \brief QgsError is container for error messages (report). It may contain chain
  * (sort of traceback) of error messages (e.g. GDAL - provider - layer).
  * Higher level messages are appended at the end.
 */
@@ -84,7 +81,8 @@ class CORE_EXPORT QgsError
 {
   public:
 
-    QgsError() {}
+    //! Constructor for QgsError
+    QgsError() = default;
 
     /**
      * Constructor with single message.
@@ -108,7 +106,7 @@ class CORE_EXPORT QgsError
 
     /**
      * Test if any error is set.
-     *  \returns true if contains error
+     *  \returns TRUE if contains error
      */
     bool isEmpty() const { return mMessageList.isEmpty(); }
 
@@ -127,6 +125,21 @@ class CORE_EXPORT QgsError
 
     //! Clear error messages
     void clear() { mMessageList.clear(); }
+
+    /**
+     * \brief messageList return the list of current error messages
+     * \return current list of error messages
+     */
+    QList<QgsErrorMessage> messageList() const { return mMessageList; }
+
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString str = QStringLiteral( "<QgsError: %1>" ).arg( sipCpp->message( QgsErrorMessage::Text ) );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
 
   private:
     //! List of messages

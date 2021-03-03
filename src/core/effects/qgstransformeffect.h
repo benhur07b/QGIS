@@ -19,7 +19,7 @@
 
 #include "qgis_core.h"
 #include "qgspainteffect.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsmapunitscale.h"
 #include "qgsunittypes.h"
 #include <QPainter>
@@ -33,7 +33,7 @@
  * \since QGIS 2.9
  */
 
-class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
+class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect SIP_NODEFAULTCTORS
 {
 
   public:
@@ -43,17 +43,17 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
      * \param map encoded properties string map
      * \returns new QgsTransformEffect
      */
-    static QgsPaintEffect *create( const QgsStringMap &map ) SIP_FACTORY;
+    static QgsPaintEffect *create( const QVariantMap &map ) SIP_FACTORY;
 
     /**
      * Constructor for QgsTransformEffect.
      */
     QgsTransformEffect() = default;
 
-    virtual QString type() const override { return QStringLiteral( "transform" ); }
-    virtual QgsStringMap properties() const override;
-    virtual void readProperties( const QgsStringMap &props ) override;
-    virtual QgsTransformEffect *clone() const override SIP_FACTORY;
+    QString type() const override { return QStringLiteral( "transform" ); }
+    QVariantMap properties() const override;
+    void readProperties( const QVariantMap &props ) override;
+    QgsTransformEffect *clone() const override SIP_FACTORY;
 
     /**
      * Sets the transform x translation.
@@ -212,7 +212,7 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
 
     /**
      * Sets whether to reflect along the x-axis
-     * \param reflectX true to reflect horizontally
+     * \param reflectX TRUE to reflect horizontally
      * \see reflectX
      * \see setReflectY
      */
@@ -220,7 +220,7 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
 
     /**
      * Returns whether transform will be reflected along the x-axis
-     * \returns true if transform will reflect horizontally
+     * \returns TRUE if transform will reflect horizontally
      * \see setReflectX
      * \see reflectY
      */
@@ -228,7 +228,7 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
 
     /**
      * Sets whether to reflect along the y-axis
-     * \param reflectY true to reflect horizontally
+     * \param reflectY TRUE to reflect horizontally
      * \see reflectY
      * \see setReflectX
      */
@@ -236,7 +236,7 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
 
     /**
      * Returns whether transform will be reflected along the y-axis
-     * \returns true if transform will reflect horizontally
+     * \returns TRUE if transform will reflect horizontally
      * \see setReflectY
      * \see reflectX
      */
@@ -244,8 +244,8 @@ class CORE_EXPORT QgsTransformEffect : public QgsPaintEffect
 
   protected:
 
-    virtual void draw( QgsRenderContext &context ) override;
-    virtual QRectF boundingRect( const QRectF &rect, const QgsRenderContext &context ) const override;
+    void draw( QgsRenderContext &context ) override;
+    QRectF boundingRect( const QRectF &rect, const QgsRenderContext &context ) const override;
 
   private:
 

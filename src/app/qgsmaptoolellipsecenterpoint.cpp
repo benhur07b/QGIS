@@ -18,7 +18,9 @@
 #include "qgsgeometryrubberband.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
+
 
 QgsMapToolEllipseCenterPoint::QgsMapToolEllipseCenterPoint( QgsMapToolCapture *parentTool,
     QgsMapCanvas *canvas, CaptureMode mode )
@@ -28,34 +30,43 @@ QgsMapToolEllipseCenterPoint::QgsMapToolEllipseCenterPoint( QgsMapToolCapture *p
 
 void QgsMapToolEllipseCenterPoint::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
 
   if ( e->button() == Qt::LeftButton )
   {
-    mPoints.append( mapPoint );
+    if ( mPoints.empty() )
+      mPoints.append( point );
 
-    if ( !mPoints.isEmpty() && !mTempRubberBand )
+    if ( !mTempRubberBand )
     {
-      mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
       mTempRubberBand->show();
     }
   }
   else if ( e->button() == Qt::RightButton )
   {
-    deactivate();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    release( e );
   }
 }
 
 void QgsMapToolEllipseCenterPoint::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
+
   if ( mTempRubberBand )
   {
-    mEllipse = QgsEllipse().fromCenterPoint( mPoints.at( 0 ), mapPoint );
+    mEllipse = QgsEllipse().fromCenterPoint( mPoints.at( 0 ), point );
     mTempRubberBand->setGeometry( mEllipse.toPolygon( segments() ) );
   }
 }

@@ -24,13 +24,14 @@
 #include "qgsmapcanvas.h"
 #include "qgsmaptool.h"
 #include "qgsexception.h"
+#include "qgsmapmouseevent.h"
 
 #include <QButtonGroup>
 #include <QColorDialog>
 #include <QMessageBox>
-#include <QMouseEvent>
 #include <QRubberBand>
 #include <QSettings>
+#include <QDoubleValidator>
 
 
 //! Map tool which uses rubber band for changing grass region
@@ -141,7 +142,7 @@ void QgsGrassRegionEdit::transform( QgsMapCanvas *, QVector<QgsPointXY> &points,
   }
   catch ( QgsCsException &cse )
   {
-    Q_UNUSED( cse );
+    Q_UNUSED( cse )
     QgsDebugMsg( QString( "transformation failed: %1" ).arg( cse.what() ) );
   }
 }
@@ -207,8 +208,8 @@ QgsGrassRegion::QgsGrassRegion( QgisInterface *iface,
   mUpdatingGui = false;
 
   // Set input validators
-  QDoubleValidator *dv = new QDoubleValidator( 0 );
-  QIntValidator *iv = new QIntValidator( 0 );
+  QDoubleValidator *dv = new QDoubleValidator( nullptr );
+  QIntValidator *iv = new QIntValidator( nullptr );
 
   mNorth->setValidator( dv );
   mSouth->setValidator( dv );
@@ -305,7 +306,7 @@ void QgsGrassRegion::reloadRegion()
 void QgsGrassRegion::mapsetChanged()
 {
   delete mRegionEdit;
-  mRegionEdit = 0;
+  mRegionEdit = nullptr;
   if ( QgsGrass::activeMode() )
   {
     mRegionEdit = new QgsGrassRegionEdit( mCanvas );

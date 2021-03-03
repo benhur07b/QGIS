@@ -3,7 +3,7 @@
   TOPOLogy checker
   -------------------
          date                 : May 2009
-         copyright            : Vita Cizek
+         copyright            : (C) 2009 by Vita Cizek
          email                : weetya (at) gmail.com
 
  ***************************************************************************
@@ -18,11 +18,12 @@
 #include "topolError.h"
 #include "qgsmessagelog.h"
 #include "qgsfeatureiterator.h"
+#include "qgsvectorlayer.h"
 
 //TODO: tell dock to parse errorlist when feature is deleted
 bool TopolError::fix( const QString &fixName )
 {
-  QgsMessageLog::logMessage( QObject::tr( "Using fix %1." ).arg( fixName ), QObject::tr( "Topology plugin" ), QgsMessageLog::INFO );
+  QgsMessageLog::logMessage( QObject::tr( "Using fix %1." ).arg( fixName ), QObject::tr( "Topology plugin" ), Qgis::Info );
   return ( this->*mFixMap[fixName] )();
 }
 

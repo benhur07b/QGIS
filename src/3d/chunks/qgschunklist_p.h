@@ -27,11 +27,16 @@
 // version without notice, or even be removed.
 //
 
+#define SIP_NO_FILE
+
 class QgsChunkNode;
 
 /**
  * \ingroup 3d
- * Element of a double-linked list
+ * \brief Element of a double-linked list
+ *
+ * \note Not available in Python bindings
+ *
  * \since QGIS 3.0
  */
 struct QgsChunkListEntry
@@ -50,7 +55,8 @@ struct QgsChunkListEntry
 
 /**
  * \ingroup 3d
- * Double linked list of chunks.
+ * \brief Double linked list of chunks.
+ *
  * The list does not own entries.
  *
  * Why having another linked list structure if there is already QLinkedList template?
@@ -64,7 +70,8 @@ struct QgsChunkListEntry
 class QgsChunkList
 {
   public:
-    QgsChunkList();
+    //! Constructor for QgsChunkList
+    QgsChunkList() = default;
 
     //! Counts the real number of entries by walking the list (for debugging purposes only)
     int trueCount() const;
@@ -99,7 +106,7 @@ class QgsChunkList
   private:
     QgsChunkListEntry *mHead = nullptr;
     QgsChunkListEntry *mTail = nullptr;
-    int mCount;
+    int mCount = 0;
 };
 
 /// @endcond

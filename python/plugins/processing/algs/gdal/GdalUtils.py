@@ -16,51 +16,61 @@
 *                                                                         *
 ***************************************************************************
 """
-from builtins import str
-from builtins import range
-from builtins import object
 
 __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 import subprocess
 import platform
 import re
+import warnings
 
 import psycopg2
 
-from osgeo import gdal
-from osgeo import ogr
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    from osgeo import ogr
 
-from qgis.core import (QgsApplication,
+from qgis.core import (Qgis,
+                       QgsBlockingProcess,
+                       QgsRunProcess,
+                       QgsApplication,
                        QgsVectorFileWriter,
                        QgsProcessingFeedback,
                        QgsProcessingUtils,
                        QgsMessageLog,
                        QgsSettings,
                        QgsCredentials,
-                       QgsDataSourceUri)
+                       QgsDataSourceUri,
+                       QgsProjUtils,
+                       QgsCoordinateReferenceSystem,
+                       QgsProcessingException)
+
+from qgis.PyQt.QtCore import (
+    QCoreApplication,
+    QProcess
+)
+
 from processing.core.ProcessingConfig import ProcessingConfig
 from processing.tools.system import isWindows, isMac
 
 try:
-    from osgeo import gdal  # NOQA
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        from osgeo import gdal  # NOQA
 
     gdalAvailable = True
 except:
     gdalAvailable = False
 
 
-class GdalUtils(object):
+class GdalUtils:
     GDAL_HELP_PATH = 'GDAL_HELP_PATH'
 
     supportedRasters = None
+    supportedOutputRasters = None
 
     @staticmethod
     def runGdal(commands, feedback=None):
@@ -86,42 +96,66 @@ class GdalUtils(object):
                 os.putenv('PATH', envval)
 
         fused_command = ' '.join([str(c) for c in commands])
-        QgsMessageLog.logMessage(fused_command, 'Processing', QgsMessageLog.INFO)
-        feedback.pushInfo('GDAL command:')
+        QgsMessageLog.logMessage(fused_command, 'Processing', Qgis.Info)
+        feedback.pushInfo(GdalUtils.tr('GDAL command:'))
         feedback.pushCommandInfo(fused_command)
-        feedback.pushInfo('GDAL command output:')
-        success = False
-        retry_count = 0
-        while not success:
-            loglines = []
-            loglines.append('GDAL execution console output')
-            try:
-                with subprocess.Popen(
-                    fused_command,
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stdin=subprocess.DEVNULL,
-                    stderr=subprocess.STDOUT,
-                    universal_newlines=True,
-                ) as proc:
-                    for line in proc.stdout:
-                        feedback.pushConsoleInfo(line)
-                        loglines.append(line)
-                    success = True
-            except IOError as e:
-                if retry_count < 5:
-                    retry_count += 1
-                else:
-                    raise IOError(
-                        str(e) + u'\nTried 5 times without success. Last iteration stopped after reading {} line(s).\nLast line(s):\n{}'.format(
-                            len(loglines), u'\n'.join(loglines[-10:])))
+        feedback.pushInfo(GdalUtils.tr('GDAL command output:'))
 
-            QgsMessageLog.logMessage('\n'.join(loglines), 'Processing', QgsMessageLog.INFO)
-            GdalUtils.consoleOutput = loglines
+        loglines = [GdalUtils.tr('GDAL execution console output')]
 
-    @staticmethod
-    def getConsoleOutput():
-        return GdalUtils.consoleOutput
+        def on_stdout(ba):
+            val = ba.data().decode('UTF-8')
+            # catch progress reports
+            if val == '100 - done.':
+                on_stdout.progress = 100
+                feedback.setProgress(on_stdout.progress)
+            elif val in ('0', '10', '20', '30', '40', '50', '60', '70', '80', '90'):
+                on_stdout.progress = int(val)
+                feedback.setProgress(on_stdout.progress)
+            elif val == '.':
+                on_stdout.progress += 2.5
+                feedback.setProgress(on_stdout.progress)
+
+            on_stdout.buffer += val
+            if on_stdout.buffer.endswith('\n') or on_stdout.buffer.endswith('\r'):
+                # flush buffer
+                feedback.pushConsoleInfo(on_stdout.buffer.rstrip())
+                loglines.append(on_stdout.buffer.rstrip())
+                on_stdout.buffer = ''
+
+        on_stdout.progress = 0
+        on_stdout.buffer = ''
+
+        def on_stderr(ba):
+            val = ba.data().decode('UTF-8')
+            on_stderr.buffer += val
+
+            if on_stderr.buffer.endswith('\n') or on_stderr.buffer.endswith('\r'):
+                # flush buffer
+                feedback.reportError(on_stderr.buffer.rstrip())
+                loglines.append(on_stderr.buffer.rstrip())
+                on_stderr.buffer = ''
+
+        on_stderr.buffer = ''
+
+        command, *arguments = QgsRunProcess.splitCommand(fused_command)
+        proc = QgsBlockingProcess(command, arguments)
+        proc.setStdOutHandler(on_stdout)
+        proc.setStdErrHandler(on_stderr)
+
+        res = proc.run(feedback)
+        if feedback.isCanceled() and res != 0:
+            feedback.pushInfo(GdalUtils.tr('Process was canceled and did not complete'))
+        elif not feedback.isCanceled() and proc.exitStatus() == QProcess.CrashExit:
+            raise QgsProcessingException(GdalUtils.tr('Process was unexpectedly terminated'))
+        elif res == 0:
+            feedback.pushInfo(GdalUtils.tr('Process completed successfully'))
+        elif proc.processError() == QProcess.FailedToStart:
+            raise QgsProcessingException(GdalUtils.tr('Process {} failed to start. Either {} is missing, or you may have insufficient permissions to run the program.').format(command, command))
+        else:
+            feedback.reportError(GdalUtils.tr('Process returned error code {}').format(res))
+
+        return loglines
 
     @staticmethod
     def getSupportedRasters():
@@ -135,7 +169,10 @@ class GdalUtils(object):
             gdal.AllRegister()
 
         GdalUtils.supportedRasters = {}
-        GdalUtils.supportedRasters['GTiff'] = ['tif']
+        GdalUtils.supportedOutputRasters = {}
+        GdalUtils.supportedRasters['GTiff'] = ['tif', 'tiff']
+        GdalUtils.supportedOutputRasters['GTiff'] = ['tif', 'tiff']
+
         for i in range(gdal.GetDriverCount()):
             driver = gdal.GetDriver(i)
             if driver is None:
@@ -146,25 +183,51 @@ class GdalUtils(object):
                     or metadata[gdal.DCAP_RASTER] != 'YES':
                 continue
 
-            # ===================================================================
-            # if gdal.DCAP_CREATE not in metadata \
-            #         or metadata[gdal.DCAP_CREATE] != 'YES':
-            #     continue
-            # ===================================================================
-            if gdal.DMD_EXTENSION in metadata:
-                extensions = metadata[gdal.DMD_EXTENSION].split('/')
+            if gdal.DMD_EXTENSIONS in metadata:
+                extensions = metadata[gdal.DMD_EXTENSIONS].split(' ')
                 if extensions:
                     GdalUtils.supportedRasters[shortName] = extensions
+                    # Only creatable rasters can be referenced in output rasters
+                    if ((gdal.DCAP_CREATE in metadata and
+                         metadata[gdal.DCAP_CREATE] == 'YES') or
+                        (gdal.DCAP_CREATECOPY in metadata and
+                            metadata[gdal.DCAP_CREATECOPY] == 'YES')):
+                        GdalUtils.supportedOutputRasters[shortName] = extensions
 
         return GdalUtils.supportedRasters
 
     @staticmethod
+    def getSupportedOutputRasters():
+        if not gdalAvailable:
+            return {}
+
+        if GdalUtils.supportedOutputRasters is not None:
+            return GdalUtils.supportedOutputRasters
+        else:
+            GdalUtils.getSupportedRasters()
+
+        return GdalUtils.supportedOutputRasters
+
+    @staticmethod
     def getSupportedRasterExtensions():
-        allexts = ['tif']
+        allexts = []
         for exts in list(GdalUtils.getSupportedRasters().values()):
             for ext in exts:
-                if ext not in allexts and ext != '':
+                if ext not in allexts and ext not in ['', 'tif', 'tiff']:
                     allexts.append(ext)
+        allexts.sort()
+        allexts[0:0] = ['tif', 'tiff']
+        return allexts
+
+    @staticmethod
+    def getSupportedOutputRasterExtensions():
+        allexts = []
+        for exts in list(GdalUtils.getSupportedOutputRasters().values()):
+            for ext in exts:
+                if ext not in allexts and ext not in ['', 'tif', 'tiff']:
+                    allexts.append(ext)
+        allexts.sort()
+        allexts[0:0] = ['tif', 'tiff']
         return allexts
 
     @staticmethod
@@ -174,9 +237,9 @@ class GdalUtils(object):
             return 'ESRI Shapefile'
 
         formats = QgsVectorFileWriter.supportedFiltersAndFormats()
-        for k, v in list(formats.items()):
-            if ext in k:
-                return v
+        for format in formats:
+            if ext in format.filterString:
+                return format.driverName
         return 'ESRI Shapefile'
 
     @staticmethod
@@ -191,12 +254,14 @@ class GdalUtils(object):
 
     @staticmethod
     def escapeAndJoin(strList):
+        escChars = [' ', '&', '(', ')', '"', ';']
         joined = ''
         for s in strList:
             if not isinstance(s, str):
                 s = str(s)
-            if s and s[0] != '-' and ' ' in s:
-                escaped = '"' + s.replace('\\', '\\\\').replace('"', '\\"') \
+            # don't escape if command starts with - and isn't a negative number, e.g. -9999
+            if s and re.match(r'^([^-]|-\d)', s) and any(c in s for c in escChars):
+                escaped = '"' + s.replace('\\', '\\\\').replace('"', '"""') \
                           + '"'
             else:
                 escaped = s
@@ -213,28 +278,10 @@ class GdalUtils(object):
         return gdal.VersionInfo('RELEASE_NAME')
 
     @staticmethod
-    def gdalHelpPath():
-        helpPath = ProcessingConfig.getSetting(GdalUtils.GDAL_HELP_PATH)
-
-        if helpPath is None:
-            if isWindows():
-                pass
-            elif isMac():
-                pass
-            else:
-                searchPaths = ['/usr/share/doc/libgdal-doc/gdal']
-                for path in searchPaths:
-                    if os.path.exists(path):
-                        helpPath = os.path.abspath(path)
-                        break
-
-        return helpPath if helpPath is not None else 'http://www.gdal.org/'
-
-    @staticmethod
-    def ogrConnectionString(uri, context):
-        """Generates OGR connection string from layer source
+    def ogrConnectionStringFromLayer(layer):
+        """Generates OGR connection string from a layer
         """
-        return GdalUtils.ogrConnectionStringAndFormat(uri, context)[0]
+        return GdalUtils.ogrConnectionStringAndFormatFromLayer(layer)[0]
 
     @staticmethod
     def ogrConnectionStringAndFormat(uri, context):
@@ -248,8 +295,12 @@ class GdalUtils(object):
         if layer is None:
             path, ext = os.path.splitext(uri)
             format = QgsVectorFileWriter.driverForExtension(ext)
-            return '"' + uri + '"', '"' + format + '"'
+            return uri, '"' + format + '"'
 
+        return GdalUtils.ogrConnectionStringAndFormatFromLayer(layer)
+
+    @staticmethod
+    def ogrConnectionStringAndFormatFromLayer(layer):
         provider = layer.dataProvider().name()
         if provider == 'spatialite':
             # dbname='/geodata/osm_ch.sqlite' table="places" (Geometry) sql=
@@ -285,6 +336,22 @@ class GdalUtils(object):
 
             ogrstr = "PG:%s" % dsUri.connectionInfo()
             format = 'PostgreSQL'
+        elif provider == 'mssql':
+            # 'dbname=\'db_name\' host=myHost estimatedmetadata=true
+            # srid=27700 type=MultiPolygon table="dbo"."my_table"
+            # #(Shape) sql='
+            dsUri = layer.dataProvider().uri()
+            ogrstr = 'MSSQL:'
+            ogrstr += 'database={0};'.format(dsUri.database())
+            ogrstr += 'server={0};'.format(dsUri.host())
+            if dsUri.username() != "":
+                ogrstr += 'uid={0};'.format(dsUri.username())
+            else:
+                ogrstr += 'trusted_connection=yes;'
+            if dsUri.password() != '':
+                ogrstr += 'pwd={0};'.format(dsUri.password())
+            ogrstr += 'tables={0}'.format(dsUri.table())
+            format = 'MSSQL'
         elif provider == "oracle":
             # OCI:user/password@host:port/service:table
             dsUri = QgsDataSourceUri(layer.dataProvider().dataSourceUri())
@@ -298,7 +365,7 @@ class GdalUtils(object):
             if dsUri.host() != "":
                 ogrstr += delim + dsUri.host()
                 delim = ""
-                if dsUri.port() != "" and dsUri.port() != '1521':
+                if dsUri.port() not in ["", '1521']:
                     ogrstr += ":" + dsUri.port()
                 ogrstr += "/"
                 if dsUri.database() != "":
@@ -315,19 +382,26 @@ class GdalUtils(object):
 
             ogrstr += dsUri.table()
             format = 'OCI'
+        elif provider.lower() == "wfs":
+            uri = QgsDataSourceUri(layer.source())
+            baseUrl = uri.param('url').split('?')[0]
+            ogrstr = "WFS:{}".format(baseUrl)
+            format = 'WFS'
         else:
             ogrstr = str(layer.source()).split("|")[0]
             path, ext = os.path.splitext(ogrstr)
             format = QgsVectorFileWriter.driverForExtension(ext)
 
-        return '"' + ogrstr + '"', '"' + format + '"'
+        return ogrstr, '"' + format + '"'
+
+    @staticmethod
+    def ogrOutputLayerName(uri):
+        uri = uri.strip('"')
+        return os.path.basename(os.path.splitext(uri)[0])
 
     @staticmethod
     def ogrLayerName(uri):
         uri = uri.strip('"')
-        #if os.path.isfile(uri):
-        #    return os.path.basename(os.path.splitext(uri)[0])
-
         if ' table=' in uri:
             # table="schema"."table"
             re_table_schema = re.compile(' table="([^"]*)"\\."([^"]*)"')
@@ -365,3 +439,47 @@ class GdalUtils(object):
         name = ly.GetName()
         ds = None
         return name
+
+    @staticmethod
+    def parseCreationOptions(value):
+        parts = value.split('|')
+        options = []
+        for p in parts:
+            options.extend(['-co', p])
+        return options
+
+    @staticmethod
+    def writeLayerParameterToTextFile(filename, alg, parameters, parameter_name, context, quote=True, executing=False):
+        listFile = QgsProcessingUtils.generateTempFilename(filename)
+
+        if executing:
+            layers = []
+            for l in alg.parameterAsLayerList(parameters, parameter_name, context):
+                if quote:
+                    layers.append('"' + l.source() + '"')
+                else:
+                    layers.append(l.source())
+
+            with open(listFile, 'w') as f:
+                f.write('\n'.join(layers))
+
+        return listFile
+
+    @staticmethod
+    def gdal_crs_string(crs):
+        """
+        Converts a QgsCoordinateReferenceSystem to a string understandable
+        by GDAL
+        :param crs: crs to convert
+        :return: gdal friendly string
+        """
+        if crs.authid().upper().startswith('EPSG:') or crs.authid().upper().startswith('IGNF:') or crs.authid().upper().startswith('ESRI:'):
+            return crs.authid()
+
+        return crs.toWkt(QgsCoordinateReferenceSystem.WKT_PREFERRED_GDAL)
+
+    @classmethod
+    def tr(cls, string, context=''):
+        if context == '':
+            context = cls.__name__
+        return QCoreApplication.translate(context, string)

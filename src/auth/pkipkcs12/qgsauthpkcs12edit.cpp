@@ -142,8 +142,8 @@ void QgsAuthPkcs12Edit::loadConfig( const QgsStringMap &configmap )
   mConfigMap = configmap;
   lePkcs12Bundle->setText( configmap.value( QStringLiteral( "bundlepath" ) ) );
   lePkcs12KeyPass->setText( configmap.value( QStringLiteral( "bundlepass" ) ) );
-  cbAddCas->setChecked( configmap.value( QStringLiteral( "addcas" ), QStringLiteral( "false " ) ) == QStringLiteral( "true" ) );
-  cbAddRootCa->setChecked( configmap.value( QStringLiteral( "addrootca" ), QStringLiteral( "false " ) ) == QStringLiteral( "true" ) );
+  cbAddCas->setChecked( configmap.value( QStringLiteral( "addcas" ), QStringLiteral( "false " ) ) == QLatin1String( "true" ) );
+  cbAddRootCa->setChecked( configmap.value( QStringLiteral( "addrootca" ), QStringLiteral( "false " ) ) == QLatin1String( "true" ) );
 
   validateConfig();
 }
@@ -165,7 +165,7 @@ void QgsAuthPkcs12Edit::clearConfig()
 void QgsAuthPkcs12Edit::clearPkiMessage( QLineEdit *lineedit )
 {
   lineedit->clear();
-  lineedit->setStyleSheet( QLatin1String( "" ) );
+  lineedit->setStyleSheet( QString() );
 }
 
 void QgsAuthPkcs12Edit::writePkiMessage( QLineEdit *lineedit, const QString &msg, Validity valid )
@@ -193,20 +193,20 @@ void QgsAuthPkcs12Edit::writePkiMessage( QLineEdit *lineedit, const QString &msg
 void QgsAuthPkcs12Edit::clearPkcs12BundlePath()
 {
   lePkcs12Bundle->clear();
-  lePkcs12Bundle->setStyleSheet( QLatin1String( "" ) );
+  lePkcs12Bundle->setStyleSheet( QString() );
 }
 
 void QgsAuthPkcs12Edit::clearPkcs12BundlePass()
 {
   lePkcs12KeyPass->clear();
-  lePkcs12KeyPass->setStyleSheet( QLatin1String( "" ) );
+  lePkcs12KeyPass->setStyleSheet( QString() );
   lePkcs12KeyPass->setPlaceholderText( QStringLiteral( "Optional passphrase" ) );
   chkPkcs12PassShow->setChecked( false );
 }
 
 void QgsAuthPkcs12Edit::lePkcs12KeyPass_textChanged( const QString &pass )
 {
-  Q_UNUSED( pass );
+  Q_UNUSED( pass )
   validateConfig();
 }
 

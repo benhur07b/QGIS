@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Hugo Mercier'
 __date__ = '10/12/2015'
 __copyright__ = 'Copyright 2015, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -82,9 +80,10 @@ class TestQgsVirtualLayerDefinition(unittest.TestCase):
         f.append(QgsField("f", QVariant.Double))
         f.append(QgsField("s", QVariant.String))
         d.setFields(f)
+
         f2 = QgsVirtualLayerDefinition.fromUrl(d.toUrl()).fields()
         self.assertEqual(f[0].name(), f2[0].name())
-        self.assertEqual(f[0].type(), f2[0].type())
+        self.assertEqual(f2[0].type(), QVariant.LongLong)
         self.assertEqual(f[1].name(), f2[1].name())
         self.assertEqual(f[1].type(), f2[1].type())
         self.assertEqual(f[2].name(), f2[2].name())

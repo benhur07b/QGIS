@@ -14,6 +14,7 @@
  ***************************************************************************/
 
 #include "qgsratiolockbutton.h"
+#include "qgis.h"
 
 #include <QApplication>
 #include <QMouseEvent>
@@ -24,11 +25,9 @@
 
 QgsRatioLockButton::QgsRatioLockButton( QWidget *parent )
   : QToolButton( parent )
-
-
 {
   setMinimumSize( QSize( 24, 24 ) );
-  setMaximumWidth( fontMetrics().width( QStringLiteral( "000" ) ) );
+  setMaximumWidth( fontMetrics().horizontalAdvance( '0' ) * 3 );
   setCheckable( true );
   setAutoRaise( true );
   connect( this, &QPushButton::clicked, this, &QgsRatioLockButton::buttonClicked );
@@ -155,4 +154,10 @@ void QgsRatioLockButton::setHeightSpinBox( QDoubleSpinBox *widget )
   mHeightSpinBox = widget;
   mPrevHeight = widget->value();
   connect( mHeightSpinBox, static_cast<void ( QDoubleSpinBox::* )( double )>( &QDoubleSpinBox::valueChanged ), this, &QgsRatioLockButton::heightSpinBoxChanged );
+}
+
+void QgsRatioLockButton::resetRatio()
+{
+  mPrevWidth = mWidthSpinBox ? mWidthSpinBox->value() : 0.0;
+  mPrevHeight = mHeightSpinBox ? mHeightSpinBox->value() : 0.0;
 }

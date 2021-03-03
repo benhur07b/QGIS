@@ -21,25 +21,24 @@ __author__ = 'Nyall Dawson'
 __date__ = 'November 2016'
 __copyright__ = '(C) 2016, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 import codecs
 
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsStatisticalSummary,
+from qgis.core import (QgsApplication,
+                       QgsStatisticalSummary,
                        QgsStringStatisticalSummary,
                        QgsDateTimeStatisticalSummary,
                        QgsFeatureRequest,
+                       QgsProcessing,
+                       QgsProcessingException,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
                        QgsProcessingParameterFileDestination,
-                       QgsProcessingOutputHtml,
-                       QgsProcessingOutputNumber)
+                       QgsProcessingOutputNumber,
+                       QgsProcessingFeatureSource)
 
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 
@@ -47,7 +46,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class BasicStatisticsForField(QgisAlgorithm):
-
     INPUT_LAYER = 'INPUT_LAYER'
     FIELD_NAME = 'FIELD_NAME'
     OUTPUT_HTML_FILE = 'OUTPUT_HTML_FILE'
@@ -74,28 +72,36 @@ class BasicStatisticsForField(QgisAlgorithm):
     IQR = 'IQR'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'basic_statistics.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmBasicStatistics.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmBasicStatistics.svg")
 
     def tags(self):
-        return self.tr('stats,statistics,date,time,datetime,string,number,text,table,layer,maximum,minimum,mean,average,standard,deviation,'
-                       'count,distinct,unique,variance,median,quartile,range,majority,minority').split(',')
+        return self.tr(
+            'stats,statistics,date,time,datetime,string,number,text,table,layer,sum,maximum,minimum,mean,average,standard,deviation,'
+            'count,distinct,unique,variance,median,quartile,range,majority,minority,summary').split(',')
 
     def group(self):
         return self.tr('Vector analysis')
+
+    def groupId(self):
+        return 'vectoranalysis'
 
     def __init__(self):
         super().__init__()
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT_LAYER,
-                                                              self.tr('Input layer')))
+                                                              self.tr('Input layer'),
+                                                              types=[QgsProcessing.TypeVector]))
 
         self.addParameter(QgsProcessingParameterField(self.FIELD_NAME,
                                                       self.tr('Field to calculate statistics on'),
                                                       None, self.INPUT_LAYER, QgsProcessingParameterField.Any))
 
-        self.addParameter(QgsProcessingParameterFileDestination(self.OUTPUT_HTML_FILE, self.tr('Statistics'), self.tr('HTML files (*.html)'), None, True))
-        self.addOutput(QgsProcessingOutputHtml(self.OUTPUT_HTML_FILE, self.tr('Statistics')))
+        self.addParameter(QgsProcessingParameterFileDestination(self.OUTPUT_HTML_FILE, self.tr('Statistics'),
+                                                                self.tr('HTML files (*.html)'), None, True))
 
         self.addOutput(QgsProcessingOutputNumber(self.COUNT, self.tr('Count')))
         self.addOutput(QgsProcessingOutputNumber(self.UNIQUE, self.tr('Number of unique values')))
@@ -126,28 +132,29 @@ class BasicStatisticsForField(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT_LAYER, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT_LAYER))
+
         field_name = self.parameterAsString(parameters, self.FIELD_NAME, context)
         field = source.fields().at(source.fields().lookupField(field_name))
 
         output_file = self.parameterAsFileOutput(parameters, self.OUTPUT_HTML_FILE, context)
 
-        request = QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry).setSubsetOfAttributes([field_name], source.fields())
-        features = source.getFeatures(request)
+        request = QgsFeatureRequest().setFlags(QgsFeatureRequest.NoGeometry).setSubsetOfAttributes([field_name],
+                                                                                                   source.fields())
+        features = source.getFeatures(request, QgsProcessingFeatureSource.FlagSkipGeometryValidityChecks)
         count = source.featureCount()
 
-        data = []
-        data.append(self.tr('Analyzed field: {}').format(field_name))
+        data = [self.tr('Analyzed field: {}').format(field_name)]
         results = {}
 
         if field.isNumeric():
             d, results = self.calcNumericStats(features, feedback, field, count)
-            data.extend(d)
         elif field.type() in (QVariant.Date, QVariant.Time, QVariant.DateTime):
             d, results = self.calcDateTimeStats(features, feedback, field, count)
-            data.extend(d)
         else:
             d, results = self.calcStringStats(features, feedback, field, count)
-            data.extend(d)
+        data.extend(d)
 
         if output_file:
             self.createHTML(output_file, data)
@@ -185,23 +192,24 @@ class BasicStatisticsForField(QgisAlgorithm):
                    self.THIRDQUARTILE: stat.thirdQuartile(),
                    self.IQR: stat.interQuartileRange()}
 
-        data = []
-        data.append(self.tr('Count: {}').format(stat.count()))
-        data.append(self.tr('Unique values: {}').format(stat.variety()))
-        data.append(self.tr('NULL (missing) values: {}').format(stat.countMissing()))
-        data.append(self.tr('Minimum value: {}').format(stat.min()))
-        data.append(self.tr('Maximum value: {}').format(stat.max()))
-        data.append(self.tr('Range: {}').format(stat.range()))
-        data.append(self.tr('Sum: {}').format(stat.sum()))
-        data.append(self.tr('Mean value: {}').format(stat.mean()))
-        data.append(self.tr('Median value: {}').format(stat.median()))
-        data.append(self.tr('Standard deviation: {}').format(stat.stDev()))
-        data.append(self.tr('Coefficient of Variation: {}').format(cv))
-        data.append(self.tr('Minority (rarest occurring value): {}').format(stat.minority()))
-        data.append(self.tr('Majority (most frequently occurring value): {}').format(stat.majority()))
-        data.append(self.tr('First quartile: {}').format(stat.firstQuartile()))
-        data.append(self.tr('Third quartile: {}').format(stat.thirdQuartile()))
-        data.append(self.tr('Interquartile Range (IQR): {}').format(stat.interQuartileRange()))
+        data = [
+            self.tr('Count: {}').format(stat.count()),
+            self.tr('Unique values: {}').format(stat.variety()),
+            self.tr('NULL (missing) values: {}').format(stat.countMissing()),
+            self.tr('Minimum value: {}').format(stat.min()),
+            self.tr('Maximum value: {}').format(stat.max()),
+            self.tr('Range: {}').format(stat.range()),
+            self.tr('Sum: {}').format(stat.sum()),
+            self.tr('Mean value: {}').format(stat.mean()),
+            self.tr('Median value: {}').format(stat.median()),
+            self.tr('Standard deviation: {}').format(stat.stDev()),
+            self.tr('Coefficient of Variation: {}').format(cv),
+            self.tr('Minority (rarest occurring value): {}').format(stat.minority()),
+            self.tr('Majority (most frequently occurring value): {}').format(stat.majority()),
+            self.tr('First quartile: {}').format(stat.firstQuartile()),
+            self.tr('Third quartile: {}').format(stat.thirdQuartile()),
+            self.tr('Interquartile Range (IQR): {}').format(stat.interQuartileRange())
+        ]
         return data, results
 
     def calcStringStats(self, features, feedback, field, count):
@@ -224,15 +232,16 @@ class BasicStatisticsForField(QgisAlgorithm):
                    self.MAX_LENGTH: stat.maxLength(),
                    self.MEAN_LENGTH: stat.meanLength()}
 
-        data = []
-        data.append(self.tr('Count: {}').format(count))
-        data.append(self.tr('Unique values: {}').format(stat.countDistinct()))
-        data.append(self.tr('NULL (missing) values: {}').format(stat.countMissing()))
-        data.append(self.tr('Minimum value: {}').format(stat.min()))
-        data.append(self.tr('Maximum value: {}').format(stat.max()))
-        data.append(self.tr('Minimum length: {}').format(stat.minLength()))
-        data.append(self.tr('Maximum length: {}').format(stat.maxLength()))
-        data.append(self.tr('Mean length: {}').format(stat.meanLength()))
+        data = [
+            self.tr('Count: {}').format(count),
+            self.tr('Unique values: {}').format(stat.countDistinct()),
+            self.tr('NULL (missing) values: {}').format(stat.countMissing()),
+            self.tr('Minimum value: {}').format(stat.min()),
+            self.tr('Maximum value: {}').format(stat.max()),
+            self.tr('Minimum length: {}').format(stat.minLength()),
+            self.tr('Maximum length: {}').format(stat.maxLength()),
+            self.tr('Mean length: {}').format(stat.meanLength())
+        ]
 
         return data, results
 
@@ -253,12 +262,13 @@ class BasicStatisticsForField(QgisAlgorithm):
                    self.MIN: stat.statistic(QgsDateTimeStatisticalSummary.Min),
                    self.MAX: stat.statistic(QgsDateTimeStatisticalSummary.Max)}
 
-        data = []
-        data.append(self.tr('Count: {}').format(count))
-        data.append(self.tr('Unique values: {}').format(stat.countDistinct()))
-        data.append(self.tr('NULL (missing) values: {}').format(stat.countMissing()))
-        data.append(self.tr('Minimum value: {}').format(field.displayString(stat.statistic(QgsDateTimeStatisticalSummary.Min))))
-        data.append(self.tr('Maximum value: {}').format(field.displayString(stat.statistic(QgsDateTimeStatisticalSummary.Max))))
+        data = [
+            self.tr('Count: {}').format(count),
+            self.tr('Unique values: {}').format(stat.countDistinct()),
+            self.tr('NULL (missing) values: {}').format(stat.countMissing()),
+            self.tr('Minimum value: {}').format(field.displayString(stat.statistic(QgsDateTimeStatisticalSummary.Min))),
+            self.tr('Maximum value: {}').format(field.displayString(stat.statistic(QgsDateTimeStatisticalSummary.Max)))
+        ]
 
         return data, results
 

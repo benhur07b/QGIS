@@ -16,7 +16,7 @@
 #ifndef QGSVARIABLEEDITORWIDGET_H
 #define QGSVARIABLEEDITORWIDGET_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QWidget>
 #include <QTreeWidget>
 #include <QItemDelegate>
@@ -33,7 +33,7 @@ class VariableEditorDelegate;
 /**
  * \ingroup gui
  * \class QgsVariableEditorWidget
- * A tree based widget for editing expression context scope variables. The widget allows editing
+ * \brief A tree based widget for editing expression context scope variables. The widget allows editing
  * variables from a QgsExpressionContextScope, and can optionally also show inherited
  * variables from a QgsExpressionContext.
  * \since QGIS 2.12
@@ -51,9 +51,9 @@ class GUI_EXPORT QgsVariableEditorWidget : public QWidget
      * Constructor for QgsVariableEditorWidget.
      * \param parent parent widget
      */
-    QgsVariableEditorWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsVariableEditorWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    ~QgsVariableEditorWidget();
+    ~QgsVariableEditorWidget() override;
 
     /**
      * Overwrites the QgsExpressionContext for the widget. Setting a context
@@ -82,7 +82,7 @@ class GUI_EXPORT QgsVariableEditorWidget : public QWidget
 
     /**
      * Returns the current editable scope for the widget.
-     * \returns editable scope, or 0 if no editable scope is set
+     * \returns editable scope, or NULLPTR if no editable scope is set
      * \see setEditableScopeIndex()
      */
     QgsExpressionContextScope *editableScope() const;
@@ -167,7 +167,7 @@ class QgsVariableEditorTree : public QTreeWidget
 
   public:
 
-    enum VaribleRoles
+    enum VariableRoles
     {
       ContextIndex = Qt::UserRole,
       RowBaseColor

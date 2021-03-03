@@ -16,15 +16,15 @@
 #ifndef QGSGENERICFEATURESELECTIONMANAGER_H
 #define QGSGENERICFEATURESELECTIONMANAGER_H
 
-#include "qgsfeature.h"
 #include "qgsifeatureselectionmanager.h"
 #include "qgis_gui.h"
+#include "qgsfeatureid.h"
 
 SIP_NO_FILE
 
 /**
  * \ingroup gui
- * This selection manager synchronizes a local set of selected features with an attribute table.
+ * \brief This selection manager synchronizes a local set of selected features with an attribute table.
  * If you want to synchronize the attribute table selection with the map canvas selection, you
  * should use QgsVectorLayerSelectionManager instead.
  * \note not available in Python bindings
@@ -38,11 +38,11 @@ class GUI_EXPORT QgsGenericFeatureSelectionManager : public QgsIFeatureSelection
     QgsGenericFeatureSelectionManager( const QgsFeatureIds &initialSelection, QObject *parent = nullptr );
 
     // QgsIFeatureSelection interface
-    virtual int selectedFeatureCount() override;
-    virtual void select( const QgsFeatureIds &ids ) override;
-    virtual void deselect( const QgsFeatureIds &ids ) override;
-    virtual void setSelectedFeatures( const QgsFeatureIds &ids ) override;
-    virtual const QgsFeatureIds &selectedFeatureIds() const override;
+    int selectedFeatureCount() override;
+    void select( const QgsFeatureIds &ids ) override;
+    void deselect( const QgsFeatureIds &ids ) override;
+    void setSelectedFeatures( const QgsFeatureIds &ids ) override;
+    const QgsFeatureIds &selectedFeatureIds() const override;
 
   private:
     QgsFeatureIds mSelectedFeatures;

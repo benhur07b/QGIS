@@ -19,7 +19,7 @@
 #define QGSUNITSELECTIONWIDGET_H
 
 #include <QWidget>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QDialog>
 #include "qgspanelwidget.h"
 #include "qgssymbol.h"
@@ -32,12 +32,12 @@ class QgsMapCanvas;
 /**
  * \class QgsMapUnitScaleWidget
  * \ingroup gui
- * A widget which allows the user to choose the minimum and maximum scale of an object in map units
+ * \brief A widget which allows the user to choose the minimum and maximum scale of an object in map units
  * and millimeters. This widget is designed to allow users to edit the properties of a
  * QgsMapUnitScale object.
- * \since QGIS 3.0
  * \see QgsMapUnitScaleDialog
  * \see QgsUnitSelectionWidget
+ * \since QGIS 3.0
 */
 class GUI_EXPORT QgsMapUnitScaleWidget : public QgsPanelWidget, private Ui::QgsMapUnitScaleWidgetBase
 {
@@ -50,7 +50,7 @@ class GUI_EXPORT QgsMapUnitScaleWidget : public QgsPanelWidget, private Ui::QgsM
      * Constructor for QgsMapUnitScaleWidget.
      * \param parent parent widget
      */
-    QgsMapUnitScaleWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsMapUnitScaleWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Returns a QgsMapUnitScale representing the settings shown in the
@@ -98,7 +98,7 @@ class GUI_EXPORT QgsMapUnitScaleWidget : public QgsPanelWidget, private Ui::QgsM
 /**
  * \class QgsMapUnitScaleDialog
  * \ingroup gui
- * A dialog which allows the user to choose the minimum and maximum scale of an object in map units
+ * \brief A dialog which allows the user to choose the minimum and maximum scale of an object in map units
  * and millimeters. This dialog is designed to allow users to edit the properties of a
  * QgsMapUnitScale object.
  * \see QgsMapUnitScaleWidget
@@ -140,6 +140,11 @@ class GUI_EXPORT QgsMapUnitScaleDialog : public QDialog
      */
     void setMapCanvas( QgsMapCanvas *canvas );
 
+  private slots:
+
+    void showHelp();
+
+
   private:
 
     QgsMapUnitScaleWidget *mWidget = nullptr;
@@ -149,7 +154,7 @@ class GUI_EXPORT QgsMapUnitScaleDialog : public QDialog
 /**
  * \class QgsUnitSelectionWidget
  * \ingroup gui
- * A widget displaying a combobox allowing the user to choose between various display units,
+ * \brief A widget displaying a combobox allowing the user to choose between various display units,
  * such as millimeters or map unit. If the user chooses map units, a button appears allowing
  * adjustment of minimum and maximum scaling.
  * \see QgsMapUnitScaleWidget
@@ -165,7 +170,7 @@ class GUI_EXPORT QgsUnitSelectionWidget : public QWidget, private Ui::QgsUnitSel
      * Constructor for QgsUnitSelectionWidget.
      * \param parent parent widget
      */
-    QgsUnitSelectionWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsUnitSelectionWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Sets the units which the user can choose from in the combobox.
@@ -181,7 +186,7 @@ class GUI_EXPORT QgsUnitSelectionWidget : public QWidget, private Ui::QgsUnitSel
      */
     void setUnits( const QgsUnitTypes::RenderUnitList &units );
 
-    //! Get the selected unit index
+    //! Gets the selected unit index
     int getUnit() const { return mUnitCombo->currentIndex(); }
 
     /**

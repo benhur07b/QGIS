@@ -29,8 +29,6 @@ from functools import partial
 __author__ = 'Alessandro Pasotti'
 __date__ = '18/09/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 from shutil import rmtree
 
@@ -56,7 +54,6 @@ try:
     QGIS_SERVER_ENDPOINT_PORT = os.environ['QGIS_SERVER_ENDPOINT_PORT']
 except:
     QGIS_SERVER_ENDPOINT_PORT = '0'  # Auto
-
 
 QGIS_AUTH_DB_DIR_PATH = tempfile.mkdtemp()
 
@@ -107,7 +104,7 @@ class TestAuthManager(unittest.TestCase):
                                       env=os.environ, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         line = cls.server.stdout.readline()
-        cls.port = int(re.findall(b':(\d+)', line)[0])
+        cls.port = int(re.findall(br':(\d+)', line)[0])
         assert cls.port != 0
         # Wait for the server process to start
         assert waitServer('%s://%s:%s' % (cls.protocol, cls.hostname, cls.port)), "Server is not responding! %s://%s:%s" % (cls.protocol, cls.hostname, cls.port)
@@ -162,13 +159,26 @@ class TestAuthManager(unittest.TestCase):
             'layers': urllib.parse.quote(layers.replace('_', ' ')),
             'styles': '',
             'version': 'auto',
-            #'sql': '',
+            # 'sql': '',
         }
         if authcfg is not None:
             parms.update({'authcfg': authcfg})
         uri = '&'.join([("%s=%s" % (k, v.replace('=', '%3D'))) for k, v in list(parms.items())])
         wms_layer = QgsRasterLayer(uri, layer_name, 'wms')
         return wms_layer
+
+    @classmethod
+    def _getGeoJsonLayer(cls, type_name, layer_name=None, authcfg=None):
+        """
+        OGR layer factory
+        """
+        if layer_name is None:
+            layer_name = 'geojson_' + type_name
+        uri = '%s://%s:%s/?MAP=%s&SERVICE=WFS&REQUEST=GetFeature&TYPENAME=%s&VERSION=2.0.0&OUTPUTFORMAT=geojson' % (cls.protocol, cls.hostname, cls.port, cls.project_path, urllib.parse.quote(type_name))
+        if authcfg is not None:
+            uri += " authcfg='%s'" % authcfg
+        geojson_layer = QgsVectorLayer(uri, layer_name, 'ogr')
+        return geojson_layer
 
     def testValidAuthAccess(self):
         """
@@ -178,6 +188,8 @@ class TestAuthManager(unittest.TestCase):
         self.assertTrue(wfs_layer.isValid())
         wms_layer = self._getWMSLayer('testlayer_èé', authcfg=self.auth_config.id())
         self.assertTrue(wms_layer.isValid())
+        geojson_layer = self._getGeoJsonLayer('testlayer_èé', authcfg=self.auth_config.id())
+        self.assertTrue(geojson_layer.isValid())
 
     def testInvalidAuthAccess(self):
         """
@@ -187,6 +199,8 @@ class TestAuthManager(unittest.TestCase):
         self.assertFalse(wfs_layer.isValid())
         wms_layer = self._getWMSLayer('testlayer_èé')
         self.assertFalse(wms_layer.isValid())
+        geojson_layer = self._getGeoJsonLayer('testlayer_èé')
+        self.assertFalse(geojson_layer.isValid())
 
     def testInvalidAuthFileDownload(self):
         """
@@ -259,12 +273,12 @@ class TestAuthManager(unittest.TestCase):
 
         # Check the we've got a likely PNG image
         self.assertTrue(self.completed_was_called)
-        self.assertTrue(os.path.getsize(destination) > 700000, "Image size: %s" % os.path.getsize(destination))  # > 1MB
+        self.assertTrue(os.path.getsize(destination) > 2000, "Image size: %s" % os.path.getsize(destination))  # > 1MB
         with open(destination, 'rb') as f:
             self.assertTrue(b'PNG' in f.read())  # is a PNG
 
     def _set_slot(self, *args, **kwargs):
-        #print('_set_slot(%s) called' % args[0])
+        # print('_set_slot(%s) called' % args[0])
         setattr(self, args[0] + '_was_called', True)
         setattr(self, args[0] + '_args', args)
 

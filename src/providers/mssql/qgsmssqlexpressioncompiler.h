@@ -24,12 +24,16 @@ class QgsMssqlExpressionCompiler : public QgsSqlExpressionCompiler
 {
   public:
 
-    explicit QgsMssqlExpressionCompiler( QgsMssqlFeatureSource *source );
+    explicit QgsMssqlExpressionCompiler( QgsMssqlFeatureSource *source, bool ignoreStaticNodes = false );
 
   protected:
-    virtual Result compileNode( const QgsExpressionNode *node, QString &result ) override;
-    virtual QString quotedValue( const QVariant &value, bool &ok ) override;
-
+    Result compileNode( const QgsExpressionNode *node, QString &result ) override;
+    QString quotedValue( const QVariant &value, bool &ok ) override;
+    QString quotedIdentifier( const QString &identifier ) override;
+    QString castToReal( const QString &value ) const override;
+    QString castToInt( const QString &value ) const override;
+    QString sqlFunctionFromFunctionName( const QString &fnName ) const override;
+    QStringList sqlArgumentsFromFunctionName( const QString &fnName, const QStringList &fnArgs ) const override;
 };
 
 #endif // QGSMSSQLEXPRESSIONCOMPILER_H

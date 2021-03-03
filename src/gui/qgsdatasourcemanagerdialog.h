@@ -32,16 +32,17 @@ class QgsBrowserDockWidget;
 class QgsRasterLayer;
 class QgsMapCanvas;
 class QgsAbstractDataSourceWidget;
-class QgsBrowserModel;
+class QgsBrowserGuiModel;
+class QgsMessageBar;
 
 /**
  * \ingroup gui
- * The QgsDataSourceManagerDialog class embeds the browser panel and all
+ * \brief The QgsDataSourceManagerDialog class embeds the browser panel and all
  * the provider dialogs.
  * The dialog does not handle layer addition directly but emits signals that
  * need to be forwarded to the QGIS application to be handled.
- * \since QGIS 3.0
  * \note not available in Python bindings
+ * \since QGIS 3.0
  */
 class GUI_EXPORT QgsDataSourceManagerDialog : public QgsOptionsDialogBase, private Ui::QgsDataSourceManagerDialog
 {
@@ -56,26 +57,34 @@ class GUI_EXPORT QgsDataSourceManagerDialog : public QgsOptionsDialogBase, priva
       * \param canvas a pointer to the map canvas
       * \param fl window flags
       */
-    explicit QgsDataSourceManagerDialog( QgsBrowserModel *browserModel, QWidget *parent = nullptr, QgsMapCanvas *canvas = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
-    ~QgsDataSourceManagerDialog();
+    explicit QgsDataSourceManagerDialog( QgsBrowserGuiModel *browserModel, QWidget *parent = nullptr, QgsMapCanvas *canvas = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
+    ~QgsDataSourceManagerDialog() override;
 
     /**
-     * @brief openPage open a given page in the dialog
+     * Open a given page in the dialog
      * \param pageName the page name, usually the provider name or "browser" (for the browser panel)
      *        or "ogr" (vector layers) or "raster" (raster layers)
      */
     void openPage( const QString &pageName );
+
+    //! Returns the dialog's message bar
+    QgsMessageBar *messageBar() const;
 
   public slots:
 
     //! Sync current page with the leftbar list
     void setCurrentPage( int index );
 
-    /**
-     * A raster layer was added: for signal forwarding to QgisApp
-     * TODO: use this with an internal source select dialog instead of forwarding the whole raster selection to app
-     */
+    // TODO: use this with an internal source select dialog instead of forwarding the whole raster selection to app
+
+    //! A raster layer was added: for signal forwarding to QgisApp
     void rasterLayerAdded( QString const &uri, QString const &baseName, QString const &providerKey );
+
+    /**
+     * One or more raster layer were added: for signal forwarding to QgisApp
+     * \since QGIS 3.20
+     */
+    void rasterLayersAdded( const QStringList &layersList );
     //! A vector layer was added: for signal forwarding to QgisApp
     void vectorLayerAdded( const QString &vectorLayerPath, const QString &baseName, const QString &providerKey );
     //! One or more vector layer were added: for signal forwarding to QgisApp
@@ -85,28 +94,62 @@ class GUI_EXPORT QgsDataSourceManagerDialog : public QgsOptionsDialogBase, priva
     //! Refresh the browser view
     void refresh();
 
+    /**
+     * Resets the interface of the datasource manager after reopening the dialog.
+     *
+     * Will clear the selection of embedded all source selection widgets.
+     *
+     * \since QGIS 3.10
+     */
+    void reset();
+
   protected:
-    virtual void showEvent( QShowEvent *event ) override;
+    void showEvent( QShowEvent *event ) override;
 
   signals:
+
+    /**
+     * Emitted when a one or more layer were selected for addition: for signal forwarding to QgisApp
+     * \since QGIS 3.20
+     */
+    void addRasterLayers( const QStringList &layersList );
     //! Emitted when a raster layer was selected for addition: for signal forwarding to QgisApp
     void addRasterLayer( const QString &uri, const QString &baseName, const QString &providerKey );
     //! Emitted when the user wants to select a raster layer: for signal forwarding to QgisApp
     void addRasterLayer();
+
     //! Emitted when a vector layer was selected for addition: for signal forwarding to QgisApp
     void addVectorLayer( const QString &vectorLayerPath, const QString &baseName, const QString &providerKey );
+
+    /**
+     * Emitted when a mesh layer was selected for addition: for signal forwarding to QgisApp
+     * \since QGIS 3.4
+     */
+    void addMeshLayer( const QString &uri, const QString &baseName, const QString &providerKey );
+
+    /**
+     * Emitted when a vector tile layer was selected for addition: for signal forwarding to QgisApp
+     * \since QGIS 3.14
+     */
+    void addVectorTileLayer( const QString &uri, const QString &baseName );
+
+    /**
+     * Emitted when a point cloud layer was selected for addition: for signal forwarding to QgisApp
+     * \since QGIS 3.18
+     */
+    void addPointCloudLayer( const QString &pointCloudLayerPath, const QString &baseName, const QString &providerKey );
+
     //! Replace the selected layer by a vector layer defined by uri, layer name, data source uri
     void replaceSelectedVectorLayer( const QString &oldId, const QString &uri, const QString &layerName, const QString &provider );
     //! Emitted when a one or more layer were selected for addition: for signal forwarding to QgisApp
     void addVectorLayers( const QStringList &layerQStringList, const QString &enc, const QString &dataSourceType );
-    //! Emitted when the dialog is busy: for signal forwarding to QgisApp
-    void showProgress( int progress, int totalSteps );
+
     //! Emitted when a status message needs to be shown: for signal forwarding to QgisApp
     void showStatusMessage( const QString &message );
     //! Emitted when a DB layer was selected for addition: for signal forwarding to QgisApp
     void addDatabaseLayers( const QStringList &layerPathList, const QString &providerKey );
     //! Emitted when a file needs to be opened
-    void openFile( const QString & );
+    void openFile( const QString &fileName, const QString &fileTypeHint = QString() );
     //! Emitted when drop uri list needs to be handled from the browser
     void handleDropUriList( const QgsMimeDataUtils::UriList & );
     //! Update project home directory
@@ -134,7 +177,8 @@ class GUI_EXPORT QgsDataSourceManagerDialog : public QgsOptionsDialogBase, priva
     QStringList mPageNames;
     // Map canvas
     QgsMapCanvas *mMapCanvas = nullptr;
-
+    QgsMessageBar *mMessageBar = nullptr;
+    QgsBrowserGuiModel *mBrowserModel = nullptr;
 
 };
 

@@ -17,12 +17,12 @@
 #define QGSACTIONMENU_H
 
 #include <QMenu>
-#include "qgis.h"
-#include <QSignalMapper>
+#include "qgis_sip.h"
 
 #include "qgsfeature.h"
 #include "qgsaction.h"
 #include "qgis_gui.h"
+#include "qgsattributeform.h"
 
 class QgsMapLayer;
 class QgsMapLayerAction;
@@ -31,7 +31,7 @@ class QgsActionManager;
 
 /**
  * \ingroup gui
- * This class is a menu that is populated automatically with the actions defined for a given layer.
+ * \brief This class is a menu that is populated automatically with the actions defined for a given layer.
  */
 
 class GUI_EXPORT QgsActionMenu : public QMenu
@@ -71,7 +71,7 @@ class GUI_EXPORT QgsActionMenu : public QMenu
      * \param parent   The usual QWidget parent.
      * \param actionScope The action scope this menu will run in
      */
-    explicit QgsActionMenu( QgsVectorLayer *layer, const QgsFeature &feature, const QString &actionScope, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsActionMenu( QgsVectorLayer *layer, const QgsFeature &feature, const QString &actionScope, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Constructs a new QgsActionMenu
@@ -81,7 +81,7 @@ class GUI_EXPORT QgsActionMenu : public QMenu
      * \param parent   The usual QWidget parent.
      * \param actionScope The action scope this menu will run in
      */
-    explicit QgsActionMenu( QgsVectorLayer *layer, const QgsFeatureId fid, const QString &actionScope, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    explicit QgsActionMenu( QgsVectorLayer *layer, QgsFeatureId fid, const QString &actionScope, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Change the feature on which actions are performed
@@ -91,12 +91,41 @@ class GUI_EXPORT QgsActionMenu : public QMenu
      */
     void setFeature( const QgsFeature &feature );
 
+    /**
+     * Change the mode of the actions
+     *
+     * \param mode The mode of the attribute form
+     */
+    void setMode( QgsAttributeEditorContext::Mode mode );
+
+    /**
+     * Sets an expression context scope used to resolve underlying actions.
+     *
+     * \since QGIS 3.0
+     */
+    void setExpressionContextScope( const QgsExpressionContextScope &scope );
+
+    /**
+     * Returns an expression context scope used to resolve underlying actions.
+     *
+     * \since QGIS 3.0
+     */
+    QgsExpressionContextScope expressionContextScope() const;
+
+    /**
+     * Returns menu actions
+     *
+     * \since QGIS 3.12
+     */
+    QList<QgsAction> menuActions();
+
   signals:
     void reinit();
 
   private slots:
     void triggerAction();
     void reloadActions();
+    void layerWillBeDeleted();
 
   private:
     void init();
@@ -107,6 +136,8 @@ class GUI_EXPORT QgsActionMenu : public QMenu
     QgsFeature mFeature;
     QgsFeatureId mFeatureId;
     QString mActionScope;
+    QgsExpressionContextScope mExpressionContextScope;
+    QgsAttributeEditorContext::Mode mMode;
 };
 
 

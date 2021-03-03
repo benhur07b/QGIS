@@ -17,7 +17,7 @@
 #define QGSGRADIENTCOLORRAMPDIALOG_H
 
 #include <QDialog>
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "ui_qgsgradientcolorrampdialogbase.h"
 #include "qgshelp.h"
@@ -32,7 +32,7 @@ class QgsGradientPlotEventFilter;
 /**
  * \ingroup gui
  * \class QgsGradientColorRampDialog
- * A dialog which allows users to modify the properties of a QgsGradientColorRamp.
+ * \brief A dialog which allows users to modify the properties of a QgsGradientColorRamp.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsGradientColorRampDialog : public QDialog, private Ui::QgsGradientColorRampDialogBase
@@ -47,8 +47,8 @@ class GUI_EXPORT QgsGradientColorRampDialog : public QDialog, private Ui::QgsGra
      * \param ramp initial ramp to show in dialog
      * \param parent parent widget
      */
-    QgsGradientColorRampDialog( const QgsGradientColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = 0 );
-    ~QgsGradientColorRampDialog();
+    QgsGradientColorRampDialog( const QgsGradientColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = nullptr );
+    ~QgsGradientColorRampDialog() override;
 
     /**
      * Returns a color ramp representing the current settings from the dialog.
@@ -62,6 +62,12 @@ class GUI_EXPORT QgsGradientColorRampDialog : public QDialog, private Ui::QgsGra
      * \see ramp()
      */
     void setRamp( const QgsGradientColorRamp &ramp );
+
+    /**
+     * Returns a reference to the dialog's button box.
+     * \since QGIS 3.10
+     */
+    QDialogButtonBox *buttonBox() const;
 
   signals:
 
@@ -132,7 +138,7 @@ class GUI_EXPORT QgsGradientPlotEventFilter: public QObject
 
     QgsGradientPlotEventFilter( QwtPlot *plot );
 
-    virtual bool eventFilter( QObject *object, QEvent *event ) override;
+    bool eventFilter( QObject *object, QEvent *event ) override;
 
   signals:
 

@@ -17,7 +17,7 @@
 #define QGSGRAPHBUILDER_H
 
 #include "qgsgraphbuilderinterface.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #include "qgsspatialindex.h"
 #include "qgis_analysis.h"
@@ -32,7 +32,7 @@ class QgsGraph;
 * \brief This class used for making the QgsGraph object
 */
 
-class ANALYSIS_EXPORT QgsGraphBuilder : public QgsGraphBuilderInterface
+class ANALYSIS_EXPORT QgsGraphBuilder : public QgsGraphBuilderInterface SIP_NODEFAULTCTORS
 {
   public:
 
@@ -41,7 +41,7 @@ class ANALYSIS_EXPORT QgsGraphBuilder : public QgsGraphBuilderInterface
      */
     QgsGraphBuilder( const QgsCoordinateReferenceSystem &crs, bool otfEnabled = true, double topologyTolerance = 0.0, const QString &ellipsoidID = "WGS84" );
 
-    ~QgsGraphBuilder();
+    ~QgsGraphBuilder() override;
 
     /*
      * MANDATORY BUILDER PROPERTY DECLARATION
@@ -58,6 +58,9 @@ class ANALYSIS_EXPORT QgsGraphBuilder : public QgsGraphBuilderInterface
   private:
 
     QgsGraph *mGraph = nullptr;
+
+    QgsGraphBuilder( const QgsGraphBuilder & ) = delete;
+    QgsGraphBuilder &operator=( const QgsGraphBuilder & ) = delete;
 };
 
 // clazy:excludeall=qstring-allocations

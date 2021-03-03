@@ -17,7 +17,7 @@
 #define QGSRELATIONREFERENCEWIDGETWRAPPER_H
 
 #include "qgseditorwidgetwrapper.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 
 class QgsRelationReferenceWidget;
@@ -26,13 +26,13 @@ class QgsMessageBar;
 
 /**
  * \ingroup gui
- * Wraps a relation reference widget.
+ * \brief Wraps a relation reference widget.
  *
  * Options:
  * <ul>
- * <li><b>ShowForm</b> <i>If True, an embedded form with the referenced feature will be shown.</i></li>
+ * <li><b>ShowForm</b> <i>If TRUE, an embedded form with the referenced feature will be shown.</i></li>
  * <li><b>MapIdentification</b> <i>Will offer a map tool to pick a referenced feature on the map canvas. Only use for layers with geometry.</i></li>
- * <li><b>ReadOnly</b> <i>If True, will represent the referenced widget in a read-only line edit. Can speed up loading.</i></li>
+ * <li><b>ReadOnly</b> <i>If TRUE, will represent the referenced widget in a read-only line edit. Can speed up loading.</i></li>
  * <li><b>AllowNULL</b> <i>Will offer NULL as a value.</i></li>
  * <li><b>Relation</b> <i>The ID of the relation that will be used to define this widget.</i></li>
  * ReadOnly
@@ -44,35 +44,43 @@ class GUI_EXPORT QgsRelationReferenceWidgetWrapper : public QgsEditorWidgetWrapp
 {
     Q_OBJECT
   public:
+
+    //! Constructor for QgsRelationReferenceWidgetWrapper
     explicit QgsRelationReferenceWidgetWrapper( QgsVectorLayer *vl,
         int fieldIdx,
         QWidget *editor,
         QgsMapCanvas *canvas,
         QgsMessageBar *messageBar,
-        QWidget *parent SIP_TRANSFERTHIS = 0 );
+        QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
-    virtual QWidget *createWidget( QWidget *parent ) override;
-    virtual void initWidget( QWidget *editor ) override;
-    virtual QVariant value() const override;
+    QWidget *createWidget( QWidget *parent ) override;
+    void initWidget( QWidget *editor ) override;
+    QVariant value() const override;
     bool valid() const override;
     void showIndeterminateState() override;
+    QVariantList additionalFieldValues() const override;
+    QStringList additionalFields() const override;
 
   public slots:
-    virtual void setValue( const QVariant &value ) override;
-    virtual void setEnabled( bool enabled ) override;
+    void setEnabled( bool enabled ) override;
 
   private slots:
-    void foreignKeyChanged( QVariant value );
+    void foreignKeysChanged( const QVariantList &values );
 
   protected:
-
-    void updateConstraintWidgetStatus( ConstraintResult status ) override;
+    void updateConstraintWidgetStatus() override;
 
   private:
+    void updateValues( const QVariant &val, const QVariantList &additionalValues = QVariantList() ) override;
+
+    QString mExpression;
+
     QgsRelationReferenceWidget *mWidget = nullptr;
     QgsMapCanvas *mCanvas = nullptr;
     QgsMessageBar *mMessageBar = nullptr;
     bool mIndeterminateState;
+    int mBlockChanges = 0;
+
 };
 
 #endif // QGSRELATIONREFERENCEWIDGETWRAPPER_H

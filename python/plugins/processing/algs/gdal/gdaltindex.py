@@ -21,16 +21,13 @@ __author__ = 'Pedro Venancio'
 __date__ = 'February 2015'
 __copyright__ = '(C) 2015, Pedro Venancio'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
 from qgis.core import (QgsMapLayer,
                        QgsProcessing,
+                       QgsProcessingAlgorithm,
                        QgsProcessingException,
                        QgsProcessingParameterCrs,
                        QgsProcessingParameterEnum,
@@ -46,7 +43,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class gdaltindex(GdalAlgorithm):
-
     LAYERS = 'LAYERS'
     PATH_FIELD_NAME = 'PATH_FIELD_NAME'
     ABSOLUTE_PATH = 'ABSOLUTE_PATH'
@@ -106,53 +102,60 @@ class gdaltindex(GdalAlgorithm):
         return 'tileindex'
 
     def displayName(self):
-        return self.tr('Tile Index')
+        return self.tr('Tile index')
 
     def group(self):
         return self.tr('Raster miscellaneous')
 
+    def groupId(self):
+        return 'rastermiscellaneous'
+
     def icon(self):
         return QIcon(os.path.join(pluginPath, 'images', 'gdaltools', 'tiles.png'))
 
-    def getConsoleCommands(self, parameters, context, feedback):
+    def commandName(self):
+        return 'gdaltindex'
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         input_layers = self.parameterAsLayerList(parameters, self.LAYERS, context)
         crs_field = self.parameterAsString(parameters, self.CRS_FIELD_NAME, context)
         crs_format = self.parameterAsEnum(parameters, self.CRS_FORMAT, context)
         target_crs = self.parameterAsCrs(parameters, self.TARGET_CRS, context)
 
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
         output, outFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
 
-        layers = []
-        for layer in input_layers:
-            if layer.type() != QgsMapLayer.RasterLayer:
-                raise QgsProcessingException(
-                    self.tr('All layers must be raster layers!'))
-            layers.append(layer.source())
+        arguments = [
+            '-tileindex',
+            self.parameterAsString(parameters, self.PATH_FIELD_NAME, context),
+        ]
 
-        arguments = []
-        arguments.append('-tileindex')
-        arguments.append(self.parameterAsString(parameters, self.PATH_FIELD_NAME, context))
-
-        if self.parameterAsBool(parameters, self.ABSOLUTE_PATH, context):
+        if self.parameterAsBoolean(parameters, self.ABSOLUTE_PATH, context):
             arguments.append('-write_absolute_path')
 
-        if self.parameterAsBool(parameters, self.PROJ_DIFFERENCE, context):
+        if self.parameterAsBoolean(parameters, self.PROJ_DIFFERENCE, context):
             arguments.append('-skip_different_projection')
 
         if crs_field:
             arguments.append('-src_srs_name {}'.format(crs_field))
 
         if crs_format:
-            arguments.append('-src_srs_format {}'.format(self.modes[crs_format][1]))
+            arguments.append('-src_srs_format {}'.format(self.formats[crs_format][1]))
 
         if target_crs.isValid():
-            arguments.append('-t_srs {}'.format(target_crs.authid()))
+            arguments.append('-t_srs')
+            arguments.append(GdalUtils.gdal_crs_string(target_crs))
 
         if outFormat:
             arguments.append('-f {}'.format(outFormat))
 
         arguments.append(output)
-        arguments.append(' '.join(layers))
 
-        return ['gdaltindex', GdalUtils.escapeAndJoin(arguments)]
+        # Always write input files to a text file in case there are many of them and the
+        # length of the command will be longer then allowed in command prompt
+        list_file = GdalUtils.writeLayerParameterToTextFile(filename='tile_index_files.txt', alg=self, parameters=parameters, parameter_name=self.LAYERS, context=context, quote=True, executing=executing)
+        arguments.append('--optfile')
+        arguments.append(list_file)
+
+        return [self.commandName(), GdalUtils.escapeAndJoin(arguments)]

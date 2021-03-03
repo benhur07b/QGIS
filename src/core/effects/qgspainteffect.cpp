@@ -19,6 +19,7 @@
 #include "qgsimageoperation.h"
 #include "qgslogger.h"
 #include "qgsrendercontext.h"
+#include "qgssymbollayerutils.h"
 #include <QPicture>
 
 Q_GUI_EXPORT extern int qt_defaultDpiX();
@@ -57,19 +58,9 @@ bool QgsPaintEffect::saveProperties( QDomDocument &doc, QDomElement &element ) c
   {
     return false;
   }
-
   QDomElement effectElement = doc.createElement( QStringLiteral( "effect" ) );
   effectElement.setAttribute( QStringLiteral( "type" ), type() );
-
-  QgsStringMap props = properties();
-  for ( QgsStringMap::iterator it = props.begin(); it != props.end(); ++it )
-  {
-    QDomElement propEl = doc.createElement( QStringLiteral( "prop" ) );
-    propEl.setAttribute( QStringLiteral( "k" ), it.key() );
-    propEl.setAttribute( QStringLiteral( "v" ), it.value() );
-    effectElement.appendChild( propEl );
-  }
-
+  QgsSymbolLayerUtils::saveProperties( properties(), doc, effectElement );
   element.appendChild( effectElement );
   return true;
 }
@@ -81,25 +72,7 @@ bool QgsPaintEffect::readProperties( const QDomElement &element )
     return false;
   }
 
-  //default implementation converts to a string map
-  QgsStringMap props;
-
-  QDomElement e = element.firstChildElement();
-  while ( !e.isNull() )
-  {
-    if ( e.tagName() != QLatin1String( "prop" ) )
-    {
-      QgsDebugMsg( "unknown tag " + e.tagName() );
-    }
-    else
-    {
-      QString propKey = e.attribute( QStringLiteral( "k" ) );
-      QString propValue = e.attribute( QStringLiteral( "v" ) );
-      props[propKey] = propValue;
-    }
-    e = e.nextSiblingElement();
-  }
-
+  QVariantMap props = QgsSymbolLayerUtils::parseProperties( element );
   readProperties( props );
   return true;
 }
@@ -159,10 +132,9 @@ void QgsPaintEffect::drawSource( QPainter &painter )
 {
   if ( requiresQPainterDpiFix )
   {
-    painter.save();
+    QgsScopedQPainterState painterState( &painter );
     fixQPictureDpi( &painter );
     painter.drawPicture( 0, 0, *mPicture );
-    painter.restore();
   }
   else
   {
@@ -202,7 +174,7 @@ QPointF QgsPaintEffect::imageOffset( const QgsRenderContext &context ) const
 
 QRectF QgsPaintEffect::boundingRect( const QRectF &rect, const QgsRenderContext &context ) const
 {
-  Q_UNUSED( context );
+  Q_UNUSED( context )
   return rect;
 }
 
@@ -226,12 +198,7 @@ QRectF QgsPaintEffect::imageBoundingRect( const QgsRenderContext &context ) cons
 // QgsDrawSourceEffect
 //
 
-QgsDrawSourceEffect::QgsDrawSourceEffect()
-  : QgsPaintEffect()
-{
-}
-
-QgsPaintEffect *QgsDrawSourceEffect::create( const QgsStringMap &map )
+QgsPaintEffect *QgsDrawSourceEffect::create( const QVariantMap &map )
 {
   QgsDrawSourceEffect *effect = new QgsDrawSourceEffect();
   effect->readProperties( map );
@@ -255,10 +222,9 @@ void QgsDrawSourceEffect::draw( QgsRenderContext &context )
     //rasterize source and apply modifications
     QImage image = sourceAsImage( context )->copy();
     QgsImageOperation::multiplyOpacity( image, mOpacity );
-    painter->save();
+    QgsScopedQPainterState painterState( painter );
     painter->setCompositionMode( mBlendMode );
     painter->drawImage( imageOffset( context ), image );
-    painter->restore();
   }
 }
 
@@ -267,9 +233,9 @@ QgsDrawSourceEffect *QgsDrawSourceEffect::clone() const
   return new QgsDrawSourceEffect( *this );
 }
 
-QgsStringMap QgsDrawSourceEffect::properties() const
+QVariantMap QgsDrawSourceEffect::properties() const
 {
-  QgsStringMap props;
+  QVariantMap props;
   props.insert( QStringLiteral( "enabled" ), mEnabled ? "1" : "0" );
   props.insert( QStringLiteral( "draw_mode" ), QString::number( int( mDrawMode ) ) );
   props.insert( QStringLiteral( "blend_mode" ), QString::number( int( mBlendMode ) ) );
@@ -277,7 +243,7 @@ QgsStringMap QgsDrawSourceEffect::properties() const
   return props;
 }
 
-void QgsDrawSourceEffect::readProperties( const QgsStringMap &props )
+void QgsDrawSourceEffect::readProperties( const QVariantMap &props )
 {
   bool ok;
   QPainter::CompositionMode mode = static_cast< QPainter::CompositionMode >( props.value( QStringLiteral( "blend_mode" ) ).toInt( &ok ) );

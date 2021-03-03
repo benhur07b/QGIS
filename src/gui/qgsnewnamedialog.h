@@ -25,7 +25,7 @@ class QLineEdit;
 
 /**
  * \ingroup gui
- * New name, for example new layer name dialog. If existing names are provided,
+ * \brief New name, for example new layer name dialog. If existing names are provided,
  * the dialog warns users if an entered name already exists.
  * \since QGIS 2.10
  */
@@ -68,39 +68,55 @@ class GUI_EXPORT QgsNewNameDialog : public QgsDialog
     QString hintString() const;
 
     /**
-     * Sets whether users are permitted to overwrite existing names. If true, then
-     * the dialog will reflect that the new name will overwrite an existing name. If false,
+     * Sets whether users are permitted to overwrite existing names. If TRUE, then
+     * the dialog will reflect that the new name will overwrite an existing name. If FALSE,
      * then the dialog will not accept names which already exist.
-     * \since QGIS 2.12
      * \see overwriteEnabled()
+     * \since QGIS 2.12
      */
     void setOverwriteEnabled( bool enabled );
 
     /**
      * Returns whether users are permitted to overwrite existing names.
-     * \since QGIS 2.12
      * \see setOverwriteEnabled()
+     * \since QGIS 2.12
      */
     bool overwriteEnabled() const { return mOverwriteEnabled; }
 
     /**
+     * Sets whether users are permitted to leave the widget empty.
+     * If TRUE, the dialog will accept an empty name value.
+     * \see allowEmptyName()
+     * \since QGIS 3.14
+     */
+    void setAllowEmptyName( bool allowed );
+
+    /**
+     * Returns TRUE if the widget can be left empty (no name filled).
+     * \see setAllowEmptyName()
+     * \since QGIS 3.14
+     */
+    bool allowEmptyName() const { return mAllowEmptyName; }
+
+    /**
      * Sets the string used for warning users if a conflicting name exists.
      * \param string warning string. If empty a default warning string will be used.
-     * \since QGIS 2.12
      * \see conflictingNameWarning()
+     * \since QGIS 2.12
      */
     void setConflictingNameWarning( const QString &string );
 
     /**
      * Returns the string used for warning users if a conflicting name exists.
-     * \since QGIS 2.12
      * \see setConflictingNameWarning()
+     * \since QGIS 2.12
      */
     QString conflictingNameWarning() const { return mConflictingNameWarning; }
 
     /**
      * Name entered by user.
      * \returns new name
+     * \see newNameChanged()
      */
     QString name() const;
 
@@ -110,11 +126,22 @@ class GUI_EXPORT QgsNewNameDialog : public QgsDialog
      * \param extensions base name extensions
      * \param existing existing names
      * \param cs case sensitivity for new name to existing names comparison
-     * \returns true if name exists
+     * \returns TRUE if name exists
      */
     static bool exists( const QString &name, const QStringList &extensions,
                         const QStringList &existing, Qt::CaseSensitivity cs = Qt::CaseSensitive );
+  signals:
+
+    // TODO QGIS 4.0 - rename to nameChanged
+
+    /**
+     * Emitted when the name is changed in the dialog.
+     * \since QGIS 3.2
+     */
+    void newNameChanged();
+
   public slots:
+    // TODO QGIS 4.0 - rename to onNameChanged
     void nameChanged();
 
   protected:
@@ -129,6 +156,7 @@ class GUI_EXPORT QgsNewNameDialog : public QgsDialog
     QString mOkString;
     QRegExp mRegexp;
     bool mOverwriteEnabled = true;
+    bool mAllowEmptyName = false;
     QString mConflictingNameWarning;
 
     QString highlightText( const QString &text );

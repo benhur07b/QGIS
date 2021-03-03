@@ -21,7 +21,7 @@
 
 /**
  * \ingroup gui
- * This can be used like a regular QTableWidgetItem with the difference that a
+ * \brief This can be used like a regular QTableWidgetItem with the difference that a
  * specific role can be set to sort.
  */
 class GUI_EXPORT QgsTableWidgetItem : public QTableWidgetItem
@@ -46,7 +46,7 @@ class GUI_EXPORT QgsTableWidgetItem : public QTableWidgetItem
     void setSortRole( int role );
 
     /**
-     * Get the role by which the items should be sorted.
+     * Gets the role by which the items should be sorted.
      * By default this will be Qt::DisplayRole
      */
     int sortRole() const;

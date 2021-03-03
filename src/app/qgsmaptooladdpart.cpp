@@ -24,8 +24,8 @@
 #include "qgsvectorlayer.h"
 #include "qgslogger.h"
 #include "qgisapp.h"
+#include "qgsmapmouseevent.h"
 
-#include <QMouseEvent>
 
 QgsMapToolAddPart::QgsMapToolAddPart( QgsMapCanvas *canvas )
   : QgsMapToolCapture( canvas, QgisApp::instance()->cadDockWidget(), CaptureNone )
@@ -33,6 +33,11 @@ QgsMapToolAddPart::QgsMapToolAddPart( QgsMapCanvas *canvas )
   mToolName = tr( "Add part" );
   connect( QgisApp::instance(), &QgisApp::newProject, this, &QgsMapToolAddPart::stopCapturing );
   connect( QgisApp::instance(), &QgisApp::projectRead, this, &QgsMapToolAddPart::stopCapturing );
+}
+
+QgsMapToolCapture::Capabilities QgsMapToolAddPart::capabilities() const
+{
+  return QgsMapToolCapture::SupportsCurves;
 }
 
 void QgsMapToolAddPart::canvasReleaseEvent( QgsMapMouseEvent *e )
@@ -64,9 +69,16 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
   }
 
   bool isGeometryEmpty = false;
-  QgsFeatureList selectedFeatures = vlayer->selectedFeatures();
-  if ( !selectedFeatures.isEmpty() && selectedFeatures.at( 0 ).geometry().isNull() )
-    isGeometryEmpty = true;
+  if ( vlayer->selectedFeatureCount() > 0 )
+  {
+    // be efficient here - only grab the first selected feature if there's a selection, don't
+    // fetch all the other features which we don't require.
+    QgsFeatureIterator selectedFeatures = vlayer->getSelectedFeatures();
+    QgsFeature firstSelectedFeature;
+    if ( selectedFeatures.nextFeature( firstSelectedFeature ) )
+      if ( firstSelectedFeature.geometry().isNull() )
+        isGeometryEmpty = true;
+  }
 
   if ( !checkSelection() )
   {
@@ -84,7 +96,7 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 
       if ( nextPoint( QgsPoint( mapPoint ), layerPoint ) != 0 )
       {
-        QgsDebugMsg( "nextPoint failed" );
+        QgsDebugMsg( QStringLiteral( "nextPoint failed" ) );
         return;
       }
 
@@ -102,13 +114,13 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
         int error = addVertex( e->mapPoint(), e->mapPointMatch() );
         if ( error == 1 )
         {
-          QgsDebugMsg( "current layer is not a vector layer" );
+          QgsDebugMsg( QStringLiteral( "current layer is not a vector layer" ) );
           return;
         }
         else if ( error == 2 )
         {
           //problem with coordinate transformation
-          emit messageEmitted( tr( "Coordinate transform error. Cannot transform the point to the layers coordinate system" ), QgsMessageBar::WARNING );
+          emit messageEmitted( tr( "Coordinate transform error. Cannot transform the point to the layers coordinate system" ), Qgis::Warning );
           return;
         }
 
@@ -152,7 +164,23 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
         QgsCurvePolygon *cp = new QgsCurvePolygon();
         cp->setExteriorRing( curveToAdd );
         QgsGeometry *geom = new QgsGeometry( cp );
-        geom->avoidIntersections( QgsProject::instance()->avoidIntersectionsLayers() );
+
+        QList<QgsVectorLayer *>  avoidIntersectionsLayers;
+        switch ( QgsProject::instance()->avoidIntersectionsMode() )
+        {
+          case QgsProject::AvoidIntersectionsMode::AvoidIntersectionsCurrentLayer:
+            avoidIntersectionsLayers.append( vlayer );
+            break;
+          case QgsProject::AvoidIntersectionsMode::AvoidIntersectionsLayers:
+            avoidIntersectionsLayers = QgsProject::instance()->avoidIntersectionsLayers();
+            break;
+          case QgsProject::AvoidIntersectionsMode::AllowIntersections:
+            break;
+        }
+        if ( avoidIntersectionsLayers.size() > 0 )
+        {
+          geom->avoidIntersections( avoidIntersectionsLayers );
+        }
 
         const QgsCurvePolygon *cpGeom = qgsgeometry_cast<const QgsCurvePolygon *>( geom->constGet() );
         if ( !cpGeom )
@@ -191,7 +219,7 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       bool topologicalEditing = QgsProject::instance()->topologicalEditing();
       if ( topologicalEditing )
       {
-        addTopologicalPoints( points() );
+        addTopologicalPoints( pointsZM() );
       }
 
       vlayer->endEditCommand();
@@ -200,7 +228,7 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 
       if ( ( !isGeometryEmpty ) && QgsWkbTypes::isSingleType( vlayer->wkbType() ) )
       {
-        emit messageEmitted( tr( "Add part: Feature geom is single part and you've added more than one" ), QgsMessageBar::WARNING );
+        emit messageEmitted( tr( "Add part: Feature geom is single part and you've added more than one" ), Qgis::Warning );
       }
 
       return;
@@ -231,7 +259,7 @@ void QgsMapToolAddPart::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
       break;
   }
 
-  emit messageEmitted( errorMessage, QgsMessageBar::WARNING );
+  emit messageEmitted( errorMessage, Qgis::Warning );
   vlayer->destroyEditCommand();
 }
 
@@ -265,7 +293,7 @@ bool QgsMapToolAddPart::checkSelection()
 
   if ( !selectionErrorMsg.isEmpty() )
   {
-    emit messageEmitted( tr( "Could not add part. %1" ).arg( selectionErrorMsg ), QgsMessageBar::WARNING );
+    emit messageEmitted( tr( "Could not add part. %1" ).arg( selectionErrorMsg ), Qgis::Warning );
   }
 
   return selectionErrorMsg.isEmpty();

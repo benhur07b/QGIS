@@ -45,9 +45,10 @@ SIP_IF_FEATURE( MOBILITY_LOCATION )
 /**
  * \ingroup core
  * \class QgsQtLocationConnection
+ * \brief A GPS connection subclass based on the Qt Location libraries.
  * \note may not be available in Python bindings on all platforms
 */
-class CORE_EXPORT QgsQtLocationConnection: public QgsGPSConnection
+class CORE_EXPORT QgsQtLocationConnection: public QgsGpsConnection
 {
     Q_OBJECT
   public:
@@ -58,7 +59,7 @@ class CORE_EXPORT QgsQtLocationConnection: public QgsGPSConnection
     void broadcastConnectionAvailable();
 
     //! Parse available data source content
-    void parseData();
+    void parseData() override;
 
     /**
      * Called when the position updated.

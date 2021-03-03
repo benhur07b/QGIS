@@ -16,6 +16,7 @@
  ***************************************************************************/
 
 #include "qgsalgorithmorientedminimumboundingbox.h"
+#include "qgsvectorlayer.h"
 
 ///@cond PRIVATE
 
@@ -37,6 +38,11 @@ QStringList QgsOrientedMinimumBoundingBoxAlgorithm::tags() const
 QString QgsOrientedMinimumBoundingBoxAlgorithm::group() const
 {
   return QObject::tr( "Vector geometry" );
+}
+
+QString QgsOrientedMinimumBoundingBoxAlgorithm::groupId() const
+{
+  return QStringLiteral( "vectorgeometry" );
 }
 
 QString QgsOrientedMinimumBoundingBoxAlgorithm::outputName() const
@@ -61,6 +67,18 @@ QgsOrientedMinimumBoundingBoxAlgorithm *QgsOrientedMinimumBoundingBoxAlgorithm::
   return new QgsOrientedMinimumBoundingBoxAlgorithm();
 }
 
+bool QgsOrientedMinimumBoundingBoxAlgorithm::supportInPlaceEdit( const QgsMapLayer *l ) const
+{
+  const QgsVectorLayer *layer = qobject_cast< const QgsVectorLayer * >( l );
+  if ( !layer )
+    return false;
+
+  if ( ! QgsProcessingFeatureBasedAlgorithm::supportInPlaceEdit( layer ) )
+    return false;
+  // Polygons only
+  return layer->wkbType() == QgsWkbTypes::Type::Polygon || layer->wkbType() == QgsWkbTypes::Type::MultiPolygon;
+}
+
 QgsFields QgsOrientedMinimumBoundingBoxAlgorithm::outputFields( const QgsFields &inputFields ) const
 {
   QgsFields fields = inputFields;
@@ -72,7 +90,7 @@ QgsFields QgsOrientedMinimumBoundingBoxAlgorithm::outputFields( const QgsFields 
   return fields;
 }
 
-QgsFeature QgsOrientedMinimumBoundingBoxAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingFeedback * )
+QgsFeatureList QgsOrientedMinimumBoundingBoxAlgorithm::processFeature( const QgsFeature &feature, QgsProcessingContext &, QgsProcessingFeedback * )
 {
   QgsFeature f = feature;
   if ( f.hasGeometry() )
@@ -91,7 +109,17 @@ QgsFeature QgsOrientedMinimumBoundingBoxAlgorithm::processFeature( const QgsFeat
           << 2 * width + 2 * height;
     f.setAttributes( attrs );
   }
-  return f;
+  else
+  {
+    QgsAttributes attrs = f.attributes();
+    attrs << QVariant()
+          << QVariant()
+          << QVariant()
+          << QVariant()
+          << QVariant();
+    f.setAttributes( attrs );
+  }
+  return QgsFeatureList() << f;
 }
 
 ///@endcond

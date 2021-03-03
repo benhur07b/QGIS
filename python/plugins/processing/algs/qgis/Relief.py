@@ -21,10 +21,6 @@ __author__ = 'Alexander Bruy'
 __date__ = 'December 2016'
 __copyright__ = '(C) 2016, Alexander Bruy'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon, QColor
@@ -39,7 +35,6 @@ from qgis.core import (QgsProcessingParameterDefinition,
                        QgsRasterFileWriter,
                        QgsProcessingException)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
-from processing.tools.dataobjects import exportRasterLayer
 
 pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
@@ -73,18 +68,15 @@ class ParameterReliefColors(QgsProcessingParameterDefinition):
 
     @staticmethod
     def colorsToString(colors):
-        s = ''
-        for c in colors:
-            s += '{:f}, {:f}, {:d}, {:d}, {:d};'.format(c[0],
-                                                        c[1],
-                                                        c[2],
-                                                        c[3],
-                                                        c[4])
-        return s[:-1]
+        return ';'.join('{:f}, {:f}, {:d}, {:d}, {:d}'.format(c[0],
+                                                              c[1],
+                                                              c[2],
+                                                              c[3],
+                                                              c[4])
+                        for c in colors)
 
 
 class Relief(QgisAlgorithm):
-
     INPUT = 'INPUT'
     Z_FACTOR = 'Z_FACTOR'
     AUTO_COLORS = 'AUTO_COLORS'
@@ -98,6 +90,9 @@ class Relief(QgisAlgorithm):
     def group(self):
         return self.tr('Raster terrain analysis')
 
+    def groupId(self):
+        return 'rasterterrainanalysis'
+
     def __init__(self):
         super().__init__()
 
@@ -106,7 +101,7 @@ class Relief(QgisAlgorithm):
                                                             self.tr('Elevation layer')))
         self.addParameter(QgsProcessingParameterNumber(self.Z_FACTOR,
                                                        self.tr('Z factor'), type=QgsProcessingParameterNumber.Double,
-                                                       minValue=0.00, maxValue=999999.99, defaultValue=1.0))
+                                                       minValue=0.00, defaultValue=1.0))
         self.addParameter(QgsProcessingParameterBoolean(self.AUTO_COLORS,
                                                         self.tr('Generate relief classes automatically'),
                                                         defaultValue=False))
@@ -117,7 +112,10 @@ class Relief(QgisAlgorithm):
         self.addParameter(QgsProcessingParameterRasterDestination(self.OUTPUT,
                                                                   self.tr('Relief')))
         self.addParameter(QgsProcessingParameterFileDestination(self.FREQUENCY_DISTRIBUTION,
-                                                                self.tr('Frequency distribution'), 'CSV files (*.csv)', optional=True))
+                                                                self.tr('Frequency distribution'),
+                                                                'CSV files (*.csv)',
+                                                                optional=True,
+                                                                createByDefault=False))
 
     def name(self):
         return 'relief'
@@ -126,9 +124,9 @@ class Relief(QgisAlgorithm):
         return self.tr('Relief')
 
     def processAlgorithm(self, parameters, context, feedback):
-        inputFile = exportRasterLayer(self.parameterAsRasterLayer(parameters, self.INPUT, context))
+        inputFile = self.parameterAsRasterLayer(parameters, self.INPUT, context).source()
         zFactor = self.parameterAsDouble(parameters, self.Z_FACTOR, context)
-        automaticColors = self.parameterAsBool(parameters, self.AUTO_COLORS, context)
+        automaticColors = self.parameterAsBoolean(parameters, self.AUTO_COLORS, context)
         outputFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
         frequencyDistribution = self.parameterAsFileOutput(parameters, self.FREQUENCY_DISTRIBUTION, context)
 
@@ -156,6 +154,20 @@ class Relief(QgisAlgorithm):
         relief.setZFactor(zFactor)
         if frequencyDistribution:
             relief.exportFrequencyDistributionToCsv(frequencyDistribution)
-        relief.processRaster(feedback)
+        res = relief.processRaster(feedback)
+        if res == 1:
+            raise QgsProcessingException(self.tr('Can not open input file.'))
+        elif res == 2:
+            raise QgsProcessingException(self.tr('Can not get GDAL driver for output file.'))
+        elif res == 3:
+            raise QgsProcessingException(self.tr('Can not create output file.'))
+        elif res == 4:
+            raise QgsProcessingException(self.tr('Can not get input band.'))
+        elif res == 5:
+            raise QgsProcessingException(self.tr('Can not create output bands.'))
+        elif res == 6:
+            raise QgsProcessingException(self.tr('Output raster size is too small (at least 3 rows needed).'))
+        elif res == 7:
+            feedback.pushInfo(self.tr('Canceled.'))
 
         return {self.OUTPUT: outputFile, self.FREQUENCY_DISTRIBUTION: frequencyDistribution}

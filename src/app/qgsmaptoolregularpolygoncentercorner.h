@@ -18,14 +18,15 @@
 #define QGSMAPTOOLREGULARPOLYGONCENTERCORNER_H
 
 #include "qgsmaptooladdregularpolygon.h"
+#include "qgis_app.h"
 
-class QgsMapToolRegularPolygonCenterCorner: public QgsMapToolAddRegularPolygon
+class APP_EXPORT QgsMapToolRegularPolygonCenterCorner: public QgsMapToolAddRegularPolygon
 {
     Q_OBJECT
 
   public:
     QgsMapToolRegularPolygonCenterCorner( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode = CaptureLine );
-    ~QgsMapToolRegularPolygonCenterCorner();
+    ~QgsMapToolRegularPolygonCenterCorner() override;
 
     void cadCanvasReleaseEvent( QgsMapMouseEvent *e ) override;
     void cadCanvasMoveEvent( QgsMapMouseEvent *e ) override;

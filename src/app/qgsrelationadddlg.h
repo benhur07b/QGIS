@@ -16,13 +16,27 @@
 #define QGSRELATIONADDDLG_H
 
 #include <QDialog>
-#include "ui_qgsrelationadddlgbase.h"
 #include "qgis_app.h"
+#include "ui_qgsrelationmanageradddialogbase.h"
 #include "qgsrelation.h"
 
-class QgsVectorLayer;
+class QDialogButtonBox;
+class QComboBox;
+class QLineEdit;
+class QSpacerItem;
+class QToolButton;
+class QVBoxLayout;
+class QHBoxLayout;
 
-class APP_EXPORT QgsRelationAddDlg : public QDialog, private Ui::QgsRelationAddDlgBase
+class QgsVectorLayer;
+class QgsFieldComboBox;
+class QgsMapLayerComboBox;
+
+/**
+ * QgsRelationAddDlg allows configuring a new relation.
+ * Multiple field pairs can be set.
+ */
+class APP_EXPORT QgsRelationAddDlg : public QDialog, private Ui::QgsRelationManagerAddDialogBase
 {
     Q_OBJECT
 
@@ -37,8 +51,21 @@ class APP_EXPORT QgsRelationAddDlg : public QDialog, private Ui::QgsRelationAddD
     QgsRelation::RelationStrength relationStrength();
 
   private slots:
+    void addFieldsRow();
+    void removeFieldsRow();
+    void updateFieldsMappingButtons();
+    void updateFieldsMappingHeaders();
+    void updateDialogButtons();
+    void updateChildRelationsComboBox();
+    void updateReferencedFieldsComboBoxes();
+    void updateReferencingFieldsComboBoxes();
 
-    void checkDefinitionValid();
+  private:
+    bool isDefinitionValid();
+    void updateFieldsMapping();
+
+    QgsMapLayerComboBox *mReferencedLayerCombobox = nullptr;
+    QgsMapLayerComboBox *mReferencingLayerCombobox = nullptr;
 
 };
 

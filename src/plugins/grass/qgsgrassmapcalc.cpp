@@ -44,8 +44,8 @@ QgsGrassMapcalc::QgsGrassMapcalc(
   , QgsGrassModuleOptions( tools, module, iface, false )
   , mTool( -1 )
 {
-  Q_UNUSED( parent );
-  Q_UNUSED( f );
+  Q_UNUSED( parent )
+  Q_UNUSED( f )
   QgsDebugMsg( "QgsGrassMapcalc()" );
 
   setupUi( this );
@@ -148,7 +148,7 @@ QgsGrassMapcalc::QgsGrassMapcalc(
   connect( mMapComboBox->completer(), static_cast<void ( QCompleter::* )( const QString & )>( &QCompleter::activated ), this, &QgsGrassMapcalc::mapChanged );
   connect( mMapComboBox, &QComboBox::editTextChanged, this, &QgsGrassMapcalc::mapChanged );
   bool firstSet = mMapComboBox->setFirst();
-  Q_UNUSED( firstSet );
+  Q_UNUSED( firstSet )
   mInputFrame->layout()->addWidget( mMapComboBox );
 
   /* Create functions */
@@ -249,7 +249,7 @@ void QgsGrassMapcalc::mousePressEvent( QMouseEvent *e )
     case AddConstant:
     case AddFunction:
       mObject->setCenter( p.x(), p.y() );
-      mObject = 0;
+      mObject = nullptr;
       //addMap(); // restart
       setTool( mTool );  // restart
       break;
@@ -266,16 +266,16 @@ void QgsGrassMapcalc::mousePressEvent( QMouseEvent *e )
       break;
 
     case Select:
-      // Cleare previous
+      // Cleared previous
       if ( mObject )
       {
         mObject->setSelected( false );
-        mObject = 0;
+        mObject = nullptr;
       }
       if ( mConnector )
       {
         mConnector->setSelected( false );
-        mConnector = 0;
+        mConnector = nullptr;
       }
       showOptions( Select );
 
@@ -429,7 +429,7 @@ void QgsGrassMapcalc::mouseReleaseEvent( QMouseEvent *e )
           mConnector->setSocket( 0 );   // disconnect
           delete mConnector;
         }
-        mConnector = 0;
+        mConnector = nullptr;
         setTool( mTool );  // restart
       }
       break;
@@ -445,7 +445,7 @@ void QgsGrassMapcalc::mouseReleaseEvent( QMouseEvent *e )
 
 QStringList QgsGrassMapcalc::arguments()
 {
-  QString cmd = QLatin1String( "" );
+  QString cmd;
   // Attention with quotes and spaces!
   //cmd.append("\"");
 
@@ -512,7 +512,7 @@ QStringList QgsGrassMapcalc::checkRegion()
 
     struct Cell_head window;
 
-    QStringList mm = obj->value().split( QStringLiteral( "@" ) );
+    QStringList mm = obj->value().split( '@' );
     if ( mm.size() < 1 )
       continue;
 
@@ -526,7 +526,7 @@ QStringList QgsGrassMapcalc::checkRegion()
                                QgsGrass::getDefaultLocation(), mapset, map,
                                &window ) )
     {
-      QMessageBox::warning( 0, tr( "Warning" ), tr( "Cannot check region of map %1" ).arg( obj->value() ) );
+      QMessageBox::warning( nullptr, tr( "Warning" ), tr( "Cannot check region of map %1" ).arg( obj->value() ) );
       continue;
     }
 
@@ -541,8 +541,8 @@ QStringList QgsGrassMapcalc::checkRegion()
 
 bool QgsGrassMapcalc::inputRegion( struct Cell_head *window, QgsCoordinateReferenceSystem &crs, bool all )
 {
-  Q_UNUSED( crs );
-  Q_UNUSED( all );
+  Q_UNUSED( crs )
+  Q_UNUSED( all )
 
   try
   {
@@ -571,7 +571,7 @@ bool QgsGrassMapcalc::inputRegion( struct Cell_head *window, QgsCoordinateRefere
 
     struct Cell_head mapWindow;
 
-    QStringList mm = obj->value().split( QStringLiteral( "@" ) );
+    QStringList mm = obj->value().split( '@' );
     if ( mm.size() < 1 )
       continue;
 
@@ -585,7 +585,7 @@ bool QgsGrassMapcalc::inputRegion( struct Cell_head *window, QgsCoordinateRefere
                                QgsGrass::getDefaultLocation(), mapset, map,
                                &mapWindow ) )
     {
-      QMessageBox::warning( 0, tr( "Warning" ), tr( "Cannot get region of map %1" ).arg( obj->value() ) );
+      QMessageBox::warning( nullptr, tr( "Warning" ), tr( "Cannot get region of map %1" ).arg( obj->value() ) );
       return false;
     }
 
@@ -652,7 +652,7 @@ void QgsGrassMapcalc::setOption()
   {
     case QgsGrassMapcalcObject::Map :
     {
-      QStringList mapMapset = mObject->value().split( QStringLiteral( "@" ) );
+      QStringList mapMapset = mObject->value().split( '@' );
       if ( !mMapComboBox->setCurrent( mapMapset.value( 0 ), mapMapset.value( 1 ) ) )
       {
         mMapComboBox->setEditText( mObject->value() );
@@ -700,8 +700,8 @@ void QgsGrassMapcalc::setTool( int tool )
       delete mConnector;
     mCanvasScene->update();
   }
-  mObject = 0;
-  mConnector = 0;
+  mObject = nullptr;
+  mConnector = nullptr;
 
   mTool = tool;
   mToolStep = 0;
@@ -767,7 +767,7 @@ void QgsGrassMapcalc::addMap()
 {
   if ( mMapComboBox->count() == 0 )
   {
-    QMessageBox::warning( 0, tr( "Warning" ), tr( "No GRASS raster maps available" ) );
+    QMessageBox::warning( nullptr, tr( "Warning" ), tr( "No GRASS raster maps available" ) );
 
     setTool( AddConstant );
     return;
@@ -803,12 +803,12 @@ void QgsGrassMapcalc::deleteItem()
   if ( mConnector )
   {
     delete mConnector;
-    mConnector = 0;
+    mConnector = nullptr;
   }
   if ( mObject && mObject->type() != QgsGrassMapcalcObject::Output )
   {
     delete mObject;
-    mObject = 0;
+    mObject = nullptr;
   }
   mActionDeleteItem->setEnabled( false );
   mCanvasScene->update();
@@ -988,7 +988,7 @@ void QgsGrassMapcalc::saveAs()
 
     if ( !d.mkdir( QStringLiteral( "mapcalc" ) ) )
     {
-      QMessageBox::warning( 0, tr( "Warning" ), tr( "Cannot create 'mapcalc' directory in current mapset." ) );
+      QMessageBox::warning( nullptr, tr( "Warning" ), tr( "Cannot create 'mapcalc' directory in current mapset." ) );
       return;
     }
   }
@@ -1006,14 +1006,14 @@ void QgsGrassMapcalc::saveAs()
 
     if ( name.isEmpty() )
     {
-      QMessageBox::warning( 0, tr( "Warning" ), tr( "Enter vector name" ) );
+      QMessageBox::warning( nullptr, tr( "Warning" ), tr( "Enter vector name" ) );
       continue;
     }
 
     // check if exists
     if ( QFile::exists( mc + "/" + name ) )
     {
-      QMessageBox::StandardButton ret = QMessageBox::question( 0, tr( "Warning" ),
+      QMessageBox::StandardButton ret = QMessageBox::question( nullptr, tr( "Warning" ),
                                         tr( "The file already exists. Overwrite?" ),
                                         QMessageBox::Ok | QMessageBox::Cancel );
 
@@ -1173,13 +1173,13 @@ void QgsGrassMapcalc::load()
 
   if ( !file.exists() ) // should not happen
   {
-    QMessageBox::warning( 0, tr( "Warning" ), tr( "The mapcalc schema (%1) not found." ).arg( path ) );
+    QMessageBox::warning( nullptr, tr( "Warning" ), tr( "The mapcalc schema (%1) not found." ).arg( path ) );
     return;
   }
 
   if ( ! file.open( QIODevice::ReadOnly ) )
   {
-    QMessageBox::warning( 0, tr( "Warning" ), tr( "Cannot open mapcalc schema (%1)" ).arg( path ) );
+    QMessageBox::warning( nullptr, tr( "Warning" ), tr( "Cannot open mapcalc schema (%1)" ).arg( path ) );
 
     return;
   }
@@ -1193,7 +1193,7 @@ void QgsGrassMapcalc::load()
   {
     QString errmsg = tr( "Cannot read mapcalc schema (%1):" ).arg( path )
                      + tr( "\n%1\nat line %2 column %3" ).arg( err ).arg( line ).arg( column );
-    QMessageBox::warning( 0, tr( "Warning" ), errmsg );
+    QMessageBox::warning( nullptr, tr( "Warning" ), errmsg );
     return;
   }
 
@@ -1383,8 +1383,7 @@ void QgsGrassMapcalc::clear()
 
 /**************************** OBJECT ************************/
 QgsGrassMapcalcObject::QgsGrassMapcalcObject( int type )
-  : QGraphicsRectItem( -1000, -1000, 50, 20, 0 )
-  , QgsGrassMapcalcItem()
+  : QGraphicsRectItem( -1000, -1000, 50, 20, nullptr )
   , mType( type )
   , mRound( 0. )
   , mCenter( -1000, -1000 )
@@ -1444,8 +1443,8 @@ int QgsGrassMapcalcObject::type() const
 void QgsGrassMapcalcObject::paint( QPainter *painter,
                                    const QStyleOptionGraphicsItem *option, QWidget *widget )
 {
-  Q_UNUSED( option );
-  Q_UNUSED( widget );
+  Q_UNUSED( option )
+  Q_UNUSED( widget )
   //QGraphicsRectItem::paint(painter, option, widget);
 
   painter->setPen( QPen( QColor( 0, 0, 0 ) ) );
@@ -1453,7 +1452,7 @@ void QgsGrassMapcalcObject::paint( QPainter *painter,
   int xRound = ( int )( 100 * mRound / mRect.width() );
   int yRound = ( int )( 100 * mRound / mRect.height() );
 
-  painter->drawRoundRect( mRect, xRound, yRound );
+  painter->drawRoundedRect( mRect, xRound, yRound );
 
   // Input sockets
   for ( int i = 0; i < mInputCount; i++ )
@@ -1497,7 +1496,11 @@ void QgsGrassMapcalcObject::paint( QPainter *painter,
 
       int lx = mRect.x() + mSpace;
       int ly = mRect.y() + mSpace + i * ( mTextHeight + mSpace );
+#if QT_VERSION < QT_VERSION_CHECK(5, 11, 0)
       QRect lr( lx, ly, metrics.width( l ), mTextHeight );
+#else
+      QRect lr( lx, ly, metrics.horizontalAdvance( l ), mTextHeight );
+#endif
 
       painter->drawText( lr, Qt::AlignCenter | Qt::TextSingleLine, l );
     }
@@ -1549,13 +1552,21 @@ void QgsGrassMapcalcObject::resetSize()
     for ( int i = 0; i < mFunction.inputLabels().size(); i++ )
     {
       QString l = mFunction.inputLabels().at( i );
+#if QT_VERSION < QT_VERSION_CHECK(5, 11, 0)
       int len = metrics.width( l );
+#else
+      int len = metrics.horizontalAdvance( l );
+#endif
       if ( len > mInputTextWidth )
         mInputTextWidth = len;
     }
   }
 
+#if QT_VERSION < QT_VERSION_CHECK(5, 11, 0)
   int labelTextWidth = metrics.width( mLabel );
+#else
+  int labelTextWidth = metrics.horizontalAdvance( mLabel );
+#endif
   if ( mType == Function && !mFunction.drawlabel() )
   {
     labelTextWidth = 0;
@@ -1794,10 +1805,7 @@ QString QgsGrassMapcalcObject::expression()
 
 /************************* CONNECTOR **********************************/
 QgsGrassMapcalcConnector::QgsGrassMapcalcConnector( QGraphicsScene *canvas )
-  : QgsGrassMapcalcItem()
-  , mSelectedEnd( -1 )
 {
-
   canvas->addItem( this );
 
   QGraphicsLineItem::setZValue( 10 );
@@ -1807,8 +1815,8 @@ QgsGrassMapcalcConnector::QgsGrassMapcalcConnector( QGraphicsScene *canvas )
   mPoints[1] = QPoint( -1000, -1000 );
 
   mSocketObjects.resize( 2 );
-  mSocketObjects[0] = 0;
-  mSocketObjects[1] = 0;
+  mSocketObjects[0] = nullptr;
+  mSocketObjects[1] = nullptr;
   mSocketDir.resize( 2 );
   mSocket.resize( 2 );
 }
@@ -1823,8 +1831,8 @@ QgsGrassMapcalcConnector::~QgsGrassMapcalcConnector()
 void QgsGrassMapcalcConnector::paint( QPainter *painter,
                                       const QStyleOptionGraphicsItem *option, QWidget *widget )
 {
-  Q_UNUSED( option );
-  Q_UNUSED( widget );
+  Q_UNUSED( option )
+  Q_UNUSED( widget )
   for ( int i = 0; i < 2; i++ )
   {
     if ( mSocketObjects[i] )
@@ -1914,7 +1922,7 @@ bool QgsGrassMapcalcConnector::tryConnectEnd( int end )
 {
 
   QList<QGraphicsItem *> l = scene()->items( mPoints[end] );
-  QgsGrassMapcalcObject *object = 0;
+  QgsGrassMapcalcObject *object = nullptr;
   QList<QGraphicsItem *>::const_iterator it = l.constEnd();
   while ( it != l.constBegin() )
   {
@@ -1938,7 +1946,7 @@ void QgsGrassMapcalcConnector::setSocket( int end,
     mSocketObjects[end]->setConnector( mSocketDir[end],
                                        mSocket[end] );
 
-    mSocketObjects[end] = 0;
+    mSocketObjects[end] = nullptr;
   }
 
   // Create new connection
@@ -2013,14 +2021,14 @@ QgsGrassMapcalcView::QgsGrassMapcalcView( QgsGrassMapcalc *mapcalc,
     QWidget *parent, Qt::WindowFlags f )
   : QGraphicsView( parent )
 {
-  Q_UNUSED( f );
+  Q_UNUSED( f )
   setAttribute( Qt::WA_StaticContents );
   mMapcalc = mapcalc;
 
   // TODO: nothing does work -> necessary to call setFocus ()
   setEnabled( true );
   setFocusPolicy( Qt::StrongFocus );
-  setFocusProxy( 0 );
+  setFocusProxy( nullptr );
 }
 
 void QgsGrassMapcalcView::mousePressEvent( QMouseEvent *e )

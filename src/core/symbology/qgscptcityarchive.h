@@ -78,17 +78,13 @@ class CORE_EXPORT QgsCptCityArchive
     QVector< QgsCptCityDataItem * > rootItems() const { return mRootItems; }
     QVector< QgsCptCityDataItem * > selectionItems() const { return mSelectionItems; }
 
-  protected:
+  private:
 
     QString mArchiveName;
     QString mBaseDir;
-    static QString sDefaultArchiveName;
-    static QMap< QString, QgsCptCityArchive * > sArchiveRegistry;
     // root items, namely directories at root of archive
     QVector< QgsCptCityDataItem * > mRootItems;
     QVector<QgsCptCityDataItem *> mSelectionItems;
-    // mapping of copyinginfo, key is fileName
-    static QMap< QString, QMap< QString, QString > > sCopyingInfoMap;
 
   private:
 #ifdef SIP_RUN
@@ -170,7 +166,7 @@ class CORE_EXPORT QgsCptCityDataItem : public QObject
     void setParent( QgsCptCityDataItem *parent ) { mParent = parent; }
     QVector<QgsCptCityDataItem *> children() const { return mChildren; }
     virtual QIcon icon() { return mIcon; }
-    virtual QIcon icon( QSize size ) { Q_UNUSED( size ) ; return icon(); }
+    virtual QIcon icon( QSize size ) { Q_UNUSED( size ) return icon(); }
     QString name() const { return mName; }
     QString path() const { return mPath; }
     QString info() const { return mInfo; }
@@ -223,8 +219,8 @@ class CORE_EXPORT QgsCptCityColorRampItem : public QgsCptCityDataItem
 
     // --- reimplemented from QgsCptCityDataItem ---
 
-    virtual bool equal( const QgsCptCityDataItem *other ) override;
-    virtual int leafCount() const override { return 1; }
+    bool equal( const QgsCptCityDataItem *other ) override;
+    int leafCount() const override { return 1; }
 
     // --- New virtual methods for layer item derived classes ---
     const QgsCptCityColorRamp &ramp() const { return mRamp; }
@@ -250,7 +246,7 @@ class CORE_EXPORT QgsCptCityCollectionItem : public QgsCptCityDataItem
   public:
     QgsCptCityCollectionItem( QgsCptCityDataItem *parent,
                               const QString &name, const QString &path );
-    ~QgsCptCityCollectionItem();
+    ~QgsCptCityCollectionItem() override;
 
     void setPopulated() { mPopulated = true; }
     void addChild( QgsCptCityDataItem *item SIP_TRANSFER ) { mChildren.append( item ); }
@@ -273,7 +269,7 @@ class CORE_EXPORT QgsCptCityDirectoryItem : public QgsCptCityCollectionItem
 
     QVector<QgsCptCityDataItem *> createChildren() override;
 
-    virtual bool equal( const QgsCptCityDataItem *other ) override;
+    bool equal( const QgsCptCityDataItem *other ) override;
 
     static QgsCptCityDataItem *dataItem( QgsCptCityDataItem *parent,
                                          const QString &name, const QString &path );
@@ -287,7 +283,7 @@ class CORE_EXPORT QgsCptCityDirectoryItem : public QgsCptCityCollectionItem
 /**
  * \ingroup core
  * \class QgsCptCitySelectionItem
- * A selection: contains subdirectories and color ramps
+ * \brief A selection: contains subdirectories and color ramps
 */
 class CORE_EXPORT QgsCptCitySelectionItem : public QgsCptCityCollectionItem
 {
@@ -297,7 +293,7 @@ class CORE_EXPORT QgsCptCitySelectionItem : public QgsCptCityCollectionItem
 
     QVector<QgsCptCityDataItem *> createChildren() override;
 
-    virtual bool equal( const QgsCptCityDataItem *other ) override;
+    bool equal( const QgsCptCityDataItem *other ) override;
 
     QStringList selectionsList() const { return mSelectionsList; }
 
@@ -308,7 +304,8 @@ class CORE_EXPORT QgsCptCitySelectionItem : public QgsCptCityCollectionItem
 
 /**
  * \ingroup core
- * An "All ramps item", which contains all items in a flat hierarchy */
+ * \brief An "All ramps item", which contains all items in a flat hierarchy
+*/
 class CORE_EXPORT QgsCptCityAllRampsItem : public QgsCptCityCollectionItem
 {
     Q_OBJECT
@@ -342,19 +339,19 @@ class CORE_EXPORT QgsCptCityBrowserModel : public QAbstractItemModel
     QgsCptCityBrowserModel( QObject *parent SIP_TRANSFERTHIS = nullptr,
                             QgsCptCityArchive *archive = QgsCptCityArchive::defaultArchive(),
                             ViewType Type = Authors );
-    ~QgsCptCityBrowserModel();
+    ~QgsCptCityBrowserModel() override;
 
     // implemented methods from QAbstractItemModel for read-only access
-    virtual Qt::ItemFlags flags( const QModelIndex &index ) const override;
-    virtual QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
-    virtual QVariant headerData( int section, Qt::Orientation orientation, int role = Qt::DisplayRole ) const override;
-    virtual int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
-    virtual int columnCount( const QModelIndex &parent = QModelIndex() ) const override;
-    virtual QModelIndex index( int row, int column, const QModelIndex &parent = QModelIndex() ) const override;
+    Qt::ItemFlags flags( const QModelIndex &index ) const override;
+    QVariant data( const QModelIndex &index, int role = Qt::DisplayRole ) const override;
+    QVariant headerData( int section, Qt::Orientation orientation, int role = Qt::DisplayRole ) const override;
+    int rowCount( const QModelIndex &parent = QModelIndex() ) const override;
+    int columnCount( const QModelIndex &parent = QModelIndex() ) const override;
+    QModelIndex index( int row, int column, const QModelIndex &parent = QModelIndex() ) const override;
 
     QModelIndex findItem( QgsCptCityDataItem *item, QgsCptCityDataItem *parent = nullptr ) const;
 
-    virtual QModelIndex parent( const QModelIndex &index ) const override;
+    QModelIndex parent( const QModelIndex &index ) const override;
 
     //! Returns a list of mime that can describe model indexes
     /* virtual QStringList mimeTypes() const; */
@@ -378,7 +375,7 @@ class CORE_EXPORT QgsCptCityBrowserModel : public QAbstractItemModel
     // Refresh item children
     void refresh( const QModelIndex &index = QModelIndex() );
 
-    //! return index of a path
+    //! Returns index of a path
     QModelIndex findPath( const QString &path );
 
     void connectItem( QgsCptCityDataItem *item );

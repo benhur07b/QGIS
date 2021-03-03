@@ -30,7 +30,7 @@ class QgsMapLayer;
 
 /**
  * \ingroup gui
- * The QgsLayerTreeViewDefaultActions class serves as a factory of actions
+ * \brief The QgsLayerTreeViewDefaultActions class serves as a factory of actions
  * that can be used together with a layer tree view.
  *
  * \see QgsLayerTreeView
@@ -57,11 +57,47 @@ class GUI_EXPORT QgsLayerTreeViewDefaultActions : public QObject
     //! Action to check a group and all its parents
     QAction *actionCheckAndAllParents( QObject *parent = nullptr );
 
-    QAction *actionZoomToLayer( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY;
-    QAction *actionZoomToGroup( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY;
-    // TODO: zoom to selected
+    /**
+     * Action to zoom to the active layer from the layer tree.
+     * \deprecated since QGIS 3.18, use actionZoomToLayers()
+     */
+    Q_DECL_DEPRECATED QAction *actionZoomToLayer( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY SIP_DEPRECATED;
 
-    QAction *actionMakeTopLevel( QObject *parent = nullptr ) SIP_FACTORY;
+    /**
+     * Action to zoom to all the selected layer(s) in the layer tree
+     * \since QGIS 3.18
+     */
+    QAction *actionZoomToLayers( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY;
+
+    /**
+     * Action to zoom to selected features of a vector layer
+     * \since QGIS 3.2
+     */
+    QAction *actionZoomToSelection( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY;
+    QAction *actionZoomToGroup( QgsMapCanvas *canvas, QObject *parent = nullptr ) SIP_FACTORY;
+
+    /**
+     * \deprecated since QGIS 3.2, use actionMoveOutOfGroup()
+     */
+    Q_DECL_DEPRECATED QAction *actionMakeTopLevel( QObject *parent = nullptr ) SIP_FACTORY;
+
+    /**
+     * \see moveOutOfGroup()
+     * \since QGIS 3.2
+     */
+    QAction *actionMoveOutOfGroup( QObject *parent = nullptr ) SIP_FACTORY;
+
+    /**
+     * \see moveToTop()
+     * \since QGIS 3.2
+     */
+    QAction *actionMoveToTop( QObject *parent = nullptr ) SIP_FACTORY;
+
+    /**
+     * \see moveToBottom()
+     * \since QGIS 3.14
+     */
+    QAction *actionMoveToBottom( QObject *parent = nullptr ) SIP_FACTORY;
     QAction *actionGroupSelected( QObject *parent = nullptr ) SIP_FACTORY;
 
     /**
@@ -70,7 +106,24 @@ class GUI_EXPORT QgsLayerTreeViewDefaultActions : public QObject
      */
     QAction *actionMutuallyExclusiveGroup( QObject *parent = nullptr ) SIP_FACTORY;
 
-    void zoomToLayer( QgsMapCanvas *canvas );
+    /**
+    * Zooms a map \a canvas to the extent of the active layer in the layer tree.
+    * \deprecated since QGIS 3.18, use zoomToLayers()
+    */
+    Q_DECL_DEPRECATED void zoomToLayer( QgsMapCanvas *canvas ) SIP_DEPRECATED;
+
+    /**
+     * Zooms a map \a canvas to all the selected layer(s) in the layer tree
+     * \see zoomToLayers()
+     * \since QGIS 3.18
+     */
+    void zoomToLayers( QgsMapCanvas *canvas );
+
+    /**
+     * \see zoomToSelection()
+     * \since QGIS 3.2
+     */
+    void zoomToSelection( QgsMapCanvas *canvas );
     void zoomToGroup( QgsMapCanvas *canvas );
 
   public slots:
@@ -81,9 +134,50 @@ class GUI_EXPORT QgsLayerTreeViewDefaultActions : public QObject
     void removeGroupOrLayer();
     void renameGroupOrLayer();
     void showFeatureCount();
-    void zoomToLayer();
+
+    /**
+     * Zooms to the extent of the active layer in the layer tree.
+     * \deprecated since QGIS 3.18, use zoomToLayers()
+     */
+    Q_DECL_DEPRECATED void zoomToLayer() SIP_DEPRECATED;
+
+    /**
+     * Zooms to the combined extent of all the selected layer(s) in the layer tree.
+     * \since QGIS 3.18
+     */
+    void zoomToLayers();
+
+    /**
+     * Zooms to the bounding box of all selected features of a vector layer.
+     * \since QGIS 3.2
+     */
+    void zoomToSelection();
     void zoomToGroup();
-    void makeTopLevel();
+
+    /**
+     * \deprecated since QGIS 3.2, use moveOutOfGroup()
+     */
+    Q_DECL_DEPRECATED void makeTopLevel() SIP_DEPRECATED;
+
+    /**
+     * Moves selected layer(s) out of the group(s) and places this/these above the group(s)
+     * \since QGIS 3.2
+     */
+    void moveOutOfGroup();
+
+    /**
+     * Moves selected layer(s) and/or group(s) to the top of the layer panel
+     * or the top of the group if the layer/group is placed within a group.
+     * \since QGIS 3.2
+     */
+    void moveToTop();
+
+    /**
+     * Moves selected layer(s) and/or group(s) to the bottom of the layer panel
+     * or the bottom of the group if the layer/group is placed within a group.
+     * \since QGIS 3.14
+     */
+    void moveToBottom();
     void groupSelected();
 
     /**

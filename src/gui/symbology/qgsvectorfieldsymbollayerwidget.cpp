@@ -34,16 +34,17 @@ QgsVectorFieldSymbolLayerWidget::QgsVectorFieldSymbolLayerWidget( QgsVectorLayer
   mDistanceUnitWidget->setUnits( QgsUnitTypes::RenderUnitList() << QgsUnitTypes::RenderMillimeters << QgsUnitTypes::RenderMapUnits << QgsUnitTypes::RenderPixels
                                  << QgsUnitTypes::RenderPoints << QgsUnitTypes::RenderInches );
 
-  if ( vectorLayer() )
+  if ( auto *lVectorLayer = vectorLayer() )
   {
-    mXAttributeComboBox->addItem( QLatin1String( "" ) );
-    mYAttributeComboBox->addItem( QLatin1String( "" ) );
+    mXAttributeComboBox->addItem( QString() );
+    mYAttributeComboBox->addItem( QString() );
     int i = 0;
-    Q_FOREACH ( const QgsField &f, vectorLayer()->fields() )
+    const QgsFields fields = lVectorLayer->fields();
+    for ( const QgsField &f : fields )
     {
       QString fieldName = f.name();
-      mXAttributeComboBox->addItem( vectorLayer()->fields().iconForField( i ), fieldName );
-      mYAttributeComboBox->addItem( vectorLayer()->fields().iconForField( i ), fieldName );
+      mXAttributeComboBox->addItem( lVectorLayer->fields().iconForField( i ), fieldName );
+      mYAttributeComboBox->addItem( lVectorLayer->fields().iconForField( i ), fieldName );
       i++;
     }
   }

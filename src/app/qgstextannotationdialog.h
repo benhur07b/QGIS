@@ -29,11 +29,11 @@ class APP_EXPORT QgsTextAnnotationDialog: public QDialog, private Ui::QgsTextAnn
 {
     Q_OBJECT
   public:
-    QgsTextAnnotationDialog( QgsMapCanvasAnnotationItem *item, QWidget *parent = nullptr, Qt::WindowFlags f = 0 );
+    QgsTextAnnotationDialog( QgsMapCanvasAnnotationItem *item, QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags() );
 
   protected:
 
-    virtual void showEvent( QShowEvent *event ) override;
+    void showEvent( QShowEvent *event ) override;
 
   private:
     QgsMapCanvasAnnotationItem *mItem = nullptr;
@@ -51,6 +51,7 @@ class APP_EXPORT QgsTextAnnotationDialog: public QDialog, private Ui::QgsTextAnn
     void deleteItem();
     void mButtonBox_clicked( QAbstractButton *button );
     void backgroundColorChanged( const QColor &color );
+    void showHelp();
 };
 
 #endif // QGSTEXTANNOTATIONDIALOG_H

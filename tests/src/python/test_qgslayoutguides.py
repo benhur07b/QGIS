@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '05/07/2017'
 __copyright__ = 'Copyright 2017, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -32,7 +30,7 @@ from qgis.PyQt.QtXml import QDomDocument
 
 from qgis.testing import start_app, unittest
 
-import sip
+from qgis.PyQt import sip
 
 start_app()
 
@@ -64,8 +62,14 @@ class TestQgsLayoutGuide(unittest.TestCase):
     def testUpdateGuide(self):
         p = QgsProject()
         l = QgsLayout(p)
-        l.initializeDefaults() # add a page
-        g = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        l.initializeDefaults()  # add a page
+        # add a second page
+        page2 = QgsLayoutItemPage(l)
+        page2.setPageSize('A5')
+        l.pageCollection().addPage(page2)
+
+        g = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                           l.pageCollection().page(0))
         g.setLayout(l)
         g.update()
 
@@ -85,8 +89,23 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertEqual(g.item().line().y2(), 15)
         self.assertEqual(g.layoutPosition(), 15)
 
+        # guide on page2
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(1))
+        g1.setLayout(l)
+        g1.update()
+        g1.setPosition(QgsLayoutMeasurement(15, QgsUnitTypes.LayoutMillimeters))
+        g1.update()
+        self.assertTrue(g1.item().isVisible())
+        self.assertEqual(g1.item().line().x1(), 0)
+        self.assertEqual(g1.item().line().y1(), 235)
+        self.assertEqual(g1.item().line().x2(), 148)
+        self.assertEqual(g1.item().line().y2(), 235)
+        self.assertEqual(g1.layoutPosition(), 235)
+
         # vertical guide
-        g2 = QgsLayoutGuide(Qt.Vertical, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g2 = QgsLayoutGuide(Qt.Vertical, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         g2.setLayout(l)
         g2.update()
         self.assertTrue(g2.item().isVisible())
@@ -104,15 +123,27 @@ class TestQgsLayoutGuide(unittest.TestCase):
         g.update()
         self.assertTrue(g.item().isVisible())
 
-        #throw it off the bottom of the page
+        # throw it off the bottom of the page
         g.setPosition(QgsLayoutMeasurement(1115, QgsUnitTypes.LayoutMillimeters))
         g.update()
         self.assertFalse(g.item().isVisible())
 
+        # guide on page2
+        g3 = QgsLayoutGuide(Qt.Vertical, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(1))
+        g3.setLayout(l)
+        g3.update()
+        self.assertTrue(g3.item().isVisible())
+        self.assertEqual(g3.item().line().x1(), 50)
+        self.assertEqual(g3.item().line().y1(), 220)
+        self.assertEqual(g3.item().line().x2(), 50)
+        self.assertEqual(g3.item().line().y2(), 430)
+        self.assertEqual(g3.layoutPosition(), 50)
+
     def testCollection(self):
         p = QgsProject()
         l = QgsLayout(p)
-        l.initializeDefaults() # add a page
+        l.initializeDefaults()  # add a page
         guides = l.guides()
 
         # no guides initially
@@ -122,12 +153,14 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertFalse(guides.guides(Qt.Vertical))
 
         # add a guide
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
         self.assertEqual(guides.rowCount(QModelIndex()), 1)
         self.assertEqual(guides.data(guides.index(0, 0), QgsLayoutGuideCollection.OrientationRole), Qt.Horizontal)
         self.assertEqual(guides.data(guides.index(0, 0), QgsLayoutGuideCollection.PositionRole), 5)
-        self.assertEqual(guides.data(guides.index(0, 0), QgsLayoutGuideCollection.UnitsRole), QgsUnitTypes.LayoutCentimeters)
+        self.assertEqual(guides.data(guides.index(0, 0), QgsLayoutGuideCollection.UnitsRole),
+                         QgsUnitTypes.LayoutCentimeters)
         self.assertEqual(guides.data(guides.index(0, 0), QgsLayoutGuideCollection.PageRole), 0)
         self.assertEqual(guides.guides(Qt.Horizontal), [g1])
         self.assertFalse(guides.guides(Qt.Vertical))
@@ -139,7 +172,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertEqual(guides.rowCount(QModelIndex()), 2)
         self.assertEqual(guides.data(guides.index(1, 0), QgsLayoutGuideCollection.OrientationRole), Qt.Horizontal)
         self.assertEqual(guides.data(guides.index(1, 0), QgsLayoutGuideCollection.PositionRole), 15)
-        self.assertEqual(guides.data(guides.index(1, 0), QgsLayoutGuideCollection.UnitsRole), QgsUnitTypes.LayoutMillimeters)
+        self.assertEqual(guides.data(guides.index(1, 0), QgsLayoutGuideCollection.UnitsRole),
+                         QgsUnitTypes.LayoutMillimeters)
         self.assertEqual(guides.data(guides.index(1, 0), QgsLayoutGuideCollection.PageRole), 0)
         self.assertEqual(guides.guides(Qt.Horizontal), [g1, g2])
         self.assertFalse(guides.guides(Qt.Vertical))
@@ -153,7 +187,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertEqual(guides.rowCount(QModelIndex()), 3)
         self.assertEqual(guides.data(guides.index(2, 0), QgsLayoutGuideCollection.OrientationRole), Qt.Vertical)
         self.assertEqual(guides.data(guides.index(2, 0), QgsLayoutGuideCollection.PositionRole), 35)
-        self.assertEqual(guides.data(guides.index(2, 0), QgsLayoutGuideCollection.UnitsRole), QgsUnitTypes.LayoutMillimeters)
+        self.assertEqual(guides.data(guides.index(2, 0), QgsLayoutGuideCollection.UnitsRole),
+                         QgsUnitTypes.LayoutMillimeters)
         self.assertEqual(guides.data(guides.index(2, 0), QgsLayoutGuideCollection.PageRole), 1)
         self.assertEqual(guides.guides(Qt.Horizontal), [g1, g2])
         self.assertEqual(guides.guides(Qt.Horizontal, 0), [g1, g2])
@@ -171,7 +206,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         l.initializeDefaults()
         guides = l.guides()
 
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
         g2 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(15), l.pageCollection().page(0))
         guides.addGuide(g2)
@@ -189,7 +225,7 @@ class TestQgsLayoutGuide(unittest.TestCase):
     def testQgsLayoutGuideProxyModel(self):
         p = QgsProject()
         l = QgsLayout(p)
-        l.initializeDefaults() # add a page
+        l.initializeDefaults()  # add a page
         page2 = QgsLayoutItemPage(l)
         page2.setPageSize('A3')
         l.pageCollection().addPage(page2)
@@ -208,7 +244,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertEqual(vert_filter.rowCount(QModelIndex()), 0)
 
         # add some guides
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
         g2 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(15), l.pageCollection().page(1))
         guides.addGuide(g2)
@@ -218,23 +255,26 @@ class TestQgsLayoutGuide(unittest.TestCase):
         self.assertEqual(hoz_filter.rowCount(QModelIndex()), 1)
         self.assertEqual(hoz_filter.data(hoz_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole), 5)
         self.assertEqual(hoz_page_1_filter.rowCount(QModelIndex()), 1)
-        self.assertEqual(hoz_page_1_filter.data(hoz_page_1_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole), 15)
+        self.assertEqual(hoz_page_1_filter.data(hoz_page_1_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole),
+                         15)
         self.assertEqual(vert_filter.rowCount(QModelIndex()), 1)
         self.assertEqual(vert_filter.data(vert_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole), 35)
 
         # change page
         hoz_page_1_filter.setPage(0)
         self.assertEqual(hoz_page_1_filter.rowCount(QModelIndex()), 1)
-        self.assertEqual(hoz_page_1_filter.data(hoz_page_1_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole), 5)
+        self.assertEqual(hoz_page_1_filter.data(hoz_page_1_filter.index(0, 0), QgsLayoutGuideCollection.PositionRole),
+                         5)
 
     def testRemoveGuide(self):
         p = QgsProject()
         l = QgsLayout(p)
-        l.initializeDefaults() # add a page
+        l.initializeDefaults()  # add a page
         guides = l.guides()
 
         # add a guide
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
         self.assertEqual(guides.guides(Qt.Horizontal), [g1])
         guides.removeGuide(None)
@@ -245,13 +285,15 @@ class TestQgsLayoutGuide(unittest.TestCase):
     def testClear(self):
         p = QgsProject()
         l = QgsLayout(p)
-        l.initializeDefaults() # add a page
+        l.initializeDefaults()  # add a page
         guides = l.guides()
 
         # add a guide
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
-        g2 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g2 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g2)
         self.assertEqual(guides.guides(Qt.Horizontal), [g1, g2])
         guides.clear()
@@ -324,7 +366,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         guides = l.guides()
 
         # add some guides
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(5, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
         g2 = QgsLayoutGuide(Qt.Vertical, QgsLayoutMeasurement(6, QgsUnitTypes.LayoutInches), l.pageCollection().page(0))
         guides.addGuide(g2)
@@ -357,7 +400,8 @@ class TestQgsLayoutGuide(unittest.TestCase):
         guides = l.guides()
 
         # add some guides
-        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(1, QgsUnitTypes.LayoutCentimeters), l.pageCollection().page(0))
+        g1 = QgsLayoutGuide(Qt.Horizontal, QgsLayoutMeasurement(1, QgsUnitTypes.LayoutCentimeters),
+                            l.pageCollection().page(0))
         guides.addGuide(g1)
 
         # set position in layout units (mm)

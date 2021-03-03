@@ -21,11 +21,6 @@ __author__ = 'Victor Olaya'
 __date__ = 'November 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-
 from qgis.core import (QgsProcessingException,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterFeatureSource,
@@ -37,7 +32,6 @@ from processing.algs.gdal.GdalUtils import GdalUtils
 
 
 class ExecuteSql(GdalAlgorithm):
-
     INPUT = 'INPUT'
     SQL = 'SQL'
     DIALECT = 'DIALECT'
@@ -82,11 +76,18 @@ class ExecuteSql(GdalAlgorithm):
     def group(self):
         return self.tr('Vector miscellaneous')
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback)
+    def groupId(self):
+        return 'vectormiscellaneous'
+
+    def commandName(self):
+        return "ogr2ogr"
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        ogrLayer, layerName = self.getOgrCompatibleSource(self.INPUT, parameters, context, feedback, executing)
         sql = self.parameterAsString(parameters, self.SQL, context)
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         outFile = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, outFile)
 
         output, outputFormat = GdalUtils.ogrConnectionStringAndFormat(outFile, context)
 
@@ -94,12 +95,12 @@ class ExecuteSql(GdalAlgorithm):
             raise QgsProcessingException(
                 self.tr('Empty SQL. Please enter valid SQL expression and try again.'))
 
-        arguments = []
-        arguments.append(output)
-        arguments.append(ogrLayer)
-        arguments.append('-sql')
-        arguments.append(sql)
-
+        arguments = [
+            output,
+            ogrLayer,
+            '-sql',
+            sql
+        ]
         dialect = self.dialects[self.parameterAsEnum(parameters, self.DIALECT, context)][1]
         if dialect:
             arguments.append('-dialect')
@@ -111,4 +112,4 @@ class ExecuteSql(GdalAlgorithm):
         if outputFormat:
             arguments.append('-f {}'.format(outputFormat))
 
-        return ['ogr2ogr', GdalUtils.escapeAndJoin(arguments)]
+        return [self.commandName(), GdalUtils.escapeAndJoin(arguments)]

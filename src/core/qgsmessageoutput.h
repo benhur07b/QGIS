@@ -29,7 +29,8 @@ typedef QgsMessageOutput *( *MESSAGE_OUTPUT_CREATOR )() SIP_SKIP;
 
 /**
  * \ingroup core
- * Interface for showing messages from QGIS in GUI independent way.
+ * \brief Interface for showing messages from QGIS in GUI independent way.
+ *
  * This class provides abstraction of a dialog for showing output to the user.
  * By default QgsMessageConsoleOutput will be used if not overridden with other
  * message output creator function.
@@ -48,13 +49,13 @@ class CORE_EXPORT QgsMessageOutput
 
     virtual ~QgsMessageOutput() = default;
 
-    //! set message, it won't be displayed until
+    //! Sets message, it won't be displayed until
     virtual void setMessage( const QString &message, MessageType msgType ) = 0;
 
     //! message to be appended to the current text
     virtual void appendMessage( const QString &message ) = 0;
 
-    //! set title for the messages
+    //! Sets title for the messages
     virtual void setTitle( const QString &title ) = 0;
 
     //! display the message to the user and deletes itself
@@ -66,11 +67,12 @@ class CORE_EXPORT QgsMessageOutput
      */
     static void showMessage( const QString &title, const QString &message, MessageType msgType );
 
+    // TODO: implementation where Python class could be passed
+
     /**
      * sets function that will be used to create message output
      * \note not available in Python bindings
      */
-    // TODO: implementation where Python class could be passed
     static void setMessageOutputCreator( MESSAGE_OUTPUT_CREATOR f ) SIP_SKIP;
 
     /**
@@ -88,10 +90,10 @@ class CORE_EXPORT QgsMessageOutput
 
 /**
  * \ingroup core
-\brief Default implementation of message output interface
-
-This class outputs messages to the standard output. Therefore it might
-be the right choice for apps without GUI.
+ * \brief Default implementation of message output interface
+ *
+ * This class outputs messages to the standard output. Therefore it might
+ * be the right choice for apps without GUI.
 */
 class CORE_EXPORT QgsMessageOutputConsole : public QObject, public QgsMessageOutput
 {
@@ -104,14 +106,14 @@ class CORE_EXPORT QgsMessageOutputConsole : public QObject, public QgsMessageOut
      */
     QgsMessageOutputConsole() = default;
 
-    virtual void setMessage( const QString &message, MessageType msgType ) override;
+    void setMessage( const QString &message, MessageType msgType ) override;
 
-    virtual void appendMessage( const QString &message ) override;
+    void appendMessage( const QString &message ) override;
 
-    virtual void setTitle( const QString &title ) override;
+    void setTitle( const QString &title ) override;
 
     //! sends the message to the standard output
-    virtual void showMessage( bool blocking = true ) override;
+    void showMessage( bool blocking = true ) override;
 
   signals:
 

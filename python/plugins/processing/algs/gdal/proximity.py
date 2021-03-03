@@ -21,15 +21,12 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
 from qgis.core import (QgsRasterFileWriter,
+                       QgsProcessingException,
                        QgsProcessingParameterDefinition,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBand,
@@ -46,7 +43,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class proximity(GdalAlgorithm):
-
     INPUT = 'INPUT'
     BAND = 'BAND'
     VALUES = 'VALUES'
@@ -55,6 +51,7 @@ class proximity(GdalAlgorithm):
     UNITS = 'UNITS'
     NODATA = 'NODATA'
     OPTIONS = 'OPTIONS'
+    EXTRA = 'EXTRA'
     DATA_TYPE = 'DATA_TYPE'
     OUTPUT = 'OUTPUT'
 
@@ -74,6 +71,7 @@ class proximity(GdalAlgorithm):
                                                             self.tr('Input layer')))
         self.addParameter(QgsProcessingParameterBand(self.BAND,
                                                      self.tr('Band number'),
+                                                     1,
                                                      parentLayerParameterName=self.INPUT))
         self.addParameter(QgsProcessingParameterString(self.VALUES,
                                                        self.tr('A list of pixel values in the source image to be considered target pixels'),
@@ -101,7 +99,7 @@ class proximity(GdalAlgorithm):
                                                        optional=True))
 
         options_param = QgsProcessingParameterString(self.OPTIONS,
-                                                     self.tr('Additional creation parameters'),
+                                                     self.tr('Additional creation options'),
                                                      defaultValue='',
                                                      optional=True)
         options_param.setFlags(options_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
@@ -110,11 +108,20 @@ class proximity(GdalAlgorithm):
                 'class': 'processing.algs.gdal.ui.RasterOptionsWidget.RasterOptionsWidgetWrapper'}})
         self.addParameter(options_param)
 
-        self.addParameter(QgsProcessingParameterEnum(self.DATA_TYPE,
-                                                     self.tr('Output data type'),
-                                                     self.TYPES,
-                                                     allowMultiple=False,
-                                                     defaultValue=5))
+        extra_param = QgsProcessingParameterString(self.EXTRA,
+                                                   self.tr('Additional command-line parameters'),
+                                                   defaultValue=None,
+                                                   optional=True)
+        extra_param.setFlags(extra_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(extra_param)
+
+        dataType_param = QgsProcessingParameterEnum(self.DATA_TYPE,
+                                                    self.tr('Output data type'),
+                                                    self.TYPES,
+                                                    allowMultiple=False,
+                                                    defaultValue=5)
+        dataType_param.setFlags(dataType_param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
+        self.addParameter(dataType_param)
 
         self.addParameter(QgsProcessingParameterRasterDestination(self.OUTPUT,
                                                                   self.tr('Proximity map')))
@@ -128,20 +135,34 @@ class proximity(GdalAlgorithm):
     def group(self):
         return self.tr('Raster analysis')
 
-    def getConsoleCommands(self, parameters, context, feedback):
+    def groupId(self):
+        return 'rasteranalysis'
+
+    def commandName(self):
+        return 'gdal_proximity'
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         inLayer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if inLayer is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
         distance = self.parameterAsDouble(parameters, self.MAX_DISTANCE, context)
         replaceValue = self.parameterAsDouble(parameters, self.REPLACE, context)
-        nodata = self.parameterAsDouble(parameters, self.NODATA, context)
+        if self.NODATA in parameters and parameters[self.NODATA] is not None:
+            nodata = self.parameterAsDouble(parameters, self.NODATA, context)
+        else:
+            nodata = None
         options = self.parameterAsString(parameters, self.OPTIONS, context)
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
+        self.setOutputValue(self.OUTPUT, out)
 
-        arguments = []
-        arguments.append('-srcband')
-        arguments.append(str(self.parameterAsInt(parameters, self.BAND, context)))
+        arguments = [
+            '-srcband',
+            str(self.parameterAsInt(parameters, self.BAND, context)),
+            '-distunits',
 
-        arguments.append('-distunits')
-        arguments.append(self.distanceUnits[self.parameterAsEnum(parameters, self.UNITS, context)][1])
+            self.distanceUnits[self.parameterAsEnum(parameters, self.UNITS, context)][1]
+        ]
 
         values = self.parameterAsString(parameters, self.VALUES, context)
         if values:
@@ -152,7 +173,7 @@ class proximity(GdalAlgorithm):
             arguments.append('-maxdist')
             arguments.append(str(distance))
 
-        if nodata:
+        if nodata is not None:
             arguments.append('-nodata')
             arguments.append(str(nodata))
 
@@ -167,18 +188,13 @@ class proximity(GdalAlgorithm):
         arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
 
         if options:
-            arguments.append('-co')
-            arguments.append(options)
+            arguments.extend(GdalUtils.parseCreationOptions(options))
+
+        if self.EXTRA in parameters and parameters[self.EXTRA] not in (None, ''):
+            extra = self.parameterAsString(parameters, self.EXTRA, context)
+            arguments.append(extra)
 
         arguments.append(inLayer.source())
         arguments.append(out)
 
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal_proximity.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal_proximity.py',
-                        GdalUtils.escapeAndJoin(arguments)]
-
-        return commands
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

@@ -1,3 +1,17 @@
+/***************************************************************************
+    quantizedmeshgeometry.cpp
+    ---------------------
+    begin                : July 2017
+    copyright            : (C) 2017 by Martin Dobias
+    email                : wonder dot sk at gmail dot com
+ ***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
 #include "quantizedmeshgeometry.h"
 
 #include <zlib.h>
@@ -12,10 +26,10 @@
 #define GZIP_CHUNK_SIZE 32 * 1024
 
 /**
- * @brief Decompresses the given buffer using the standard GZIP algorithm
- * @param input The buffer to be decompressed
- * @param output The result of the decompression
- * @return @c true if the decompression was successful, @c false otherwise
+ * \brief Decompresses the given buffer using the standard GZIP algorithm
+ * \param input The buffer to be decompressed
+ * \param output The result of the decompression
+ * \return \c true if the decompression was successful, \c false otherwise
  */
 bool gzipDecompress( QByteArray input, QByteArray &output )
 {
@@ -48,7 +62,7 @@ bool gzipDecompress( QByteArray input, QByteArray &output )
   do
   {
     // Determine current chunk size
-    int chunk_size = qMin( GZIP_CHUNK_SIZE, input_data_left );
+    int chunk_size = std::min( GZIP_CHUNK_SIZE, input_data_left );
 
     // Check for termination
     if ( chunk_size <= 0 )
@@ -315,11 +329,15 @@ QuantizedMeshGeometry::QuantizedMeshGeometry( QuantizedMeshTile *t, const Map3D 
     ibptr[i*3+2] = srcptr[i*3];
   }
   */
-
+#if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
   m_vertexBuffer = new Qt3DRender::QBuffer( Qt3DRender::QBuffer::VertexBuffer, this );
-  m_vertexBuffer->setData( vb );
-
   m_indexBuffer = new Qt3DRender::QBuffer( Qt3DRender::QBuffer::IndexBuffer, this );
+#else
+  m_vertexBuffer = new Qt3DRender::QBuffer( this );
+  m_indexBuffer = new Qt3DRender::QBuffer( this );
+#endif
+
+  m_vertexBuffer->setData( vb );
   m_indexBuffer->setData( ib );
 
   m_positionAttribute = new Qt3DRender::QAttribute( this );

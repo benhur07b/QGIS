@@ -30,8 +30,8 @@ class QCheckBox;
 class QListView;
 
 /**
-  \ingroup gui
- * The QgsCustomLayerOrderWidget class provides a list box where the user can define
+ * \ingroup gui
+ * \brief The QgsCustomLayerOrderWidget class provides a list box where the user can define
  * custom order for drawing of layers. It also features a checkbox for enabling
  * or disabling the custom order. Any changes made by the user are automatically
  * propagated to the assigned QgsLayerTreeMapCanvasBridge. Also, any updates
@@ -44,14 +44,16 @@ class GUI_EXPORT QgsCustomLayerOrderWidget : public QWidget
 {
     Q_OBJECT
   public:
-    explicit QgsCustomLayerOrderWidget( QgsLayerTreeMapCanvasBridge *bridge, QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    //! Constructor for QgsCustomLayerOrderWidget
+    explicit QgsCustomLayerOrderWidget( QgsLayerTreeMapCanvasBridge *bridge, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
   signals:
 
   private slots:
     void bridgeHasCustomLayerOrderChanged( bool state );
     void bridgeCustomLayerOrderChanged();
-    //! Slot triggered when the ivsibility of a node changes
+    //! Slot triggered when the visibility of a node changes
     void nodeVisibilityChanged( QgsLayerTreeNode *node );
 
     void modelUpdated();

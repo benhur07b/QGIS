@@ -54,9 +54,9 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
      * Adding the guide to a QgsLayoutGuideCollection will automatically set
      * the corresponding layout for you.
      */
-    QgsLayoutGuide( Qt::Orientation orientation, const QgsLayoutMeasurement &position, QgsLayoutItemPage *page );
+    QgsLayoutGuide( Qt::Orientation orientation, QgsLayoutMeasurement position, QgsLayoutItemPage *page );
 
-    ~QgsLayoutGuide();
+    ~QgsLayoutGuide() override;
 
     /**
      * Returns the layout the guide belongs to.
@@ -97,7 +97,7 @@ class CORE_EXPORT QgsLayoutGuide : public QObject
      *
      * \see position()
      */
-    void setPosition( const QgsLayoutMeasurement &position );
+    void setPosition( QgsLayoutMeasurement position );
 
     /**
      * Returns the page the guide is contained within.
@@ -187,7 +187,7 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
      * and linked to the specified \a pageCollection.
      */
     QgsLayoutGuideCollection( QgsLayout *layout, QgsLayoutPageCollection *pageCollection );
-    ~QgsLayoutGuideCollection();
+    ~QgsLayoutGuideCollection() override;
 
     QString stringType() const override { return QStringLiteral( "LayoutGuideCollection" ); }
     QgsLayout *layout() override;
@@ -236,6 +236,11 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
     void update();
 
     /**
+     * Returns a list of all guides contained in the collection.
+     */
+    QList< QgsLayoutGuide * > guides();
+
+    /**
      * Returns the list of guides contained in the collection with the specified
      * \a orientation and on a matching \a page.
      * If \a page is -1, guides from all pages will be returned.
@@ -250,7 +255,7 @@ class CORE_EXPORT QgsLayoutGuideCollection : public QAbstractTableModel, public 
     QList< QgsLayoutGuide * > guidesOnPage( int page );
 
     /**
-     * Returns true if the guide lines should be drawn.
+     * Returns TRUE if the guide lines should be drawn.
      * \see setVisible()
      */
     bool visible() const;

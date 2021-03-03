@@ -24,6 +24,7 @@
 #include "qgssymbollayerutils.h"
 #include "qgsvectorlayer.h"
 #include "qgsguiutils.h"
+#include "qgsapplication.h"
 
 QgsRendererWidget *QgsPointClusterRendererWidget::create( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer )
 {
@@ -123,7 +124,10 @@ void QgsPointClusterRendererWidget::setContext( const QgsSymbolWidgetContext &co
   if ( mDistanceUnitWidget )
     mDistanceUnitWidget->setMapCanvas( context.mapCanvas() );
   if ( mCenterSymbolToolButton )
+  {
     mCenterSymbolToolButton->setMapCanvas( context.mapCanvas() );
+    mCenterSymbolToolButton->setMessageBar( context.messageBar() );
+  }
 }
 
 void QgsPointClusterRendererWidget::mRendererComboBox_currentIndexChanged( int index )
@@ -133,7 +137,8 @@ void QgsPointClusterRendererWidget::mRendererComboBox_currentIndexChanged( int i
   if ( m )
   {
     // unfortunately renderer conversion is only available through the creation of a widget...
-    QgsRendererWidget *tempRenderWidget = m->createRendererWidget( mLayer, mStyle, mRenderer->embeddedRenderer()->clone() );
+    std::unique_ptr< QgsFeatureRenderer > oldRenderer( mRenderer->embeddedRenderer()->clone() );
+    QgsRendererWidget *tempRenderWidget = m->createRendererWidget( mLayer, mStyle, oldRenderer.get() );
     mRenderer->setEmbeddedRenderer( tempRenderWidget->renderer()->clone() );
     delete tempRenderWidget;
   }
@@ -149,7 +154,7 @@ void QgsPointClusterRendererWidget::mRendererSettingsButton_clicked()
   if ( m )
   {
     QgsRendererWidget *w = m->createRendererWidget( mLayer, mStyle, mRenderer->embeddedRenderer()->clone() );
-    w->setPanelTitle( tr( "Renderer settings" ) );
+    w->setPanelTitle( tr( "Renderer Settings" ) );
 
     QgsExpressionContextScope scope;
     scope.addVariable( QgsExpressionContextScope::StaticVariable( QgsExpressionContext::EXPR_CLUSTER_COLOR, "", true ) );
@@ -195,8 +200,8 @@ void QgsPointClusterRendererWidget::blockAllSignals( bool block )
 QgsExpressionContext QgsPointClusterRendererWidget::createExpressionContext() const
 {
   QgsExpressionContext context;
-  if ( mContext.expressionContext() )
-    context = *mContext.expressionContext();
+  if ( auto *lExpressionContext = mContext.expressionContext() )
+    context = *lExpressionContext;
   else
     context.appendScopes( mContext.globalProjectAtlasMapLayerScopes( mLayer ) );
   QgsExpressionContextScope scope;
@@ -204,7 +209,8 @@ QgsExpressionContext QgsPointClusterRendererWidget::createExpressionContext() co
   scope.addVariable( QgsExpressionContextScope::StaticVariable( QgsExpressionContext::EXPR_CLUSTER_SIZE, 0, true ) );
   QList< QgsExpressionContextScope > scopes = mContext.additionalExpressionContextScopes();
   scopes << scope;
-  Q_FOREACH ( const QgsExpressionContextScope &s, scopes )
+  const auto constScopes = scopes;
+  for ( const QgsExpressionContextScope &s : constScopes )
   {
     context << new QgsExpressionContextScope( s );
   }
@@ -230,6 +236,6 @@ void QgsPointClusterRendererWidget::updateRendererFromWidget()
 void QgsPointClusterRendererWidget::setupBlankUi( const QString &layerName )
 {
   QGridLayout *layout = new QGridLayout( this );
-  QLabel *label = new QLabel( tr( "The point cluster renderer only applies to (single) point layers. \n'%1' is not a point layer and cannot be displayed by the point cluster renderer" ).arg( layerName ), this );
+  QLabel *label = new QLabel( tr( "The point cluster renderer only applies to (single) point layers. \n'%1' is not a (single) point layer and cannot be displayed by the point cluster renderer." ).arg( layerName ), this );
   layout->addWidget( label );
 }

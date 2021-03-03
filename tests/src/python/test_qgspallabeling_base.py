@@ -11,13 +11,10 @@ the Free Software Foundation; either version 2 of the License, or
 (at your option) any later version.
 """
 
-import collections
 
 __author__ = 'Larry Shaffer'
 __date__ = '07/09/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -26,6 +23,7 @@ import sys
 import datetime
 import glob
 import shutil
+from collections.abc import Callable
 
 from qgis.PyQt.QtCore import QSize, qDebug, Qt
 from qgis.PyQt.QtGui import QFont, QColor
@@ -45,7 +43,11 @@ from qgis.core import (
     QgsVectorLayer,
     QgsVectorLayerSimpleLabeling,
     QgsMultiRenderChecker,
-    QgsUnitTypes
+    QgsUnitTypes,
+    QgsVectorTileLayer,
+    QgsVectorTileBasicLabelingStyle,
+    QgsWkbTypes,
+    QgsVectorTileBasicLabeling
 )
 
 from qgis.testing import start_app, unittest
@@ -73,7 +75,6 @@ class TestQgsPalLabeling(unittest.TestCase):
 
     _TestDataDir = unitTestDataPath()
     _PalDataDir = os.path.join(_TestDataDir, 'labeling')
-    _PalFeaturesDb = os.path.join(_PalDataDir, 'pal_features_v3.sqlite')
     _TestFont = getTestFont()  # Roman at 12 pt
     """:type: QFont"""
     _MapRegistry = None
@@ -91,12 +92,6 @@ class TestQgsPalLabeling(unittest.TestCase):
         # qgis iface
         cls._Iface = get_iface()
         cls._Canvas = cls._Iface.mapCanvas()
-
-        # verify that SpatiaLite provider is available
-        msg = '\nSpatialite provider not found, SKIPPING TEST SUITE'
-        # noinspection PyArgumentList
-        res = 'spatialite' in QgsProviderRegistry.instance().providerList()
-        assert res, msg
 
         cls._TestFunction = ''
         cls._TestGroup = ''
@@ -136,7 +131,9 @@ class TestQgsPalLabeling(unittest.TestCase):
     @classmethod
     def setDefaultEngineSettings(cls):
         """Restore default settings for pal labeling"""
-        cls._MapSettings.setLabelingEngineSettings(QgsLabelingEngineSettings())
+        settings = QgsLabelingEngineSettings()
+        settings.setPlacementVersion(QgsLabelingEngineSettings.PlacementEngineVersion2)
+        cls._MapSettings.setLabelingEngineSettings(settings)
 
     @classmethod
     def removeAllLayers(cls):
@@ -162,10 +159,8 @@ class TestQgsPalLabeling(unittest.TestCase):
     def loadFeatureLayer(cls, table, chk=False):
         if chk and cls._MapRegistry.mapLayersByName(table):
             return
-        uri = QgsDataSourceUri()
-        uri.setDatabase(cls._PalFeaturesDb)
-        uri.setDataSource('', table, 'geometry')
-        vlayer = QgsVectorLayer(uri.uri(), table, 'spatialite')
+        vlayer = QgsVectorLayer('{}/{}.geojson'.format(cls._PalDataDir, table), table, 'ogr')
+        assert vlayer.isValid()
         # .qml should contain only style for symbology
         vlayer.loadNamedStyle(os.path.join(cls._PalDataDir,
                                            '{0}.qml'.format(table)))
@@ -185,10 +180,8 @@ class TestQgsPalLabeling(unittest.TestCase):
     @classmethod
     def aoiExtent(cls):
         """Area of interest extent, which matches output aspect ratio"""
-        uri = QgsDataSourceUri()
-        uri.setDatabase(cls._PalFeaturesDb)
-        uri.setDataSource('', 'aoi', 'geometry')
-        aoilayer = QgsVectorLayer(uri.uri(), 'aoi', 'spatialite')
+        aoilayer = QgsVectorLayer('{}/aoi.geojson'.format(cls._PalDataDir), 'aoi', 'ogr')
+        assert aoilayer.isValid()
         return aoilayer.extent()
 
     @classmethod
@@ -197,10 +190,8 @@ class TestQgsPalLabeling(unittest.TestCase):
         :rtype: QgsMapSettings
         """
         ms = QgsMapSettings()
-        crs = QgsCoordinateReferenceSystem()
-        """:type: QgsCoordinateReferenceSystem"""
         # default for labeling test data: WGS 84 / UTM zone 13N
-        crs.createFromSrid(32613)
+        crs = QgsCoordinateReferenceSystem('epsg:32613')
         ms.setBackgroundColor(QColor(152, 219, 249))
         ms.setOutputSize(QSize(420, 280))
         ms.setOutputDpi(72)
@@ -276,7 +267,7 @@ class TestQgsPalLabeling(unittest.TestCase):
                 value = getattr(lyr, attr)
                 if isinstance(value, (QgsGeometry, QgsStringReplacementCollection, QgsCoordinateTransform)):
                     continue  # ignore these objects
-                if not isinstance(value, collections.Callable):
+                if not isinstance(value, Callable):
                     res[attr] = value
         return res
 
@@ -290,8 +281,8 @@ class TestQgsPalLabeling(unittest.TestCase):
     def saveControlImage(self, tmpimg=''):
         # don't save control images for RenderVsOtherOutput (Vs) tests, since
         # those control images belong to a different test result
-        if ('PAL_CONTROL_IMAGE' not in os.environ or
-                'Vs' in self._TestGroup):
+        if ('PAL_CONTROL_IMAGE' not in os.environ
+                or 'Vs' in self._TestGroup):
             return
         imgpath = self.controlImagePath()
         testdir = os.path.dirname(imgpath)
@@ -369,6 +360,12 @@ class TestQgsPalLabeling(unittest.TestCase):
         """Intended to be overridden in subclasses"""
         pass
 
+    def testSplitToLines(self):
+        self.assertEqual(QgsPalLabeling.splitToLines('', ''), [''])
+        self.assertEqual(QgsPalLabeling.splitToLines('abc def', ''), ['abc def'])
+        self.assertEqual(QgsPalLabeling.splitToLines('abc def', ' '), ['abc', 'def'])
+        self.assertEqual(QgsPalLabeling.splitToLines('abc\ndef', ' '), ['abc', 'def'])
+
 
 class TestPALConfig(TestQgsPalLabeling):
 
@@ -405,6 +402,20 @@ class TestPALConfig(TestQgsPalLabeling):
         self.layer.setLabeling(QgsVectorLayerSimpleLabeling(lyr))
         msg = '\nLayer labeling not activated, as reported by labelingEngine'
         self.assertTrue(QgsPalLabeling.staticWillUseLayer(self.layer), msg)
+
+        # also test for vector tile layer
+        tile_layer = QgsVectorTileLayer('x', 'y')
+        self.assertFalse(QgsPalLabeling.staticWillUseLayer(tile_layer))
+
+        st = QgsVectorTileBasicLabelingStyle()
+        st.setStyleName("st1")
+        st.setLayerName("place")
+        st.setFilterExpression("rank = 1 AND class = 'country'")
+        st.setGeometryType(QgsWkbTypes.PointGeometry)
+        labeling = QgsVectorTileBasicLabeling()
+        labeling.setStyles([st])
+        tile_layer.setLabeling(labeling)
+        self.assertTrue(QgsPalLabeling.staticWillUseLayer(tile_layer))
 
     def test_write_read_settings(self):
         # Verify written PAL settings are same when read from layer

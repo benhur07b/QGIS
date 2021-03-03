@@ -67,8 +67,8 @@ const QString GPX_KEY = QStringLiteral( "gpx" );
 const QString GPX_DESCRIPTION = QObject::tr( "GPS eXchange format provider" );
 
 
-QgsGPXProvider::QgsGPXProvider( const QString &uri )
-  : QgsVectorDataProvider( uri )
+QgsGPXProvider::QgsGPXProvider( const QString &uri, const ProviderOptions &options, QgsDataProvider::ReadFlags flags )
+  : QgsVectorDataProvider( uri, options, flags )
 {
   // we always use UTF-8
   setEncoding( QStringLiteral( "utf8" ) );
@@ -98,7 +98,7 @@ QgsGPXProvider::QgsGPXProvider( const QString &uri )
   mFileName = uri.left( fileNameEnd );
 
   // parse the file
-  data = QgsGPSData::getData( mFileName );
+  data = QgsGpsData::getData( mFileName );
   if ( !data )
     return;
 
@@ -108,7 +108,7 @@ QgsGPXProvider::QgsGPXProvider( const QString &uri )
 
 QgsGPXProvider::~QgsGPXProvider()
 {
-  QgsGPSData::releaseData( mFileName );
+  QgsGpsData::releaseData( mFileName );
 }
 
 QgsAbstractFeatureSource *QgsGPXProvider::featureSource() const
@@ -139,7 +139,7 @@ QgsRectangle QgsGPXProvider::extent() const
 
 
 /**
- * Return the feature type
+ * Returns the feature type
  */
 QgsWkbTypes::Type QgsGPXProvider::wkbType() const
 {
@@ -154,7 +154,7 @@ QgsWkbTypes::Type QgsGPXProvider::wkbType() const
 
 
 /**
- * Return the feature type
+ * Returns the feature type
  */
 long QgsGPXProvider::featureCount() const
 {
@@ -210,13 +210,12 @@ bool QgsGPXProvider::addFeatures( QgsFeatureList &flist, Flags flags )
 
 bool QgsGPXProvider::addFeature( QgsFeature &f, Flags )
 {
-  QByteArray wkb( f.geometry().exportToWkb() );
+  QByteArray wkb( f.geometry().asWkb() );
   const char *geo = wkb.constData();
   QgsWkbTypes::Type wkbType = f.geometry().wkbType();
   bool success = false;
-  QgsGPSObject *obj = nullptr;
+  QgsGpsObject *obj = nullptr;
   QgsAttributes attrs = f.attributes();
-  QgsAttributeMap::const_iterator it;
 
   // is it a waypoint?
   if ( mFeatureType == WaypointType && geo && wkbType == QgsWkbTypes::Point )
@@ -243,7 +242,7 @@ bool QgsGPXProvider::addFeature( QgsFeature &f, Flags )
       }
     }
 
-    QgsGPSData::WaypointIterator iter = data->addWaypoint( wpt );
+    QgsGpsData::WaypointIterator iter = data->addWaypoint( wpt );
     success = true;
     obj = &( *iter );
   }
@@ -290,7 +289,7 @@ bool QgsGPXProvider::addFeature( QgsFeature &f, Flags )
       }
     }
 
-    QgsGPSData::RouteIterator iter = data->addRoute( rte );
+    QgsGpsData::RouteIterator iter = data->addRoute( rte );
     success = true;
     obj = &( *iter );
   }
@@ -339,7 +338,7 @@ bool QgsGPXProvider::addFeature( QgsFeature &f, Flags )
     }
 
     trk.segments.push_back( trkseg );
-    QgsGPSData::TrackIterator iter = data->addTrack( trk );
+    QgsGpsData::TrackIterator iter = data->addTrack( trk );
     success = true;
     obj = &( *iter );
   }
@@ -402,7 +401,7 @@ bool QgsGPXProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_
   QgsChangedAttributesMap::const_iterator aIter = attr_map.begin();
   if ( mFeatureType == WaypointType )
   {
-    QgsGPSData::WaypointIterator wIter = data->waypointsBegin();
+    QgsGpsData::WaypointIterator wIter = data->waypointsBegin();
     for ( ; wIter != data->waypointsEnd() && aIter != attr_map.end(); ++wIter )
     {
       if ( wIter->id == aIter.key() )
@@ -414,7 +413,7 @@ bool QgsGPXProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_
   }
   else if ( mFeatureType == RouteType )
   {
-    QgsGPSData::RouteIterator rIter = data->routesBegin();
+    QgsGpsData::RouteIterator rIter = data->routesBegin();
     for ( ; rIter != data->routesEnd() && aIter != attr_map.end(); ++rIter )
     {
       if ( rIter->id == aIter.key() )
@@ -426,7 +425,7 @@ bool QgsGPXProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_
   }
   if ( mFeatureType == TrackType )
   {
-    QgsGPSData::TrackIterator tIter = data->tracksBegin();
+    QgsGpsData::TrackIterator tIter = data->tracksBegin();
     for ( ; tIter != data->tracksEnd() && aIter != attr_map.end(); ++tIter )
     {
       if ( tIter->id == aIter.key() )
@@ -447,11 +446,11 @@ bool QgsGPXProvider::changeAttributeValues( const QgsChangedAttributesMap &attr_
 }
 
 
-void QgsGPXProvider::changeAttributeValues( QgsGPSObject &obj, const QgsAttributeMap &attrs )
+void QgsGPXProvider::changeAttributeValues( QgsGpsObject &obj, const QgsAttributeMap &attrs )
 {
 
   QgsWaypoint *wpt = dynamic_cast<QgsWaypoint *>( &obj );
-  QgsGPSExtended *ext = dynamic_cast<QgsGPSExtended *>( &obj );
+  QgsGpsExtended *ext = dynamic_cast<QgsGpsExtended *>( &obj );
 
   QgsAttributeMap::const_iterator aIter = attrs.begin();
   for ( ; aIter != attrs.end(); ++aIter )
@@ -535,49 +534,21 @@ QString QgsGPXProvider::description() const
 
 QgsCoordinateReferenceSystem QgsGPXProvider::crs() const
 {
-  return QgsCoordinateReferenceSystem( GEOSRID, QgsCoordinateReferenceSystem::PostgisCrsId ); // use WGS84
+  return QgsCoordinateReferenceSystem( QStringLiteral( "EPSG:4326" ) );
 }
 
-
-
-
-
-
-/**
- * Class factory to return a pointer to a newly created
- * QgsGPXProvider object
- */
-QGISEXTERN QgsGPXProvider *classFactory( const QString *uri )
+QgsDataProvider *QgsGpxProviderMetadata::createProvider( const QString &uri, const QgsDataProvider::ProviderOptions &options, QgsDataProvider::ReadFlags flags )
 {
-  return new QgsGPXProvider( *uri );
+  return new QgsGPXProvider( uri, options, flags );
 }
 
 
-/**
- * Required key function (used to map the plugin to a data store type)
-*/
-QGISEXTERN QString providerKey()
+QgsGpxProviderMetadata::QgsGpxProviderMetadata():
+  QgsProviderMetadata( GPX_KEY, GPX_DESCRIPTION )
 {
-  return GPX_KEY;
 }
 
-
-/**
- * Required description function
- */
-QGISEXTERN QString description()
+QGISEXTERN QgsProviderMetadata *providerMetadataFactory()
 {
-  return GPX_DESCRIPTION;
+  return new QgsGpxProviderMetadata();
 }
-
-
-/**
- * Required isProvider function. Used to determine if this shared library
- * is a data provider plugin
- */
-QGISEXTERN bool isProvider()
-{
-  return true;
-}
-
-

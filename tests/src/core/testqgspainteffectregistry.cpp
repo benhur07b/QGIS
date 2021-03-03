@@ -28,13 +28,13 @@ class DummyPaintEffect : public QgsPaintEffect
 {
   public:
     DummyPaintEffect() = default;
-    virtual QString type() const override { return QStringLiteral( "Dummy" ); }
-    virtual QgsPaintEffect *clone() const override { return new DummyPaintEffect(); }
-    static QgsPaintEffect *create( const QgsStringMap & ) { return new DummyPaintEffect(); }
-    virtual QgsStringMap properties() const override { return QgsStringMap(); }
-    virtual void readProperties( const QgsStringMap &props ) override { Q_UNUSED( props ); }
+    QString type() const override { return QStringLiteral( "Dummy" ); }
+    QgsPaintEffect *clone() const override { return new DummyPaintEffect(); }
+    static QgsPaintEffect *create( const QVariantMap & ) { return new DummyPaintEffect(); }
+    QVariantMap properties() const override { return QVariantMap(); }
+    void readProperties( const QVariantMap &props ) override { Q_UNUSED( props ); }
   protected:
-    virtual void draw( QgsRenderContext &context ) override { Q_UNUSED( context ); }
+    void draw( QgsRenderContext &context ) override { Q_UNUSED( context ); }
 };
 
 class TestQgsPaintEffectRegistry : public QObject
@@ -86,7 +86,7 @@ void TestQgsPaintEffectRegistry::metadata()
   QCOMPARE( metadata.visibleName(), QString( "display name" ) );
 
   //test creating effect from metadata
-  QgsStringMap map;
+  QVariantMap map;
   QgsPaintEffect *effect = metadata.createPaintEffect( map );
   QVERIFY( effect );
   DummyPaintEffect *dummyEffect = dynamic_cast<DummyPaintEffect *>( effect );
@@ -174,6 +174,14 @@ void TestQgsPaintEffectRegistry::defaultStack()
   QgsPaintEffect *effect2 = new DummyPaintEffect();
   QVERIFY( !registry->isDefaultStack( effect2 ) );
   delete effect2;
+
+  effect = static_cast<QgsEffectStack *>( registry->defaultStack() );
+  static_cast< QgsDrawSourceEffect * >( effect->effect( 2 ) )->setOpacity( 0.5 );
+  QVERIFY( !registry->isDefaultStack( effect ) );
+  static_cast< QgsDrawSourceEffect * >( effect->effect( 2 ) )->setOpacity( 1.0 );
+  QVERIFY( registry->isDefaultStack( effect ) );
+  static_cast< QgsDrawSourceEffect * >( effect->effect( 2 ) )->setBlendMode( QPainter::CompositionMode_Lighten );
+  QVERIFY( !registry->isDefaultStack( effect ) );
 }
 
 QGSTEST_MAIN( TestQgsPaintEffectRegistry )

@@ -37,8 +37,11 @@
 #include <cmath>
 #include <QLinkedList>
 #include <geos_c.h>
+#include <memory>
+#include <vector>
 
 #include "qgis_core.h"
+#include "qgsrectangle.h"
 
 namespace pal
 {
@@ -49,7 +52,7 @@ namespace pal
 
   class PointSet;
 
-  typedef struct _cHullBox
+  struct CHullBox
   {
     double x[4];
     double y[4];
@@ -58,10 +61,11 @@ namespace pal
 
     double width;
     double length;
-  } CHullBox;
+  };
 
   /**
    * \class pal::PointSet
+   * \brief The underlying raw pal geometry class.
    * \note not available in Python bindings
    * \ingroup core
    */
@@ -78,13 +82,21 @@ namespace pal
       PointSet( int nbPoints, double *x, double *y );
       virtual ~PointSet();
 
-      PointSet *extractShape( int nbPtSh, int imin, int imax, int fps, int fpe, double fptx, double fpty );
+      /**
+       * Does... something completely inscrutable.
+       */
+      std::unique_ptr< PointSet > extractShape( int nbPtSh, int imin, int imax, int fps, int fpe, double fptx, double fpty );
+
+      /**
+       * Returns a copy of the point set.
+       */
+      std::unique_ptr< PointSet > clone() const;
 
       /**
        * Tests whether point set contains a specified point.
        * \param x x-coordinate of point
        * \param y y-coordinate of point
-       * \returns true if point set contains a specified point
+       * \returns TRUE if point set contains a specified point
        */
       bool containsPoint( double x, double y ) const;
 
@@ -95,18 +107,32 @@ namespace pal
        * \param width label width
        * \param height label height
        * \param alpha label angle
-       * \returns true if point set completely contains candidate label
+       * \returns TRUE if point set completely contains candidate label
        */
       bool containsLabelCandidate( double x, double y, double width, double height, double alpha = 0 ) const;
 
-      CHullBox *compute_chull_bbox();
+      /**
+       * Computes a con???? hull. Maybe convex, maybe concave. The person who wrote this
+       * had no care for anyone else ever reading their code.
+       */
+      CHullBox compute_chull_bbox();
 
       /**
        * Split a concave shape into several convex shapes.
        */
-      static void splitPolygons( QLinkedList<PointSet *> &shapes_toProcess,
-                                 QLinkedList<PointSet *> &shapes_final,
+      static void splitPolygons( QLinkedList<PointSet *> &inputShapes,
+                                 QLinkedList<PointSet *> &outputShapes,
                                  double xrm, double yrm );
+
+      /**
+       * Extends linestrings by the specified amount at the start and end of the line,
+       * by extending the existing lines following the same direction as the original line
+       * start or end.
+       *
+       * The \a smoothDistance argument specifies the distance over which to smooth the direction
+       * of the line at its start and end points.
+       */
+      void extendLineByDistance( double startDistance, double endDistance, double smoothDistance );
 
       /**
        * Returns the squared minimum distance between the point set geometry and the point (px,py)
@@ -123,21 +149,27 @@ namespace pal
 
       int getGeosType() const { return type; }
 
-      void getBoundingBox( double min[2], double max[2] ) const
+      /**
+       * Returns the point set bounding box.
+       */
+      QgsRectangle boundingBox() const
       {
-        min[0] = xmin;
-        min[1] = ymin;
-        max[0] = xmax;
-        max[1] = ymax;
+        return QgsRectangle( xmin, ymin, xmax, ymax );
       }
 
-      //! Returns NULL if this isn't a hole. Otherwise returns pointer to parent pointset.
-      PointSet *getHoleOf() { return holeOf; }
+      /**
+       * Returns TRUE if the bounding box of this pointset intersects the bounding box
+       * of another pointset.
+       */
+      bool boundingBoxIntersects( const PointSet *other ) const;
+
+      //! Returns NULLPTR if this isn't a hole. Otherwise returns pointer to parent pointset.
+      PointSet *getHoleOf() const { return holeOf; }
 
       int getNumPoints() const { return nbPoints; }
 
       /**
-       * Get a point a set distance along a line geometry.
+       * Gets a point a set distance along a line geometry.
        * \param d array of distances between points
        * \param ad cumulative total distance from pt0 to each point (ad0 = pt0->pt0)
        * \param dl distance to traverse along line
@@ -156,21 +188,35 @@ namespace pal
        */
       double length() const;
 
+      /**
+       * Returns area of polygon geometry.
+       */
+      double area() const;
+
+      /**
+       * Returns TRUE if pointset is closed.
+       */
+      bool isClosed() const;
+
+      int nbPoints;
+      std::vector< double > x;
+      std::vector< double > y;   // points order is counterclockwise
+
     protected:
       mutable GEOSGeometry *mGeos = nullptr;
       mutable bool mOwnsGeom = false;
 
-      int nbPoints;
-      double *x = nullptr;
-      double *y;   // points order is counterclockwise
-
       int *cHull = nullptr;
-      int cHullSize;
+      int cHullSize = 0;
 
       int type;
 
       PointSet *holeOf = nullptr;
       PointSet *parent = nullptr;
+
+      mutable double mArea = -1;
+      mutable double mLength = -1;
+
 
       PointSet( double x, double y );
 
@@ -181,14 +227,17 @@ namespace pal
       const GEOSPreparedGeometry *preparedGeom() const;
       void invalidateGeos();
 
-      double xmin = DBL_MAX;
-      double xmax = -DBL_MAX;
-      double ymin = DBL_MAX;
-      double ymax = -DBL_MAX;
+      double xmin = std::numeric_limits<double>::max();
+      double xmax = std::numeric_limits<double>::lowest();
+      double ymin = std::numeric_limits<double>::max();
+      double ymax = std::numeric_limits<double>::lowest();
 
     private:
 
+      mutable const GEOSPreparedGeometry *mGeosPreparedBoundary = nullptr;
       mutable const GEOSPreparedGeometry *mPreparedGeom = nullptr;
+
+      PointSet &operator= ( const PointSet & ) = delete;
 
   };
 

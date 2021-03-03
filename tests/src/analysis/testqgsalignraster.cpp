@@ -218,7 +218,7 @@ class TestAlignRaster : public QObject
       QgsAlignRaster::List rasters;
       rasters << QgsAlignRaster::Item( SRC_FILE, tmpFile );
       align.setRasters( rasters );
-      align.setParametersFromRaster( SRC_FILE, destCRS.toWkt() );
+      align.setParametersFromRaster( SRC_FILE, destCRS.toWkt( QgsCoordinateReferenceSystem::WKT_PREFERRED ) );
       bool res = align.run();
       QVERIFY( res );
 
@@ -233,23 +233,6 @@ class TestAlignRaster : public QObject
       QGSCOMPARENEAR( out.gridOffset().x(), 4327, 1 ); // ~ 4327.168434
       QGSCOMPARENEAR( out.gridOffset().y(), 637, 1 ); // ~ 637.007990
       QCOMPARE( out.identify( 1308405, -746611 ), 10. );
-    }
-
-    void testInvalidReprojection()
-    {
-      QString tmpFile( _tempFile( QStringLiteral( "reproject-invalid" ) ) );
-
-      // reprojection to British National Grid with raster in Jakarta area clearly cannot work
-      QgsCoordinateReferenceSystem destCRS( QStringLiteral( "EPSG:27700" ) );
-      QVERIFY( destCRS.isValid() );
-
-      QgsAlignRaster align;
-      QgsAlignRaster::List rasters;
-      rasters << QgsAlignRaster::Item( SRC_FILE, tmpFile );
-      align.setRasters( rasters );
-      align.setParametersFromRaster( SRC_FILE, destCRS.toWkt() );
-      bool res = align.run();
-      QVERIFY( !res );
     }
 
     void testSuggestedReferenceLayer()

@@ -27,6 +27,11 @@ class TestQgsRectangle: public QObject
   private slots:
     void isEmpty();
     void fromWkt();
+    void constructor();
+    void constructorTwoPoints();
+    void set();
+    void setXY();
+    void fromCenter();
     void manipulate();
     void regression6194();
     void operators();
@@ -37,7 +42,12 @@ class TestQgsRectangle: public QObject
     void include();
     void buffered();
     void isFinite();
+    void combine();
     void dataStream();
+    void scale();
+    void snappedToGrid();
+    void distanceToPoint();
+    void center();
 };
 
 void TestQgsRectangle::isEmpty()
@@ -76,6 +86,110 @@ void TestQgsRectangle::fromWkt()
   QVERIFY( QgsRectangle::fromWkt( QStringLiteral( "POLYGON((0 0,1 0,1 1,0 1))" ) ).isEmpty() );
 }
 
+void TestQgsRectangle::constructor()
+{
+  QgsRectangle r( 1, 2, 13, 14 );
+  QCOMPARE( r.xMinimum(), 1.0 );
+  QCOMPARE( r.xMaximum(), 13.0 );
+  QCOMPARE( r.yMinimum(), 2.0 );
+  QCOMPARE( r.yMaximum(), 14.0 );
+
+  // auto normalized
+  QgsRectangle r2( 13, 14, 1, 2 );
+  QCOMPARE( r2.xMinimum(), 1.0 );
+  QCOMPARE( r2.xMaximum(), 13.0 );
+  QCOMPARE( r2.yMinimum(), 2.0 );
+  QCOMPARE( r2.yMaximum(), 14.0 );
+
+  // no normalization
+  QgsRectangle r3( 13, 14, 1, 2, false );
+  QCOMPARE( r3.xMinimum(), 13.0 );
+  QCOMPARE( r3.xMaximum(), 1.0 );
+  QCOMPARE( r3.yMinimum(), 14.0 );
+  QCOMPARE( r3.yMaximum(), 2.0 );
+}
+
+void TestQgsRectangle::constructorTwoPoints()
+{
+  QgsRectangle r( QgsPointXY( 1, 2 ), QgsPointXY( 13, 14 ) );
+  QCOMPARE( r.xMinimum(), 1.0 );
+  QCOMPARE( r.xMaximum(), 13.0 );
+  QCOMPARE( r.yMinimum(), 2.0 );
+  QCOMPARE( r.yMaximum(), 14.0 );
+
+  // auto normalized
+  QgsRectangle r2( QgsPointXY( 13, 14 ), QgsPointXY( 1, 2 ) );
+  QCOMPARE( r2.xMinimum(), 1.0 );
+  QCOMPARE( r2.xMaximum(), 13.0 );
+  QCOMPARE( r2.yMinimum(), 2.0 );
+  QCOMPARE( r2.yMaximum(), 14.0 );
+
+  // no normalization
+  QgsRectangle r3( QgsPointXY( 13, 14 ), QgsPointXY( 1, 2 ), false );
+  QCOMPARE( r3.xMinimum(), 13.0 );
+  QCOMPARE( r3.xMaximum(), 1.0 );
+  QCOMPARE( r3.yMinimum(), 14.0 );
+  QCOMPARE( r3.yMaximum(), 2.0 );
+}
+
+void TestQgsRectangle::set()
+{
+  QgsRectangle r( QgsPointXY( 1, 2 ), QgsPointXY( 13, 14 ) );
+  // auto normalized
+  r.set( QgsPointXY( 13, 14 ), QgsPointXY( 1, 2 ) );
+  QCOMPARE( r.xMinimum(), 1.0 );
+  QCOMPARE( r.xMaximum(), 13.0 );
+  QCOMPARE( r.yMinimum(), 2.0 );
+  QCOMPARE( r.yMaximum(), 14.0 );
+
+  // no normalization
+  r.set( QgsPointXY( 13, 14 ), QgsPointXY( 1, 2 ), false );
+  QCOMPARE( r.xMinimum(), 13.0 );
+  QCOMPARE( r.xMaximum(), 1.0 );
+  QCOMPARE( r.yMinimum(), 14.0 );
+  QCOMPARE( r.yMaximum(), 2.0 );
+}
+
+void TestQgsRectangle::setXY()
+{
+  QgsRectangle r( QgsPointXY( 111, 112 ), QgsPointXY( 113, 114 ) );
+  // auto normalized
+  r.set( 13, 14, 1, 2 );
+  QCOMPARE( r.xMinimum(), 1.0 );
+  QCOMPARE( r.xMaximum(), 13.0 );
+  QCOMPARE( r.yMinimum(), 2.0 );
+  QCOMPARE( r.yMaximum(), 14.0 );
+
+  // no normalization
+  r.set( 13, 14, 1, 2, false );
+  QCOMPARE( r.xMinimum(), 13.0 );
+  QCOMPARE( r.xMaximum(), 1.0 );
+  QCOMPARE( r.yMinimum(), 14.0 );
+  QCOMPARE( r.yMaximum(), 2.0 );
+}
+
+void TestQgsRectangle::fromCenter()
+{
+  QgsRectangle rect = QgsRectangle::fromCenterAndSize( QgsPointXY( 12, 21 ), 20, 40 );
+  QVERIFY( ! rect.isEmpty() );
+  QCOMPARE( rect.xMinimum(), 2.0 );
+  QCOMPARE( rect.yMinimum(), 1.0 );
+  QCOMPARE( rect.xMaximum(), 22.0 );
+  QCOMPARE( rect.yMaximum(), 41.0 );
+
+  rect = QgsRectangle::fromCenterAndSize( QgsPointXY( 12, 21 ), 0, 40 );
+  QCOMPARE( rect.xMinimum(), 12.0 );
+  QCOMPARE( rect.yMinimum(), 1.0 );
+  QCOMPARE( rect.xMaximum(), 12.0 );
+  QCOMPARE( rect.yMaximum(), 41.0 );
+
+  rect = QgsRectangle::fromCenterAndSize( QgsPointXY( 12, 21 ), 20, 0 );
+  QCOMPARE( rect.xMinimum(), 2.0 );
+  QCOMPARE( rect.yMinimum(), 21.0 );
+  QCOMPARE( rect.xMaximum(), 22.0 );
+  QCOMPARE( rect.yMaximum(), 21.0 );
+}
+
 void TestQgsRectangle::manipulate()
 {
   // Set up two intersecting rectangles and normalize
@@ -85,7 +199,7 @@ void TestQgsRectangle::manipulate()
   // Check intersection
   QVERIFY( rect2.intersects( rect1 ) );
   // Create intersection
-  rect3 = rect2.intersect( &rect1 );
+  rect3 = rect2.intersect( rect1 );
   // Check width and height (real numbers, careful)
   QCOMPARE( rect3.width(), 1.0 );
   QCOMPARE( rect3.height(), 1.0 );
@@ -290,6 +404,25 @@ void TestQgsRectangle::isFinite()
   QVERIFY( !QgsRectangle( 1, 2, 3, std::numeric_limits<double>::quiet_NaN() ).isFinite() );
 }
 
+void TestQgsRectangle::combine()
+{
+  QgsRectangle rect;
+  // combine extent of null rectangle with valid rectangle
+  rect.combineExtentWith( QgsRectangle( 1, 2, 3, 4 ) );
+  QCOMPARE( rect.xMinimum(), 1.0 );
+  QCOMPARE( rect.yMinimum(), 2.0 );
+  QCOMPARE( rect.xMaximum(), 3.0 );
+  QCOMPARE( rect.yMaximum(), 4.0 );
+
+  // combine extent of valid rectangle with null rectangle
+  rect = QgsRectangle( 1, 2, 3, 4 );
+  rect.combineExtentWith( QgsRectangle() );
+  QCOMPARE( rect.xMinimum(), 1.0 );
+  QCOMPARE( rect.yMinimum(), 2.0 );
+  QCOMPARE( rect.xMaximum(), 3.0 );
+  QCOMPARE( rect.yMaximum(), 4.0 );
+}
+
 void TestQgsRectangle::dataStream()
 {
   QgsRectangle original( 10.1, 20.2, 110.3, 220.4 );
@@ -303,6 +436,76 @@ void TestQgsRectangle::dataStream()
   ds >> result;
 
   QCOMPARE( result, original );
+}
+
+void TestQgsRectangle::scale()
+{
+  QgsRectangle rect( 10, 20, 30, 60 );
+  rect.scale( 2 );
+  QCOMPARE( rect, QgsRectangle( 0, 0, 40, 80 ) );
+  rect.scale( .5 );
+  QCOMPARE( rect, QgsRectangle( 10, 20, 30, 60 ) );
+  QgsPointXY center( 10, 20 );
+
+  // with center
+  rect.scale( 2, &center );
+  QCOMPARE( rect, QgsRectangle( -10, -20, 30, 60 ) );
+
+  // scaled
+  QCOMPARE( rect, QgsRectangle( 10, 20, 30, 60 ).scaled( 2, &center ) );
+}
+
+void TestQgsRectangle::snappedToGrid()
+{
+  QgsRectangle original( 10.123, 20.333, 10.788, 20.788 );
+  QgsRectangle snapped = original.snappedToGrid( 0.1 );
+
+  QgsRectangle control( 10.1, 20.3, 10.8, 20.8 );
+
+  QVERIFY( qgsDoubleNear( snapped.xMinimum(), control.xMinimum(), 0.000001 ) );
+  QVERIFY( qgsDoubleNear( snapped.xMaximum(), control.xMaximum(), 0.000001 ) );
+  QVERIFY( qgsDoubleNear( snapped.yMinimum(), control.yMinimum(), 0.000001 ) );
+  QVERIFY( qgsDoubleNear( snapped.yMaximum(), control.yMaximum(), 0.000001 ) );
+
+  QCOMPARE( QgsRectangle().snappedToGrid( 0.1 ), QgsRectangle() );
+}
+
+void TestQgsRectangle::distanceToPoint()
+{
+  QgsRectangle rect( 10, 100, 20, 110 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 10, 100 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 20, 100 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 15, 100 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 10, 110 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 20, 110 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 15, 110 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 10, 105 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 20, 100 ) ), 0.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 0, 100 ) ), 10.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 35, 100 ) ), 15.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 15, 95 ) ), 5.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 15, 120 ) ), 10.0, 0.000000001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 5, 95 ) ), 7.071068, 0.00001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 25, 95 ) ), 7.071068, 0.00001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 5, 115 ) ), 7.071068, 0.00001 );
+  QGSCOMPARENEAR( rect.distance( QgsPointXY( 25, 115 ) ), 7.071068, 0.00001 );
+}
+
+void TestQgsRectangle::center()
+{
+  QgsRectangle rect( 10, 100, 20, 110 );
+  QCOMPARE( rect.center().x(), 15.0 );
+  QCOMPARE( rect.center().y(), 105.0 );
+  rect = QgsRectangle( 10, 100, 10, 100 );
+  QCOMPARE( rect.center().x(), 10.0 );
+  QCOMPARE( rect.center().y(), 100.0 );
+  rect = QgsRectangle( -10, -100, 10, 100 );
+  QCOMPARE( rect.center().x(), 0.0 );
+  QCOMPARE( rect.center().y(), 0.0 );
+  // a "maximal" rect
+  rect = QgsRectangle( std::numeric_limits<double>::lowest(), std::numeric_limits<double>::lowest(), std::numeric_limits<double>::max(), std::numeric_limits<double>::max() );
+  QCOMPARE( rect.center().x(), 0.0 );
+  QCOMPARE( rect.center().y(), 0.0 );
 }
 
 QGSTEST_MAIN( TestQgsRectangle )

@@ -18,6 +18,13 @@
 #ifndef QGSMAPCANVASANNOTATIONITEM_H
 #define QGSMAPCANVASANNOTATIONITEM_H
 
+#ifdef SIP_RUN
+% ModuleHeaderCode
+// For ConvertToSubClassCode.
+#include <qgsmapcanvasannotationitem.h>
+% End
+#endif
+
 #include "qgsmapcanvasitem.h"
 #include "qgis_gui.h"
 
@@ -26,12 +33,21 @@ class QgsAnnotation;
 /**
  * \class QgsMapCanvasAnnotationItem
  * \ingroup gui
- * An interactive map canvas item which displays a QgsAnnotation.
+ * \brief An interactive map canvas item which displays a QgsAnnotation.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsMapCanvasAnnotationItem: public QObject, public QgsMapCanvasItem
 {
     Q_OBJECT
+
+#ifdef SIP_RUN
+    SIP_CONVERT_TO_SUBCLASS_CODE
+    if ( dynamic_cast<QgsMapCanvasAnnotationItem *>( sipCpp ) )
+      sipType = sipType_QgsMapCanvasAnnotationItem;
+    else
+      sipType = nullptr;
+    SIP_END
+#endif
 
   public:
 
@@ -92,12 +108,14 @@ class GUI_EXPORT QgsMapCanvasAnnotationItem: public QObject, public QgsMapCanvas
     //! Sets a feature for the current map position
     void setFeatureForMapPosition();
 
+    void annotationDeleted();
+
   private:
 
     //! Draws selection handles around the item
     void drawSelectionBoxes( QPainter *p ) const;
 
-    //! Returns the symbol size scaled in (mapcanvas) pixels. Used for the counding rect calculation
+    //! Returns the symbol size scaled in (mapcanvas) pixels. Used for the counting rect calculation
     double scaledSymbolSize() const;
 
     QgsAnnotation *mAnnotation = nullptr;

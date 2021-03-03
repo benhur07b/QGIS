@@ -1,5 +1,6 @@
+include(CopyResources)
 
-SET (SVG_DIRS
+set (SVG_DIRS
  accommodation
  amenity
  arrows
@@ -14,6 +15,7 @@ SET (SVG_DIRS
  health
  icon
  landmark
+ logos
  money
  religion
  services
@@ -24,13 +26,13 @@ SET (SVG_DIRS
  transport
  wind_roses
 )
-  
 
-FOREACH (SVG_DIR ${SVG_DIRS})
+foreach (SVG_DIR ${SVG_DIRS})
+  file(GLOB_RECURSE IMAGES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} ${SVG_DIR}/*.svg)
+  set(SVG_FILES ${SVG_FILES} ${IMAGES})
+endforeach (SVG_DIR)
 
-  FILE (GLOB IMAGES ${SVG_DIR}/*.svg)
+ADD_QGIS_RESOURCES("${CMAKE_CURRENT_SOURCE_DIR}" svg DEST_SVG_FILES "${SVG_FILES}")
 
-  INSTALL (FILES ${IMAGES}
-           DESTINATION ${QGIS_DATA_DIR}/svg/${SVG_DIR})
+add_custom_target(svg ALL DEPENDS ${DEST_SVG_FILES})
 
-ENDFOREACH (SVG_DIR)

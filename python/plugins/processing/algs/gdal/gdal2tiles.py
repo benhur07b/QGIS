@@ -21,19 +21,15 @@ __author__ = 'Médéric Ribreux'
 __date__ = 'January 2016'
 __copyright__ = '(C) 2016, Médéric Ribreux'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-
-from qgis.core import (QgsProcessingParameterDefinition,
+from qgis.core import (QgsProcessingAlgorithm,
+                       QgsProcessingException,
+                       QgsProcessingParameterDefinition,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterCrs,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterString,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterBoolean,
-                       QgsProcessingOutputFolder,
                        QgsProcessingParameterFolderDestination)
 from processing.algs.gdal.GdalAlgorithm import GdalAlgorithm
 from processing.algs.gdal.GdalUtils import GdalUtils
@@ -41,7 +37,6 @@ from processing.tools.system import isWindows
 
 
 class gdal2tiles(GdalAlgorithm):
-
     INPUT = 'INPUT'
     PROFILE = 'PROFILE'
     RESAMPLING = 'RESAMPLING'
@@ -103,46 +98,45 @@ class gdal2tiles(GdalAlgorithm):
                                                        self.tr('Copyright of the map'),
                                                        optional=True))
 
-        params = []
-        params.append(QgsProcessingParameterEnum(self.RESAMPLING,
-                                                 self.tr('Resampling method'),
-                                                 options=[i[0] for i in self.methods],
-                                                 allowMultiple=False,
-                                                 defaultValue=0))
-        params.append(QgsProcessingParameterCrs(self.SOURCE_CRS,
-                                                self.tr('The spatial reference system used for the source input data'),
-                                                optional=True))
-        params.append(QgsProcessingParameterNumber(self.NODATA,
-                                                   self.tr('Transparency value to assign to the input data'),
-                                                   type=QgsProcessingParameterNumber.Double,
-                                                   defaultValue=0,
-                                                   optional=True))
-        params.append(QgsProcessingParameterString(self.URL,
-                                                   self.tr('URL address where the generated tiles are going to be published'),
-                                                   optional=True))
-        params.append(QgsProcessingParameterString(self.GOOGLE_KEY,
-                                                   self.tr('Google Maps API key (http://code.google.com/apis/maps/signup.html)'),
-                                                   optional=True))
-        params.append(QgsProcessingParameterString(self.BING_KEY,
-                                                   self.tr('Bing Maps API key (https://www.bingmapsportal.com/)'),
-                                                   optional=True))
-        params.append(QgsProcessingParameterBoolean(self.RESUME,
-                                                    self.tr('Generate only missing files'),
-                                                    defaultValue=False))
-        params.append(QgsProcessingParameterBoolean(self.KML,
-                                                    self.tr('Generate KML for Google Earth'),
-                                                    defaultValue=False))
-        params.append(QgsProcessingParameterBoolean(self.NO_KML,
-                                                    self.tr('Avoid automatic generation of KML files for EPSG:4326'),
-                                                    defaultValue=False))
+        params = [
+            QgsProcessingParameterEnum(self.RESAMPLING,
+                                       self.tr('Resampling method'),
+                                       options=[i[0] for i in self.methods],
+                                       allowMultiple=False,
+                                       defaultValue=0),
+            QgsProcessingParameterCrs(self.SOURCE_CRS,
+                                      self.tr('The spatial reference system used for the source input data'),
+                                      optional=True),
+            QgsProcessingParameterNumber(self.NODATA,
+                                         self.tr('Transparency value to assign to the input data'),
+                                         type=QgsProcessingParameterNumber.Double,
+                                         defaultValue=0,
+                                         optional=True),
+            QgsProcessingParameterString(self.URL,
+                                         self.tr('URL address where the generated tiles are going to be published'),
+                                         optional=True),
+            QgsProcessingParameterString(self.GOOGLE_KEY,
+                                         self.tr('Google Maps API key (http://code.google.com/apis/maps/signup.html)'),
+                                         optional=True),
+            QgsProcessingParameterString(self.BING_KEY,
+                                         self.tr('Bing Maps API key (https://www.bingmapsportal.com/)'),
+                                         optional=True),
+            QgsProcessingParameterBoolean(self.RESUME,
+                                          self.tr('Generate only missing files'),
+                                          defaultValue=False),
+            QgsProcessingParameterBoolean(self.KML,
+                                          self.tr('Generate KML for Google Earth'),
+                                          defaultValue=False),
+            QgsProcessingParameterBoolean(self.NO_KML,
+                                          self.tr('Avoid automatic generation of KML files for EPSG:4326'),
+                                          defaultValue=False)
+        ]
         for param in params:
             param.setFlags(param.flags() | QgsProcessingParameterDefinition.FlagAdvanced)
             self.addParameter(param)
 
         self.addParameter(QgsProcessingParameterFolderDestination(self.OUTPUT,
                                                                   self.tr('Output directory')))
-
-        self.addOutput(QgsProcessingOutputFolder(self.OUTPUT, self.tr('Output directory')))
 
     def name(self):
         return 'gdal2tiles'
@@ -153,11 +147,20 @@ class gdal2tiles(GdalAlgorithm):
     def group(self):
         return self.tr('Raster miscellaneous')
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        arguments = []
+    def groupId(self):
+        return 'rastermiscellaneous'
 
-        arguments.append('-p')
-        arguments.append(self.profiles[self.parameterAsEnum(parameters, self.PROFILE, context)][1])
+    def commandName(self):
+        return 'gdal2tiles'
+
+    def flags(self):
+        return super().flags() | QgsProcessingAlgorithm.FlagDisplayNameIsLiteral
+
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
+        arguments = [
+            '-p',
+            self.profiles[self.parameterAsEnum(parameters, self.PROFILE, context)][1],
+        ]
 
         zoom = self.parameterAsString(parameters, self.ZOOM, context)
         if zoom:
@@ -183,10 +186,10 @@ class gdal2tiles(GdalAlgorithm):
         crs = self.parameterAsCrs(parameters, self.SOURCE_CRS, context)
         if crs.isValid():
             arguments.append('-s')
-            arguments.append(crs.authid())
+            arguments.append(GdalUtils.gdal_crs_string(crs))
 
-        nodata = self.parameterAsDouble(parameters, self.NODATA, context)
-        if nodata:
+        if self.NODATA in parameters and parameters[self.NODATA] is not None:
+            nodata = self.parameterAsDouble(parameters, self.NODATA, context)
             arguments.append('-a')
             arguments.append(str(nodata))
 
@@ -205,25 +208,20 @@ class gdal2tiles(GdalAlgorithm):
             arguments.append('-b')
             arguments.append(key)
 
-        if self.parameterAsBool(parameters, self.RESUME, context):
+        if self.parameterAsBoolean(parameters, self.RESUME, context):
             arguments.append('-e')
 
-        if self.parameterAsBool(parameters, self.KML, context):
+        if self.parameterAsBoolean(parameters, self.KML, context):
             arguments.append('-k')
 
-        if self.parameterAsBool(parameters, self.NO_KML, context):
+        if self.parameterAsBoolean(parameters, self.NO_KML, context):
             arguments.append('-n')
 
         inLayer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if inLayer is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
+
         arguments.append(inLayer.source())
         arguments.append(self.parameterAsString(parameters, self.OUTPUT, context))
 
-        commands = []
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'gdal2tiles.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['gdal2tiles.py',
-                        GdalUtils.escapeAndJoin(arguments)]
-
-        return commands
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

@@ -23,8 +23,8 @@ class QgsVectorLayer;
 
 #define SIP_NO_FILE
 
-#include "qgsfeature.h"
 #include "qgsgeometry.h"
+#include "qgsfeatureid.h"
 #include <QMap>
 #include <memory>
 
@@ -32,8 +32,8 @@ class QgsVectorLayer;
  * \ingroup core
  * \class QgsGeometryEditUtils
  * \brief Convenience functions for geometry editing
- * \since QGIS 2.10
  * \note not available in Python bindings
+ * \since QGIS 2.10
  */
 class QgsGeometryEditUtils
 {
@@ -57,13 +57,13 @@ class QgsGeometryEditUtils
 
     /**
      * Deletes a ring from a geometry.
-     * \returns true if delete was successful
+     * \returns TRUE if delete was successful
      */
     static bool deleteRing( QgsAbstractGeometry *geom, int ringNum, int partNum = 0 );
 
     /**
      * Deletes a part from a geometry.
-     * \returns true if delete was successful
+     * \returns TRUE if delete was successful
      */
     static bool deletePart( QgsAbstractGeometry *geom, int partNum );
 
@@ -71,10 +71,12 @@ class QgsGeometryEditUtils
      * Alters a geometry so that it avoids intersections with features from all open vector layers.
      * \param geom geometry to alter
      * \param avoidIntersectionsLayers list of layers to check for intersections
+     * \param haveInvalidGeometry returns true if at least one geometry intersected is invalid. In this case, the algorithm may not work and return the same geometry as the input. You must fix your intersecting geometries.
      * \param ignoreFeatures map of layer to feature id of features to ignore
      */
     static std::unique_ptr< QgsAbstractGeometry > avoidIntersections( const QgsAbstractGeometry &geom,
         const QList<QgsVectorLayer *> &avoidIntersectionsLayers,
+        bool &haveInvalidGeometry,
         const QHash<QgsVectorLayer *, QSet<QgsFeatureId> > &ignoreFeatures = ( QHash<QgsVectorLayer *, QSet<QgsFeatureId> >() ) );
 };
 

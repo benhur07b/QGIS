@@ -9,8 +9,6 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Matthias Kuhn'
 __date__ = '07/10/2013'
 __copyright__ = 'Copyright 2013, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
 import qgis  # NOQA
 
@@ -20,6 +18,7 @@ from qgis.core import (QgsVectorLayer,
                        QgsGeometry,
                        QgsPointXY,
                        QgsAttributeEditorElement,
+                       QgsAttributeEditorRelation,
                        QgsProject
                        )
 from utilities import unitTestDataPath
@@ -34,15 +33,15 @@ def createReferencingLayer():
                            "referencinglayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["test1", 123])
     f1.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(100, 200)))
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["test2", 123])
     f2.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(101, 201)))
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 124])
     f3.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(101, 201)))
     assert pr.addFeatures([f1, f2, f3])
@@ -55,15 +54,15 @@ def createReferencedLayer():
         "referencedlayer", "memory")
     pr = layer.dataProvider()
     f1 = QgsFeature()
-    f1.setFields(layer.pendingFields())
+    f1.setFields(layer.fields())
     f1.setAttributes(["foo", 123, 321])
     f1.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(1, 1)))
     f2 = QgsFeature()
-    f2.setFields(layer.pendingFields())
+    f2.setFields(layer.fields())
     f2.setAttributes(["bar", 456, 654])
     f2.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(2, 2)))
     f3 = QgsFeature()
-    f3.setFields(layer.pendingFields())
+    f3.setFields(layer.fields())
     f3.setAttributes(["foobar'bar", 789, 554])
     f3.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(2, 3)))
     assert pr.addFeatures([f1, f2, f3])
@@ -86,22 +85,22 @@ class TestQgsRelation(unittest.TestCase):
 
     def test_isValid(self):
         rel = QgsRelation()
-        assert not rel.isValid()
+        self.assertFalse(rel.isValid())
 
         rel.setId('rel1')
-        assert not rel.isValid()
+        self.assertFalse(rel.isValid())
 
         rel.setName('Relation Number One')
-        assert not rel.isValid()
+        self.assertFalse(rel.isValid())
 
         rel.setReferencingLayer(self.referencingLayer.id())
-        assert not rel.isValid()
+        self.assertFalse(rel.isValid())
 
         rel.setReferencedLayer(self.referencedLayer.id())
-        assert not rel.isValid()
+        self.assertFalse(rel.isValid())
 
         rel.addFieldPair('foreignkey', 'y')
-        assert rel.isValid()
+        self.assertTrue(rel.isValid())
 
     def test_getRelatedFeatures(self):
         rel = QgsRelation()
@@ -117,7 +116,7 @@ class TestQgsRelation(unittest.TestCase):
         self.assertEqual(rel.getRelatedFeaturesFilter(feat), '"foreignkey" = 123')
 
         it = rel.getRelatedFeatures(feat)
-        assert [a.attributes() for a in it] == [['test1', 123], ['test2', 123]]
+        self.assertEqual([a.attributes() for a in it], [['test1', 123], ['test2', 123]])
 
     def test_getRelatedFeaturesWithQuote(self):
         rel = QgsRelation()
@@ -131,7 +130,7 @@ class TestQgsRelation(unittest.TestCase):
         feat = self.referencedLayer.getFeature(3)
 
         it = rel.getRelatedFeatures(feat)
-        assert next(it).attributes() == ["foobar'bar", 124]
+        self.assertEqual(next(it).attributes(), ["foobar'bar", 124])
 
     def test_getReferencedFeature(self):
         rel = QgsRelation()
@@ -145,8 +144,23 @@ class TestQgsRelation(unittest.TestCase):
 
         f = rel.getReferencedFeature(feat)
 
-        assert f.isValid()
-        assert f[0] == 'foo'
+        self.assertTrue(f.isValid())
+        self.assertEqual(f[0], 'foo')
+
+        # try mixing up the field pair field name cases -- we should be tolerant to this
+        rel2 = QgsRelation()
+        rel2.setId('rel1')
+        rel2.setName('Relation Number One')
+        rel2.setReferencingLayer(self.referencingLayer.id())
+        rel2.setReferencedLayer(self.referencedLayer.id())
+        rel2.addFieldPair('ForeignKey', 'Y')
+
+        feat = next(self.referencingLayer.getFeatures())
+
+        f = rel2.getReferencedFeature(feat)
+
+        self.assertTrue(f.isValid())
+        self.assertEqual(f[0], 'foo')
 
     def test_fieldPairs(self):
         rel = QgsRelation()
@@ -157,12 +171,15 @@ class TestQgsRelation(unittest.TestCase):
         rel.setReferencedLayer(self.referencedLayer.id())
         rel.addFieldPair('foreignkey', 'y')
 
-        assert (rel.fieldPairs() == {'foreignkey': 'y'})
+        self.assertEqual(rel.fieldPairs(), {'foreignkey': 'y'})
 
     def testValidRelationAfterChangingStyle(self):
         # load project
         myPath = os.path.join(unitTestDataPath(), 'relations.qgs')
-        QgsProject.instance().read(myPath)
+        p = QgsProject.instance()
+        self.assertTrue(p.read(myPath))
+        for l in p.mapLayers().values():
+            self.assertTrue(l.isValid())
 
         # get referenced layer
         relations = QgsProject.instance().relationManager().relations()
@@ -171,6 +188,7 @@ class TestQgsRelation(unittest.TestCase):
 
         # check that the relation is valid
         valid = False
+        self.assertEqual(len(referencedLayer.editFormConfig().tabs()[0].children()), 7)
         for tab in referencedLayer.editFormConfig().tabs():
             for t in tab.children():
                 if (t.type() == QgsAttributeEditorElement.AeTypeRelation):
@@ -180,6 +198,11 @@ class TestQgsRelation(unittest.TestCase):
         # update style
         referencedLayer.styleManager().setCurrentStyle("custom")
 
+        for l in p.mapLayers().values():
+            self.assertTrue(l.isValid())
+
+        self.assertEqual(len(referencedLayer.editFormConfig().tabs()[0].children()), 7)
+
         # check that the relation is still valid
         referencedLayer = relation.referencedLayer()
         valid = False
@@ -188,6 +211,20 @@ class TestQgsRelation(unittest.TestCase):
                 if (t.type() == QgsAttributeEditorElement.AeTypeRelation):
                     valid = t.relation().isValid()
         self.assertTrue(valid)
+
+    def test_polymorphicRelationId(self):
+        rel = QgsRelation()
+
+        self.assertEqual(rel.polymorphicRelationId(), '')
+
+        rel.setPolymorphicRelationId('poly_rel_id')
+
+        self.assertEqual(rel.polymorphicRelationId(), 'poly_rel_id')
+
+    def test_generateId_empty_relation(self):
+        rel = QgsRelation()
+        # Check that it does not crash
+        rel.generateId()
 
 
 if __name__ == '__main__':

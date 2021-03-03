@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTVIEWTOOLZOOM_H
 #define QGSLAYOUTVIEWTOOLZOOM_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtool.h"
 #include "qgslayoutviewrubberband.h"
@@ -24,7 +24,7 @@
 
 /**
  * \ingroup gui
- * Layout view tool for zooming into and out of the layout.
+ * \brief Layout view tool for zooming into and out of the layout.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLayoutViewToolZoom : public QgsLayoutViewTool
@@ -48,7 +48,7 @@ class GUI_EXPORT QgsLayoutViewToolZoom : public QgsLayoutViewTool
 
   protected:
 
-    //! Will be true will marquee zoom operation is in progress
+    //! Will be TRUE will marquee zoom operation is in progress
     bool mMarqueeZoom = false;
 
   private:

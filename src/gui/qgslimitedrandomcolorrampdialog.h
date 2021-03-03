@@ -17,16 +17,18 @@
 #define QGsLIMITEDRANDOMCOLORRAMPDIALOG_H
 
 #include <QDialog>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgspanelwidget.h"
 #include "qgscolorramp.h"
 #include "ui_qgslimitedrandomcolorrampwidgetbase.h"
 #include "qgis_gui.h"
 
+class QDialogButtonBox;
+
 /**
  * \ingroup gui
  * \class QgsLimitedRandomColorRampWidget
- * A widget which allows users to modify the properties of a QgsLimitedRandomColorRamp.
+ * \brief A widget which allows users to modify the properties of a QgsLimitedRandomColorRamp.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLimitedRandomColorRampWidget : public QgsPanelWidget, private Ui::QgsLimitedRandomColorRampWidgetBase
@@ -41,7 +43,7 @@ class GUI_EXPORT QgsLimitedRandomColorRampWidget : public QgsPanelWidget, privat
      * \param ramp initial ramp to show in dialog
      * \param parent parent widget
      */
-    QgsLimitedRandomColorRampWidget( const QgsLimitedRandomColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsLimitedRandomColorRampWidget( const QgsLimitedRandomColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Returns a color ramp representing the current settings from the dialog.
@@ -90,7 +92,7 @@ class GUI_EXPORT QgsLimitedRandomColorRampWidget : public QgsPanelWidget, privat
 /**
  * \ingroup gui
  * \class QgsLimitedRandomColorRampDialog
- * A dialog which allows users to modify the properties of a QgsLimitedRandomColorRamp.
+ * \brief A dialog which allows users to modify the properties of a QgsLimitedRandomColorRamp.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLimitedRandomColorRampDialog : public QDialog
@@ -105,7 +107,7 @@ class GUI_EXPORT QgsLimitedRandomColorRampDialog : public QDialog
      * \param ramp initial ramp to show in dialog
      * \param parent parent widget
      */
-    QgsLimitedRandomColorRampDialog( const QgsLimitedRandomColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsLimitedRandomColorRampDialog( const QgsLimitedRandomColorRamp &ramp, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Returns a color ramp representing the current settings from the dialog.
@@ -120,6 +122,12 @@ class GUI_EXPORT QgsLimitedRandomColorRampDialog : public QDialog
      */
     void setRamp( const QgsLimitedRandomColorRamp &ramp ) { mWidget->setRamp( ramp ); }
 
+    /**
+     * Returns a reference to the dialog's button box.
+     * \since QGIS 3.10
+     */
+    QDialogButtonBox *buttonBox() const;
+
   signals:
 
     //! Emitted when the dialog settings change
@@ -128,6 +136,11 @@ class GUI_EXPORT QgsLimitedRandomColorRampDialog : public QDialog
   private:
 
     QgsLimitedRandomColorRampWidget *mWidget = nullptr;
+    QDialogButtonBox *mButtonBox = nullptr;
+
+  private slots:
+
+    void showHelp();
 
 };
 

@@ -19,13 +19,15 @@
 //for CMAKE_INSTALL_PREFIX
 #include "qgsconfig.h"
 #include "qgsserver.h"
-#include "qgslogger.h"
-#include "qgsserverlogger.h"
 #include "qgsfcgiserverresponse.h"
 #include "qgsfcgiserverrequest.h"
+#include "qgsapplication.h"
 
 #include <fcgi_stdio.h>
 #include <cstdlib>
+
+#include <QFontDatabase>
+#include <QString>
 
 int fcgi_accept()
 {
@@ -56,7 +58,7 @@ int main( int argc, char *argv[] )
   {
     withDisplay = false;
     qputenv( "QT_QPA_PLATFORM", "offscreen" );
-    QgsMessageLog::logMessage( "DISPLAY not set, running in offscreen mode, all printing capabilities will not be available.", "Server", QgsMessageLog::INFO );
+    QgsMessageLog::logMessage( "DISPLAY not set, running in offscreen mode, all printing capabilities will not be available.", "Server", Qgis::Info );
   }
   // since version 3.0 QgsServer now needs a qApp so initialize QgsApplication
   QgsApplication app( argc, argv, withDisplay, QString(), QStringLiteral( "server" ) );
@@ -64,6 +66,13 @@ int main( int argc, char *argv[] )
 #ifdef HAVE_SERVER_PYTHON_PLUGINS
   server.initPython();
 #endif
+
+#ifdef Q_OS_WIN
+  // Initialize font database before fcgi_accept.
+  // When using FCGI with IIS, environment variables (QT_QPA_FONTDIR in this case) are lost after fcgi_accept().
+  QFontDatabase fontDB;
+#endif
+
   // Starts FCGI loop
   while ( fcgi_accept() >= 0 )
   {

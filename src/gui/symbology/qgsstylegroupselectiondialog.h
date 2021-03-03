@@ -35,7 +35,7 @@ class GUI_EXPORT QgsStyleGroupSelectionDialog : public QDialog, private Ui::Symb
 
   public:
     QgsStyleGroupSelectionDialog( QgsStyle *style, QWidget *parent = nullptr );
-    //! Set bold font for item
+    //! Sets bold font for item
     void setBold( QStandardItem *item );
 
   signals:
@@ -51,6 +51,18 @@ class GUI_EXPORT QgsStyleGroupSelectionDialog : public QDialog, private Ui::Symb
     void allDeselected();
     //! all selected
     void allSelected();
+
+    /**
+     * Favorites has been deselected
+     * \since QGIS 3.14
+     */
+    void favoritesDeselected();
+
+    /**
+     * Favorites has need selected
+     * \since QGIS 3.14
+     */
+    void favoritesSelected();
 
   private slots:
     void groupTreeSelectionChanged( const QItemSelection &selected, const QItemSelection &deselected );

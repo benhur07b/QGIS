@@ -13,24 +13,31 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSRELATIONEDITOR_H
-#define QGSRELATIONEDITOR_H
+#ifndef QGSRELATIONEDITORWIDGET_H
+#define QGSRELATIONEDITORWIDGET_H
 
 #include <QWidget>
 #include <QToolButton>
 #include <QButtonGroup>
 #include <QGridLayout>
+#include "qobjectuniqueptr.h"
 
+#include "ui_qgsrelationeditorconfigwidgetbase.h"
+
+#include "qgsabstractrelationeditorwidget.h"
+#include "qobjectuniqueptr.h"
 #include "qgsattributeeditorcontext.h"
 #include "qgscollapsiblegroupbox.h"
 #include "qgsdualview.h"
 #include "qgsrelation.h"
+#include "qgsvectorlayerselectionmanager.h"
 #include "qgis_gui.h"
 
 class QgsFeature;
-class QgsGenericFeatureSelectionManager;
 class QgsVectorLayer;
 class QgsVectorLayerTools;
+class QgsMapTool;
+class QgsMapToolDigitizeFeature;
 
 #ifdef SIP_RUN
 % ModuleHeaderCode
@@ -41,57 +48,82 @@ class QgsVectorLayerTools;
 % End
 #endif
 
+
+/// @cond PRIVATE
+#ifndef SIP_RUN
+
 /**
+ * This class is used to filter the current vector layer selection to features matching the given request.
+ * Relation editor widget use it in order to get selected feature for the current relation.
+ */
+class QgsFilteredSelectionManager : public QgsVectorLayerSelectionManager
+{
+    Q_OBJECT
+
+  public:
+    QgsFilteredSelectionManager( QgsVectorLayer *layer, const QgsFeatureRequest &request, QObject *parent = nullptr );
+
+    const QgsFeatureIds &selectedFeatureIds() const override;
+    int selectedFeatureCount() override;
+
+  private slots:
+
+    void onSelectionChanged( const QgsFeatureIds &selected, const QgsFeatureIds &deselected, bool clearAndSelect ) override;
+
+  private:
+
+    QgsFeatureRequest mRequest;
+    QgsFeatureIds mSelectedFeatureIds;
+};
+#endif
+/// @endcond
+
+
+/**
+ * The default relation widget in QGIS.
  * \ingroup gui
  * \class QgsRelationEditorWidget
+ * \since QGIS 3.18
  */
-class GUI_EXPORT QgsRelationEditorWidget : public QgsCollapsibleGroupBox
+class GUI_EXPORT QgsRelationEditorWidget : public QgsAbstractRelationEditorWidget
 {
-
-#ifdef SIP_RUN
-    SIP_CONVERT_TO_SUBCLASS_CODE
-    if ( qobject_cast<QgsRelationEditorWidget *>( sipCpp ) )
-      sipType = sipType_QgsRelationEditorWidget;
-    else
-      sipType = NULL;
-    SIP_END
-#endif
-
-
 
     Q_OBJECT
     Q_PROPERTY( QgsDualView::ViewMode viewMode READ viewMode WRITE setViewMode )
-    Q_PROPERTY( bool showLabel READ showLabel WRITE setShowLabel )
+    Q_PROPERTY( Buttons visibleButtons READ visibleButtons WRITE setVisibleButtons )
 
   public:
 
     /**
+     * Possible buttons shown in the relation editor
+     */
+    enum Button
+    {
+      Link = 1 << 1, //!< Link button
+      Unlink = 1 << 2, //!< Unlink button
+      SaveChildEdits = 1 << 3, //!< Save child edits button
+      AddChildFeature = 1 << 4, //!< Add child feature (as in some projects we only want to allow linking/unlinking existing features)
+      DuplicateChildFeature = 1 << 5, //!< Duplicate child feature
+      DeleteChildFeature = 1 << 6, //!< Delete child feature button
+      ZoomToChildFeature = 1 << 7, //!< Zoom to child feature
+      AllButtons = Link | Unlink | SaveChildEdits | AddChildFeature | DuplicateChildFeature | DeleteChildFeature | ZoomToChildFeature //!< All buttons
+    };
+    Q_ENUM( Button )
+    Q_DECLARE_FLAGS( Buttons, Button )
+    Q_FLAG( Buttons )
+
+    /**
+     * Constructor
+     * \param config widget configuration
      * \param parent parent widget
      */
-    QgsRelationEditorWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
+    QgsRelationEditorWidget( const QVariantMap &config, QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     //! Define the view mode for the dual view
     void setViewMode( QgsDualView::ViewMode mode );
 
-    //! Get the view mode for the dual view
+    //! Gets the view mode for the dual view
     QgsDualView::ViewMode viewMode() {return mViewMode;}
-
-    void setRelationFeature( const QgsRelation &relation, const QgsFeature &feature );
-
-    /**
-     * Set the relation(s) for this widget
-     * If only one relation is set, it will act as a simple 1:N relation widget
-     * If both relations are set, it will act as an N:M relation widget
-     * inserting and deleting entries on the intermediate table as required.
-     *
-     * \param relation    Relation referencing the edited table
-     * \param nmrelation  Optional reference from the referencing table to a 3rd N:M table
-     */
-    void setRelations( const QgsRelation &relation, const QgsRelation &nmrelation );
-
-    void setFeature( const QgsFeature &feature );
-
-    void setEditorContext( const QgsAttributeEditorContext &context );
 
     /**
      * The feature selection manager is responsible for the selected features
@@ -100,83 +132,178 @@ class GUI_EXPORT QgsRelationEditorWidget : public QgsCollapsibleGroupBox
     QgsIFeatureSelectionManager *featureSelectionManager();
 
     /**
-     * Defines if a title label should be shown for this widget.
-     *
-     * \since QGIS 2.18
+     * Sets the editor \a context
+     * \note if context cadDockWidget is null, it won't be possible to digitize
+     * the geometry of a referencing feature from this widget
      */
-    bool showLabel() const;
+    void setEditorContext( const QgsAttributeEditorContext &context ) override;
 
     /**
-     * Defines if a title label should be shown for this widget.
-     *
-     * \since QGIS 2.18
+     * Defines the buttons which are shown
      */
-    void setShowLabel( bool showLabel );
+    void setVisibleButtons( const Buttons &buttons );
 
     /**
-     * Determines if the "link feature" button should be shown
-     *
-     * \since QGIS 2.18
+     * Returns the buttons which are shown
      */
-    bool showLinkButton() const;
+    Buttons visibleButtons() const;
 
     /**
-     * Determines if the "link feature" button should be shown
-     *
-     * \since QGIS 2.18
+     * Duplicates a feature
+     * \deprecated since QGIS 3.18, use duplicateSelectedFeatures() instead
      */
-    void setShowLinkButton( bool showLinkButton );
+    Q_DECL_DEPRECATED void duplicateFeature() SIP_DEPRECATED;
 
     /**
-     * Determines if the "unlink feature" button should be shown
-     *
-     * \since QGIS 2.18
+     * Duplicates the selected features
+     * \since QGIS 3.18
      */
-    bool showUnlinkButton() const;
+    void duplicateSelectedFeatures();
 
     /**
-     * Determines if the "unlink feature" button should be shown
-     *
-     * \since QGIS 2.18
+     * Unlinks the selected features from the relation
      */
-    void setShowUnlinkButton( bool showUnlinkButton );
+    void unlinkSelectedFeatures();
+
+    /**
+     * Deletes the currently selected features
+     */
+    void deleteSelectedFeatures();
+
+    /**
+     * Zooms to the selected features
+     */
+    void zoomToSelectedFeatures();
+
+    /**
+     * Returns the current configuration
+     */
+    QVariantMap config() const override;
+
+    /**
+     * Defines the current configuration
+     */
+    void setConfig( const QVariantMap &config ) override;
+
+    /**
+      * Sets the title of the root groupbox
+      */
+    void setTitle( const QString &title ) override;
+
+  public slots:
+    void parentFormValueChanged( const QString &attribute, const QVariant &newValue ) override;
+
+  protected:
+    virtual void updateUi() override;
+    void beforeSetRelationFeature( const QgsRelation &newRelation, const QgsFeature &newFeature ) override;
+    void afterSetRelationFeature() override;
+    void beforeSetRelations( const QgsRelation &newRelation, const QgsRelation &newNmRelation ) override;
+    void afterSetRelations() override;
 
   private slots:
     void setViewMode( int mode ) {setViewMode( static_cast<QgsDualView::ViewMode>( mode ) );}
     void updateButtons();
 
-    void addFeature();
-    void linkFeature();
-    void deleteFeature();
-    void unlinkFeature();
-    void saveEdits();
+    void addFeatureGeometry();
     void toggleEditing( bool state );
     void onCollapsedStateChanged( bool collapsed );
+    void showContextMenu( QgsActionMenu *menu, QgsFeatureId fid );
+    void mapToolDeactivated();
+    void onKeyPressed( QKeyEvent *e );
+    void onDigitizingCompleted( const QgsFeature &feature );
 
   private:
-    void updateUi();
+    void initDualView( QgsVectorLayer *layer, const QgsFeatureRequest &request );
+    void setMapTool( QgsMapTool *mapTool );
+    void unsetMapTool();
 
+    QgsCollapsibleGroupBox *mRootCollapsibleGroupBox = nullptr;
     QgsDualView *mDualView = nullptr;
+    QPointer<QgsMessageBarItem> mMessageBarItem;
     QgsDualView::ViewMode mViewMode = QgsDualView::AttributeEditor;
-    QgsGenericFeatureSelectionManager *mFeatureSelectionMgr = nullptr;
-    QgsAttributeEditorContext mEditorContext;
-    QgsRelation mRelation;
-    QgsRelation mNmRelation;
-    QgsFeature mFeature;
 
     QToolButton *mToggleEditingButton = nullptr;
     QToolButton *mSaveEditsButton = nullptr;
     QToolButton *mAddFeatureButton = nullptr;
+    QToolButton *mDuplicateFeatureButton = nullptr;
     QToolButton *mDeleteFeatureButton = nullptr;
     QToolButton *mLinkFeatureButton = nullptr;
     QToolButton *mUnlinkFeatureButton = nullptr;
+    QToolButton *mZoomToFeatureButton = nullptr;
     QToolButton *mFormViewButton = nullptr;
     QToolButton *mTableViewButton = nullptr;
+    QToolButton *mAddFeatureGeometryButton = nullptr;
     QGridLayout *mRelationLayout = nullptr;
+    QObjectUniquePtr<QgsMapToolDigitizeFeature> mMapToolDigitize;
     QButtonGroup *mViewModeButtonGroup = nullptr;
+    QgsVectorLayerSelectionManager *mFeatureSelectionMgr = nullptr;
 
-    bool mShowLabel = true;
-    bool mVisible = false;
+    Buttons mButtonsVisibility = Button::AllButtons;
+    bool mVisible = true;
 };
 
-#endif // QGSRELATIONEDITOR_H
+
+/**
+ * \ingroup gui
+ * \class QgsRelationEditorConfigWidget
+ * \brief Creates a new configuration widget for the relation editor widget
+ * \since QGIS 3.18
+ */
+class GUI_EXPORT QgsRelationEditorConfigWidget : public QgsAbstractRelationEditorConfigWidget, private Ui::QgsRelationEditorConfigWidgetBase
+{
+    Q_OBJECT
+
+  public:
+
+    /**
+     * Create a new configuration widget
+     *
+     * \param relation    The relation for which the configuration dialog will be created
+     * \param parent      A parent widget
+     */
+    explicit QgsRelationEditorConfigWidget( const QgsRelation &relation, QWidget *parent SIP_TRANSFERTHIS );
+
+    /**
+     * \brief Create a configuration from the current GUI state
+     *
+     * \returns A widget configuration
+     */
+    QVariantMap config();
+
+    /**
+     * \brief Update the configuration widget to represent the given configuration.
+     *
+     * \param config The configuration which should be represented by this widget
+     */
+    void setConfig( const QVariantMap &config );
+
+};
+
+
+#ifndef SIP_RUN
+
+/**
+ * Factory class for creating a relation editor widget and the respective config widget.
+ * \ingroup gui
+ * \class QgsRelationEditorWidgetFactory
+ * \note not available in Python bindings
+ * \since QGIS 3.18
+ */
+class GUI_EXPORT QgsRelationEditorWidgetFactory : public QgsAbstractRelationEditorWidgetFactory
+{
+  public:
+    QgsRelationEditorWidgetFactory();
+
+    QString type() const override;
+
+    QString name() const override;
+
+    QgsAbstractRelationEditorWidget *create( const QVariantMap &config, QWidget *parent = nullptr ) const override;
+
+    QgsAbstractRelationEditorConfigWidget *configWidget( const QgsRelation &relation, QWidget *parent ) const override;
+
+};
+#endif
+
+
+#endif // QGSRELATIONEDITORWIDGET_H

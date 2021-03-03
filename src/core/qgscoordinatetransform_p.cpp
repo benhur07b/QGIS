@@ -18,71 +18,116 @@
 #include "qgscoordinatetransform_p.h"
 #include "qgslogger.h"
 #include "qgsapplication.h"
+#include "qgsreadwritelocker.h"
+#include "qgsmessagelog.h"
 
-extern "C"
-{
-#include <proj_api.h>
-}
+#include "qgsprojutils.h"
+#include <proj.h>
+#include <proj_experimental.h>
+
 #include <sqlite3.h>
 
 #include <QStringList>
 
 /// @cond PRIVATE
 
-thread_local QgsProjContextStore QgsCoordinateTransformPrivate::mProjContext;
+std::function< void( const QgsCoordinateReferenceSystem &sourceCrs,
+                     const QgsCoordinateReferenceSystem &destinationCrs,
+                     const QgsDatumTransform::GridDetails &grid )> QgsCoordinateTransformPrivate::sMissingRequiredGridHandler = nullptr;
 
-QgsProjContextStore::QgsProjContextStore()
-{
-  context = pj_ctx_alloc();
-}
+std::function< void( const QgsCoordinateReferenceSystem &sourceCrs,
+                     const QgsCoordinateReferenceSystem &destinationCrs,
+                     const QgsDatumTransform::TransformDetails &preferredOperation,
+                     const QgsDatumTransform::TransformDetails &availableOperation )> QgsCoordinateTransformPrivate::sMissingPreferredGridHandler = nullptr;
 
-QgsProjContextStore::~QgsProjContextStore()
-{
-  pj_ctx_free( context );
-}
+std::function< void( const QgsCoordinateReferenceSystem &sourceCrs,
+                     const QgsCoordinateReferenceSystem &destinationCrs,
+                     const QString &error )> QgsCoordinateTransformPrivate::sCoordinateOperationCreationErrorHandler = nullptr;
 
+std::function< void( const QgsCoordinateReferenceSystem &sourceCrs,
+                     const QgsCoordinateReferenceSystem &destinationCrs,
+                     const QgsDatumTransform::TransformDetails &desiredOperation )> QgsCoordinateTransformPrivate::sMissingGridUsedByContextHandler = nullptr;
+
+Q_NOWARN_DEPRECATED_PUSH // because of deprecated members
 QgsCoordinateTransformPrivate::QgsCoordinateTransformPrivate()
 {
-  setFinder();
 }
+Q_NOWARN_DEPRECATED_POP
 
-QgsCoordinateTransformPrivate::QgsCoordinateTransformPrivate( const QgsCoordinateReferenceSystem &source, const QgsCoordinateReferenceSystem &destination )
+Q_NOWARN_DEPRECATED_PUSH // because of deprecated members
+QgsCoordinateTransformPrivate::QgsCoordinateTransformPrivate( const QgsCoordinateReferenceSystem &source,
+    const QgsCoordinateReferenceSystem &destination,
+    const QgsCoordinateTransformContext &context )
   : mSourceCRS( source )
   , mDestCRS( destination )
 {
-  setFinder();
-  initialize();
+  if ( mSourceCRS != mDestCRS )
+    calculateTransforms( context );
+}
+Q_NOWARN_DEPRECATED_POP
+
+Q_NOWARN_DEPRECATED_PUSH // because of deprecated members
+QgsCoordinateTransformPrivate::QgsCoordinateTransformPrivate( const QgsCoordinateReferenceSystem &source, const QgsCoordinateReferenceSystem &destination, int sourceDatumTransform, int destDatumTransform )
+  : mSourceCRS( source )
+  , mDestCRS( destination )
+  , mSourceDatumTransform( sourceDatumTransform )
+  , mDestinationDatumTransform( destDatumTransform )
+{
 }
 
 QgsCoordinateTransformPrivate::QgsCoordinateTransformPrivate( const QgsCoordinateTransformPrivate &other )
   : QSharedData( other )
+  , mAvailableOpCount( other.mAvailableOpCount )
   , mIsValid( other.mIsValid )
   , mShortCircuit( other.mShortCircuit )
   , mSourceCRS( other.mSourceCRS )
   , mDestCRS( other.mDestCRS )
   , mSourceDatumTransform( other.mSourceDatumTransform )
   , mDestinationDatumTransform( other.mDestinationDatumTransform )
+  , mProjCoordinateOperation( other.mProjCoordinateOperation )
+  , mShouldReverseCoordinateOperation( other.mShouldReverseCoordinateOperation )
+  , mAllowFallbackTransforms( other.mAllowFallbackTransforms )
+  , mIsReversed( other.mIsReversed )
+  , mProjLock()
+  , mProjProjections()
+  , mProjFallbackProjections()
 {
-  //must reinitialize to setup mSourceProjection and mDestinationProjection
-  initialize();
 }
+Q_NOWARN_DEPRECATED_POP
 
+Q_NOWARN_DEPRECATED_PUSH
 QgsCoordinateTransformPrivate::~QgsCoordinateTransformPrivate()
 {
   // free the proj objects
   freeProj();
 }
+Q_NOWARN_DEPRECATED_POP
 
-bool QgsCoordinateTransformPrivate::initialize()
+bool QgsCoordinateTransformPrivate::checkValidity()
+{
+  if ( !mSourceCRS.isValid() || !mDestCRS.isValid() )
+  {
+    invalidate();
+    return false;
+  }
+  return true;
+}
+
+void QgsCoordinateTransformPrivate::invalidate()
 {
   mShortCircuit = true;
   mIsValid = false;
+  mAvailableOpCount = -1;
+}
 
+bool QgsCoordinateTransformPrivate::initialize()
+{
+  invalidate();
   if ( !mSourceCRS.isValid() )
   {
     // Pass through with no projection since we have no idea what the layer
     // coordinates are and projecting them may not be appropriate
-    QgsDebugMsgLevel( "Source CRS is invalid!", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Source CRS is invalid!" ), 4 );
     return false;
   }
 
@@ -91,248 +136,453 @@ bool QgsCoordinateTransformPrivate::initialize()
     //No destination projection is set so we set the default output projection to
     //be the same as input proj.
     mDestCRS = mSourceCRS;
-    QgsDebugMsgLevel( "Destination CRS is invalid!", 4 );
+    QgsDebugMsgLevel( QStringLiteral( "Destination CRS is invalid!" ), 4 );
     return false;
   }
 
   mIsValid = true;
 
-  bool useDefaultDatumTransform = ( mSourceDatumTransform == - 1 && mDestinationDatumTransform == -1 );
-
-  // init the projections (destination and source)
-  freeProj();
-
-  mSourceProjString = mSourceCRS.toProj4();
-  if ( !useDefaultDatumTransform )
-  {
-    mSourceProjString = stripDatumTransform( mSourceProjString );
-  }
-  if ( mSourceDatumTransform != -1 )
-  {
-    mSourceProjString += ( ' ' + datumTransformString( mSourceDatumTransform ) );
-  }
-
-  mDestProjString = mDestCRS.toProj4();
-  if ( !useDefaultDatumTransform )
-  {
-    mDestProjString = stripDatumTransform( mDestProjString );
-  }
-  if ( mDestinationDatumTransform != -1 )
-  {
-    mDestProjString += ( ' ' +  datumTransformString( mDestinationDatumTransform ) );
-  }
-
-  if ( !useDefaultDatumTransform )
-  {
-    addNullGridShifts( mSourceProjString, mDestProjString );
-  }
-
-  // create proj projections for current thread
-  QPair<projPJ, projPJ> res = threadLocalProjData();
-
-#ifdef COORDINATE_TRANSFORM_VERBOSE
-  QgsDebugMsg( "From proj : " + mSourceCRS.toProj4() );
-  QgsDebugMsg( "To proj   : " + mDestCRS.toProj4() );
-#endif
-
-  if ( !res.first || !res.second )
-  {
-    mIsValid = false;
-  }
-
-#ifdef COORDINATE_TRANSFORM_VERBOSE
-  if ( mIsValid )
-  {
-    QgsDebugMsg( "------------------------------------------------------------" );
-    QgsDebugMsg( "The OGR Coordinate transformation for this layer was set to" );
-    QgsLogger::debug<QgsCoordinateReferenceSystem>( "Input", mSourceCRS, __FILE__, __FUNCTION__, __LINE__ );
-    QgsLogger::debug<QgsCoordinateReferenceSystem>( "Output", mDestCRS, __FILE__, __FUNCTION__, __LINE__ );
-    QgsDebugMsg( "------------------------------------------------------------" );
-  }
-  else
-  {
-    QgsDebugMsg( "------------------------------------------------------------" );
-    QgsDebugMsg( "The OGR Coordinate transformation FAILED TO INITIALIZE!" );
-    QgsDebugMsg( "------------------------------------------------------------" );
-  }
-#else
-  if ( !mIsValid )
-  {
-    QgsDebugMsg( "Coordinate transformation failed to initialize!" );
-  }
-#endif
-
-  //XXX todo overload == operator for QgsCoordinateReferenceSystem
-  //at the moment srs.parameters contains the whole proj def...soon it won't...
-  //if (mSourceCRS->toProj4() == mDestCRS->toProj4())
   if ( mSourceCRS == mDestCRS )
   {
     // If the source and destination projection are the same, set the short
     // circuit flag (no transform takes place)
     mShortCircuit = true;
-    QgsDebugMsgLevel( "Source/Dest CRS equal, shortcircuit is set.", 3 );
+    return true;
+  }
+
+  // init the projections (destination and source)
+  freeProj();
+
+  // create proj projections for current thread
+  ProjData res = threadLocalProjData();
+
+#ifdef COORDINATE_TRANSFORM_VERBOSE
+  QgsDebugMsg( "From proj : " + mSourceCRS.toProj() );
+  QgsDebugMsg( "To proj   : " + mDestCRS.toProj() );
+#endif
+
+  if ( !res )
+    mIsValid = false;
+
+#ifdef COORDINATE_TRANSFORM_VERBOSE
+  if ( mIsValid )
+  {
+    QgsDebugMsg( QStringLiteral( "------------------------------------------------------------" ) );
+    QgsDebugMsg( QStringLiteral( "The OGR Coordinate transformation for this layer was set to" ) );
+    QgsLogger::debug<QgsCoordinateReferenceSystem>( "Input", mSourceCRS, __FILE__, __FUNCTION__, __LINE__ );
+    QgsLogger::debug<QgsCoordinateReferenceSystem>( "Output", mDestCRS, __FILE__, __FUNCTION__, __LINE__ );
+    QgsDebugMsg( QStringLiteral( "------------------------------------------------------------" ) );
   }
   else
   {
-    // Transform must take place
-    mShortCircuit = false;
-    QgsDebugMsgLevel( "Source/Dest CRS not equal, shortcircuit is not set.", 3 );
+    QgsDebugMsg( QStringLiteral( "------------------------------------------------------------" ) );
+    QgsDebugMsg( QStringLiteral( "The OGR Coordinate transformation FAILED TO INITIALIZE!" ) );
+    QgsDebugMsg( QStringLiteral( "------------------------------------------------------------" ) );
   }
+#else
+  if ( !mIsValid )
+  {
+    QgsDebugMsg( QStringLiteral( "Coordinate transformation failed to initialize!" ) );
+  }
+#endif
+
+  // Transform must take place
+  mShortCircuit = false;
+
   return mIsValid;
 }
 
-QPair<projPJ, projPJ> QgsCoordinateTransformPrivate::threadLocalProjData()
+void QgsCoordinateTransformPrivate::calculateTransforms( const QgsCoordinateTransformContext &context )
 {
-  mProjLock.lockForRead();
+  // recalculate datum transforms from context
+  if ( mSourceCRS.isValid() && mDestCRS.isValid() )
+  {
+    mProjCoordinateOperation = context.calculateCoordinateOperation( mSourceCRS, mDestCRS );
+    mShouldReverseCoordinateOperation = context.mustReverseCoordinateOperation( mSourceCRS, mDestCRS );
+    mAllowFallbackTransforms = context.allowFallbackTransform( mSourceCRS, mDestCRS );
+  }
+  else
+  {
+    mProjCoordinateOperation.clear();
+    mShouldReverseCoordinateOperation = false;
+    mAllowFallbackTransforms = false;
+  }
+}
 
-  QMap < uintptr_t, QPair< projPJ, projPJ > >::const_iterator it = mProjProjections.constFind( reinterpret_cast< uintptr_t>( mProjContext.get() ) );
+static void proj_collecting_logger( void *user_data, int /*level*/, const char *message )
+{
+  QStringList *dest = reinterpret_cast< QStringList * >( user_data );
+  dest->append( QString( message ) );
+}
+
+static void proj_logger( void *, int level, const char *message )
+{
+#ifndef QGISDEBUG
+  Q_UNUSED( message )
+#endif
+  if ( level == PJ_LOG_ERROR )
+  {
+    QgsDebugMsg( QString( message ) );
+  }
+  else if ( level == PJ_LOG_DEBUG )
+  {
+    QgsDebugMsgLevel( QString( message ), 3 );
+  }
+}
+
+ProjData QgsCoordinateTransformPrivate::threadLocalProjData()
+{
+  QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Read );
+
+  PJ_CONTEXT *context = QgsProjContext::get();
+  QMap < uintptr_t, ProjData >::const_iterator it = mProjProjections.constFind( reinterpret_cast< uintptr_t>( context ) );
+
   if ( it != mProjProjections.constEnd() )
   {
-    QPair<projPJ, projPJ> res = it.value();
-    mProjLock.unlock();
+    ProjData res = it.value();
     return res;
   }
 
   // proj projections don't exist yet, so we need to create
-  mProjLock.unlock();
-  mProjLock.lockForWrite();
-  QPair<projPJ, projPJ> res = qMakePair( pj_init_plus_ctx( mProjContext.get(), mSourceProjString.toUtf8() ),
-                                         pj_init_plus_ctx( mProjContext.get(), mDestProjString.toUtf8() ) );
-  mProjProjections.insert( reinterpret_cast< uintptr_t>( mProjContext.get() ), res );
-  mProjLock.unlock();
+  locker.changeMode( QgsReadWriteLocker::Write );
+
+  // use a temporary proj error collector
+  QStringList projErrors;
+  proj_log_func( context, &projErrors, proj_collecting_logger );
+
+  mIsReversed = false;
+
+  QgsProjUtils::proj_pj_unique_ptr transform;
+  if ( !mProjCoordinateOperation.isEmpty() )
+  {
+    transform.reset( proj_create( context, mProjCoordinateOperation.toUtf8().constData() ) );
+    if ( !transform || !proj_coordoperation_is_instantiable( context, transform.get() ) )
+    {
+      if ( sMissingGridUsedByContextHandler )
+      {
+        QgsDatumTransform::TransformDetails desired;
+        desired.proj = mProjCoordinateOperation;
+        desired.accuracy = -1; //unknown, can't retrieve from proj as we can't instantiate the op
+        desired.grids = QgsProjUtils::gridsUsed( mProjCoordinateOperation );
+        sMissingGridUsedByContextHandler( mSourceCRS, mDestCRS, desired );
+      }
+      else
+      {
+        const QString err = QObject::tr( "Could not use operation specified in project between %1 and %2. (Wanted to use: %3)." ).arg( mSourceCRS.authid(),
+                            mDestCRS.authid(),
+                            mProjCoordinateOperation );
+        QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+      }
+
+      transform.reset();
+    }
+    else
+    {
+      mIsReversed = mShouldReverseCoordinateOperation;
+    }
+  }
+
+  QString nonAvailableError;
+  if ( !transform ) // fallback on default proj pathway
+  {
+    if ( !mSourceCRS.projObject() || ! mDestCRS.projObject() )
+    {
+      proj_log_func( context, nullptr, nullptr );
+      return nullptr;
+    }
+
+    PJ_OPERATION_FACTORY_CONTEXT *operationContext = proj_create_operation_factory_context( context, nullptr );
+
+    // We want to check ALL grids, not just those available for use
+    proj_operation_factory_context_set_grid_availability_use( context, operationContext, PROJ_GRID_AVAILABILITY_IGNORED );
+
+    // See https://lists.osgeo.org/pipermail/proj/2019-May/008604.html
+    proj_operation_factory_context_set_spatial_criterion( context, operationContext, PROJ_SPATIAL_CRITERION_PARTIAL_INTERSECTION );
+
+    if ( PJ_OBJ_LIST *ops = proj_create_operations( context, mSourceCRS.projObject(), mDestCRS.projObject(), operationContext ) )
+    {
+      mAvailableOpCount = proj_list_get_count( ops );
+      if ( mAvailableOpCount < 1 )
+      {
+        // huh?
+        int errNo = proj_context_errno( context );
+        if ( errNo && errNo != -61 )
+        {
+          nonAvailableError = QString( proj_errno_string( errNo ) );
+        }
+        else
+        {
+          nonAvailableError = QObject::tr( "No coordinate operations are available between these two reference systems" );
+        }
+      }
+      else if ( mAvailableOpCount == 1 )
+      {
+        // only a single operation available. Can we use it?
+        transform.reset( proj_list_get( context, ops, 0 ) );
+        if ( transform )
+        {
+          if ( !proj_coordoperation_is_instantiable( context, transform.get() ) )
+          {
+            // uh oh :( something is missing! find what it is
+            for ( int j = 0; j < proj_coordoperation_get_grid_used_count( context, transform.get() ); ++j )
+            {
+              const char *shortName = nullptr;
+              const char *fullName = nullptr;
+              const char *packageName = nullptr;
+              const char *url = nullptr;
+              int directDownload = 0;
+              int openLicense = 0;
+              int isAvailable = 0;
+              proj_coordoperation_get_grid_used( context, transform.get(), j, &shortName, &fullName, &packageName, &url, &directDownload, &openLicense, &isAvailable );
+              if ( !isAvailable )
+              {
+                // found it!
+                if ( sMissingRequiredGridHandler )
+                {
+                  QgsDatumTransform::GridDetails gridDetails;
+                  gridDetails.shortName = QString( shortName );
+                  gridDetails.fullName = QString( fullName );
+                  gridDetails.packageName = QString( packageName );
+                  gridDetails.url = QString( url );
+                  gridDetails.directDownload = directDownload;
+                  gridDetails.openLicense = openLicense;
+                  gridDetails.isAvailable = isAvailable;
+                  sMissingRequiredGridHandler( mSourceCRS, mDestCRS, gridDetails );
+                }
+                else
+                {
+                  const QString err = QObject::tr( "Cannot create transform between %1 and %2, missing required grid %3" ).arg( mSourceCRS.authid(),
+                                      mDestCRS.authid(),
+                                      shortName );
+                  QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+                }
+                break;
+              }
+            }
+          }
+          else
+          {
+
+            // transform may have either the source or destination CRS using swapped axis order. For QGIS, we ALWAYS need regular x/y axis order
+            transform.reset( proj_normalize_for_visualization( context, transform.get() ) );
+            if ( !transform )
+            {
+              const QString err = QObject::tr( "Cannot normalize transform between %1 and %2" ).arg( mSourceCRS.authid(),
+                                  mDestCRS.authid() );
+              QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+            }
+          }
+        }
+      }
+      else
+      {
+        // multiple operations available. Can we use the best one?
+        QgsDatumTransform::TransformDetails preferred;
+        bool missingPreferred = false;
+        bool stillLookingForPreferred = true;
+        for ( int i = 0; i < mAvailableOpCount; ++ i )
+        {
+          transform.reset( proj_list_get( context, ops, i ) );
+          const bool isInstantiable = transform && proj_coordoperation_is_instantiable( context, transform.get() );
+          if ( stillLookingForPreferred && transform && !isInstantiable )
+          {
+            // uh oh :( something is missing blocking us from the preferred operation!
+            QgsDatumTransform::TransformDetails candidate = QgsDatumTransform::transformDetailsFromPj( transform.get() );
+            if ( !candidate.proj.isEmpty() )
+            {
+              preferred = candidate;
+              missingPreferred = true;
+              stillLookingForPreferred = false;
+            }
+          }
+          if ( transform && isInstantiable )
+          {
+            // found one
+            break;
+          }
+          transform.reset();
+        }
+
+        if ( transform && missingPreferred )
+        {
+          // found a transform, but it's not the preferred
+          QgsDatumTransform::TransformDetails available = QgsDatumTransform::transformDetailsFromPj( transform.get() );
+          if ( sMissingPreferredGridHandler )
+          {
+            sMissingPreferredGridHandler( mSourceCRS, mDestCRS, preferred, available );
+          }
+          else
+          {
+            const QString err = QObject::tr( "Using non-preferred coordinate operation between %1 and %2. Using %3, preferred %4." ).arg( mSourceCRS.authid(),
+                                mDestCRS.authid(),
+                                available.proj,
+                                preferred.proj );
+            QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+          }
+        }
+
+        // transform may have either the source or destination CRS using swapped axis order. For QGIS, we ALWAYS need regular x/y axis order
+        if ( transform )
+          transform.reset( proj_normalize_for_visualization( context, transform.get() ) );
+        if ( !transform )
+        {
+          const QString err = QObject::tr( "Cannot normalize transform between %1 and %2" ).arg( mSourceCRS.authid(),
+                              mDestCRS.authid() );
+          QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+        }
+      }
+      proj_list_destroy( ops );
+    }
+    proj_operation_factory_context_destroy( operationContext );
+  }
+
+  if ( !transform && nonAvailableError.isEmpty() )
+  {
+    int errNo = proj_context_errno( context );
+    if ( errNo && errNo != -61 )
+    {
+      nonAvailableError = QString( proj_errno_string( errNo ) );
+    }
+    else if ( !projErrors.empty() )
+    {
+      nonAvailableError = projErrors.constLast();
+    }
+
+    if ( nonAvailableError.isEmpty() )
+    {
+      nonAvailableError = QObject::tr( "No coordinate operations are available between these two reference systems" );
+    }
+    else
+    {
+      // strip proj prefixes from error string, so that it's nicer for users
+      nonAvailableError = nonAvailableError.remove( QStringLiteral( "internal_proj_create_operations: " ) );
+    }
+  }
+
+  if ( !nonAvailableError.isEmpty() )
+  {
+    if ( sCoordinateOperationCreationErrorHandler )
+    {
+      sCoordinateOperationCreationErrorHandler( mSourceCRS, mDestCRS, nonAvailableError );
+    }
+    else
+    {
+      const QString err = QObject::tr( "Cannot create transform between %1 and %2: %3" ).arg( mSourceCRS.authid(),
+                          mDestCRS.authid(),
+                          nonAvailableError );
+      QgsMessageLog::logMessage( err, QString(), Qgis::Critical );
+    }
+  }
+
+  // reset logger to terminal output
+  proj_log_func( context, nullptr, proj_logger );
+
+  if ( !transform )
+  {
+    // ouch!
+    return nullptr;
+  }
+
+  ProjData res = transform.release();
+  mProjProjections.insert( reinterpret_cast< uintptr_t>( context ), res );
   return res;
 }
 
-QString QgsCoordinateTransformPrivate::stripDatumTransform( const QString &proj4 ) const
+ProjData QgsCoordinateTransformPrivate::threadLocalFallbackProjData()
 {
-  QStringList parameterSplit = proj4.split( '+', QString::SkipEmptyParts );
-  QString currentParameter;
-  QString newProjString;
+  QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Read );
 
-  for ( int i = 0; i < parameterSplit.size(); ++i )
+  PJ_CONTEXT *context = QgsProjContext::get();
+  QMap < uintptr_t, ProjData >::const_iterator it = mProjFallbackProjections.constFind( reinterpret_cast< uintptr_t>( context ) );
+
+  if ( it != mProjFallbackProjections.constEnd() )
   {
-    currentParameter = parameterSplit.at( i );
-    if ( !currentParameter.startsWith( QLatin1String( "towgs84" ), Qt::CaseInsensitive )
-         && !currentParameter.startsWith( QLatin1String( "nadgrids" ), Qt::CaseInsensitive ) )
-    {
-      newProjString.append( '+' );
-      newProjString.append( currentParameter );
-      newProjString.append( ' ' );
-    }
+    ProjData res = it.value();
+    return res;
   }
-  return newProjString;
+
+  // proj projections don't exist yet, so we need to create
+  locker.changeMode( QgsReadWriteLocker::Write );
+
+  QgsProjUtils::proj_pj_unique_ptr transform( proj_create_crs_to_crs_from_pj( context, mSourceCRS.projObject(), mDestCRS.projObject(), nullptr, nullptr ) );
+  if ( transform )
+    transform.reset( proj_normalize_for_visualization( QgsProjContext::get(), transform.get() ) );
+
+  ProjData res = transform.release();
+  mProjFallbackProjections.insert( reinterpret_cast< uintptr_t>( context ), res );
+  return res;
 }
 
-QString QgsCoordinateTransformPrivate::datumTransformString( int datumTransform )
+void QgsCoordinateTransformPrivate::setCustomMissingRequiredGridHandler( const std::function<void ( const QgsCoordinateReferenceSystem &, const QgsCoordinateReferenceSystem &, const QgsDatumTransform::GridDetails & )> &handler )
 {
-  QString transformString;
-
-  sqlite3 *db = nullptr;
-  int openResult = sqlite3_open_v2( QgsApplication::srsDatabaseFilePath().toUtf8().constData(), &db, SQLITE_OPEN_READONLY, nullptr );
-  if ( openResult != SQLITE_OK )
-  {
-    sqlite3_close( db );
-    return transformString;
-  }
-
-  sqlite3_stmt *stmt = nullptr;
-  QString sql = QStringLiteral( "SELECT coord_op_method_code,p1,p2,p3,p4,p5,p6,p7 FROM tbl_datum_transform WHERE coord_op_code=%1" ).arg( datumTransform );
-  int prepareRes = sqlite3_prepare( db, sql.toLatin1(), sql.size(), &stmt, nullptr );
-  if ( prepareRes != SQLITE_OK )
-  {
-    sqlite3_finalize( stmt );
-    sqlite3_close( db );
-    return transformString;
-  }
-
-  if ( sqlite3_step( stmt ) == SQLITE_ROW )
-  {
-    //coord_op_methode_code
-    int methodCode = sqlite3_column_int( stmt, 0 );
-    if ( methodCode == 9615 ) //ntv2
-    {
-      transformString = "+nadgrids=" + QString( reinterpret_cast< const char * >( sqlite3_column_text( stmt, 1 ) ) );
-    }
-    else if ( methodCode == 9603 || methodCode == 9606 || methodCode == 9607 )
-    {
-      transformString += QLatin1String( "+towgs84=" );
-      double p1 = sqlite3_column_double( stmt, 1 );
-      double p2 = sqlite3_column_double( stmt, 2 );
-      double p3 = sqlite3_column_double( stmt, 3 );
-      double p4 = sqlite3_column_double( stmt, 4 );
-      double p5 = sqlite3_column_double( stmt, 5 );
-      double p6 = sqlite3_column_double( stmt, 6 );
-      double p7 = sqlite3_column_double( stmt, 7 );
-      if ( methodCode == 9603 ) //3 parameter transformation
-      {
-        transformString += QStringLiteral( "%1,%2,%3" ).arg( p1 ).arg( p2 ).arg( p3 );
-      }
-      else //7 parameter transformation
-      {
-        transformString += QStringLiteral( "%1,%2,%3,%4,%5,%6,%7" ).arg( p1 ).arg( p2 ).arg( p3 ).arg( p4 ).arg( p5 ).arg( p6 ).arg( p7 );
-      }
-    }
-  }
-
-  sqlite3_finalize( stmt );
-  sqlite3_close( db );
-  return transformString;
+  sMissingRequiredGridHandler = handler;
 }
 
-void QgsCoordinateTransformPrivate::addNullGridShifts( QString &srcProjString, QString &destProjString ) const
+void QgsCoordinateTransformPrivate::setCustomMissingPreferredGridHandler( const std::function<void ( const QgsCoordinateReferenceSystem &, const QgsCoordinateReferenceSystem &, const QgsDatumTransform::TransformDetails &, const QgsDatumTransform::TransformDetails & )> &handler )
 {
-  //if one transformation uses ntv2, the other one needs to be null grid shift
-  if ( mDestinationDatumTransform == -1 && srcProjString.contains( QLatin1String( "+nadgrids" ) ) ) //add null grid if source transformation is ntv2
-  {
-    destProjString += QLatin1String( " +nadgrids=@null" );
-    return;
-  }
-  if ( mSourceDatumTransform == -1 && destProjString.contains( QLatin1String( "+nadgrids" ) ) )
-  {
-    srcProjString += QLatin1String( " +nadgrids=@null" );
-    return;
-  }
-
-  //add null shift grid for google mercator
-  //(see e.g. http://trac.osgeo.org/proj/wiki/FAQ#ChangingEllipsoidWhycantIconvertfromWGS84toGoogleEarthVirtualGlobeMercator)
-  if ( mSourceCRS.authid().compare( QLatin1String( "EPSG:3857" ), Qt::CaseInsensitive ) == 0 && mSourceDatumTransform == -1 )
-  {
-    srcProjString += QLatin1String( " +nadgrids=@null" );
-  }
-  if ( mDestCRS.authid().compare( QLatin1String( "EPSG:3857" ), Qt::CaseInsensitive ) == 0 && mDestinationDatumTransform == -1 )
-  {
-    destProjString += QLatin1String( " +nadgrids=@null" );
-  }
+  sMissingPreferredGridHandler = handler;
 }
 
-void QgsCoordinateTransformPrivate::setFinder()
+void QgsCoordinateTransformPrivate::setCustomCoordinateOperationCreationErrorHandler( const std::function<void ( const QgsCoordinateReferenceSystem &, const QgsCoordinateReferenceSystem &, const QString & )> &handler )
 {
-#if 0
-  // Attention! It should be possible to set PROJ_LIB
-  // but it can happen that it was previously set by installer
-  // (version 0.7) and the old installation was deleted
+  sCoordinateOperationCreationErrorHandler = handler;
+}
 
-  // Another problem: PROJ checks if pj_finder was set before
-  // PROJ_LIB environment variable. pj_finder is probably set in
-  // GRASS gproj library when plugin is loaded, consequently
-  // PROJ_LIB is ignored
-
-  pj_set_finder( finder );
-#endif
+void QgsCoordinateTransformPrivate::setCustomMissingGridUsedByContextHandler( const std::function<void ( const QgsCoordinateReferenceSystem &, const QgsCoordinateReferenceSystem &, const QgsDatumTransform::TransformDetails & )> &handler )
+{
+  sMissingGridUsedByContextHandler = handler;
 }
 
 void QgsCoordinateTransformPrivate::freeProj()
 {
-  mProjLock.lockForWrite();
-  QMap < uintptr_t, QPair< projPJ, projPJ > >::const_iterator it = mProjProjections.constBegin();
+  QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Write );
+  if ( mProjProjections.isEmpty() && mProjFallbackProjections.isEmpty() )
+    return;
+  QMap < uintptr_t, ProjData >::const_iterator it = mProjProjections.constBegin();
+
+  // During destruction of PJ* objects, the errno is set in the underlying
+  // context. Consequently the context attached to the PJ* must still exist !
+  // Which is not necessarily the case currently unfortunately. So
+  // create a temporary dummy context, and attach it to the PJ* before destroying
+  // it
+  PJ_CONTEXT *tmpContext = proj_context_create();
   for ( ; it != mProjProjections.constEnd(); ++it )
   {
-    pj_free( it.value().first );
-    pj_free( it.value().second );
+    proj_assign_context( it.value(), tmpContext );
+    proj_destroy( it.value() );
   }
+
+  it = mProjFallbackProjections.constBegin();
+  for ( ; it != mProjFallbackProjections.constEnd(); ++it )
+  {
+    proj_assign_context( it.value(), tmpContext );
+    proj_destroy( it.value() );
+  }
+
+  proj_context_destroy( tmpContext );
   mProjProjections.clear();
-  mProjLock.unlock();
+  mProjFallbackProjections.clear();
+}
+
+bool QgsCoordinateTransformPrivate::removeObjectsBelongingToCurrentThread( void *pj_context )
+{
+  QgsReadWriteLocker locker( mProjLock, QgsReadWriteLocker::Write );
+
+  QMap < uintptr_t, ProjData >::iterator it = mProjProjections.find( reinterpret_cast< uintptr_t>( pj_context ) );
+  if ( it != mProjProjections.end() )
+  {
+    proj_destroy( it.value() );
+    mProjProjections.erase( it );
+  }
+
+  it = mProjFallbackProjections.find( reinterpret_cast< uintptr_t>( pj_context ) );
+  if ( it != mProjFallbackProjections.end() )
+  {
+    proj_destroy( it.value() );
+    mProjFallbackProjections.erase( it );
+  }
+
+  return mProjProjections.isEmpty();
 }
 
 ///@endcond
-

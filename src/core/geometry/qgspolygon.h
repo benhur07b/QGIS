@@ -15,12 +15,14 @@
  *                                                                         *
  ***************************************************************************/
 
-#ifndef QGSPOLYGONV2_H
-#define QGSPOLYGONV2_H
+#ifndef QGSPOLYGON_H
+#define QGSPOLYGON_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgscurvepolygon.h"
+
+class QgsLineString;
 
 /**
  * \ingroup core
@@ -31,18 +33,34 @@
 class CORE_EXPORT QgsPolygon: public QgsCurvePolygon
 {
   public:
-    QgsPolygon();
 
-    QString geometryType() const override;
+
+    /**
+     * Constructor for an empty polygon geometry.
+     */
+    QgsPolygon() SIP_HOLDGIL;
+
+    /**
+     * Constructor for QgsPolygon, with the specified \a exterior ring and interior \a rings.
+     *
+     * Ownership of \a exterior and \a rings is transferred to the polygon.
+     *
+     * \since QGIS 3.14
+     */
+    QgsPolygon( QgsLineString *exterior SIP_TRANSFER, const QList< QgsLineString * > &rings SIP_TRANSFER = QList< QgsLineString * >() ) SIP_HOLDGIL;
+
+    QString geometryType() const override SIP_HOLDGIL;
     QgsPolygon *clone() const override SIP_FACTORY;
     void clear() override;
     bool fromWkb( QgsConstWkbPtr &wkb ) override;
-    QByteArray asWkb() const override;
+    int wkbSize( QgsAbstractGeometry::WkbFlags flags = QgsAbstractGeometry::WkbFlags() ) const override;
+    QByteArray asWkb( QgsAbstractGeometry::WkbFlags flags = QgsAbstractGeometry::WkbFlags() ) const override;
     QgsPolygon *surfaceToPolygon() const override SIP_FACTORY;
 
     /**
      * Returns the geometry converted to the more generic curve type QgsCurvePolygon
-     \returns the converted geometry. Caller takes ownership*/
+     * \returns the converted geometry. Caller takes ownership
+    */
     QgsCurvePolygon *toCurveType() const override SIP_FACTORY;
 
     void addInteriorRing( QgsCurve *ring SIP_TRANSFER ) override;
@@ -68,7 +86,7 @@ class CORE_EXPORT QgsPolygon: public QgsCurvePolygon
      * \note Not available in Python. Objects will be automatically be converted to the appropriate target type.
      * \since QGIS 3.0
      */
-    inline const QgsPolygon *cast( const QgsAbstractGeometry *geom ) const
+    inline static const QgsPolygon *cast( const QgsAbstractGeometry *geom )
     {
       if ( !geom )
         return nullptr;
@@ -82,11 +100,22 @@ class CORE_EXPORT QgsPolygon: public QgsCurvePolygon
     }
 #endif
 
-  protected:
-
     QgsPolygon *createEmptyWithSameType() const override SIP_FACTORY;
+
+#ifdef SIP_RUN
+    SIP_PYOBJECT __repr__();
+    % MethodCode
+    QString wkt = sipCpp->asWkt();
+    if ( wkt.length() > 1000 )
+      wkt = wkt.left( 1000 ) + QStringLiteral( "..." );
+    QString str = QStringLiteral( "<QgsPolygon: %1>" ).arg( wkt );
+    sipRes = PyUnicode_FromString( str.toUtf8().constData() );
+    % End
+#endif
+
+  protected:
 
     friend class QgsCurvePolygon;
 
 };
-#endif // QGSPOLYGONV2_H
+#endif // QGSPOLYGON_H

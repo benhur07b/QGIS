@@ -39,7 +39,7 @@ namespace gdal
     /**
      * Destroys an OGR data \a source, using the correct gdal calls.
      */
-    void CORE_EXPORT operator()( void *source );
+    void CORE_EXPORT operator()( OGRDataSourceH source );
 
   };
 
@@ -52,7 +52,7 @@ namespace gdal
     /**
      * Destroys an OGR \a geometry, using the correct gdal calls.
      */
-    void CORE_EXPORT operator()( void *geometry );
+    void CORE_EXPORT operator()( OGRGeometryH geometry );
 
   };
 
@@ -65,7 +65,7 @@ namespace gdal
     /**
      * Destroys an OGR field \a definition, using the correct gdal calls.
      */
-    void CORE_EXPORT operator()( void *definition );
+    void CORE_EXPORT operator()( OGRFieldDefnH definition );
 
   };
 
@@ -78,7 +78,7 @@ namespace gdal
     /**
      * Destroys an OGR \a feature, using the correct gdal calls.
      */
-    void CORE_EXPORT operator()( void *feature );
+    void CORE_EXPORT operator()( OGRFeatureH feature );
 
   };
 
@@ -91,7 +91,7 @@ namespace gdal
     /**
      * Destroys an gdal \a dataset, using the correct gdal calls.
      */
-    void CORE_EXPORT operator()( void *dataset );
+    void CORE_EXPORT operator()( GDALDatasetH datasource );
 
   };
 
@@ -111,32 +111,32 @@ namespace gdal
   /**
    * Scoped OGR data source.
    */
-  using ogr_datasource_unique_ptr = std::unique_ptr< void, OGRDataSourceDeleter>;
+  using ogr_datasource_unique_ptr = std::unique_ptr< std::remove_pointer<OGRDataSourceH>::type, OGRDataSourceDeleter >;
 
   /**
    * Scoped OGR geometry.
    */
-  using ogr_geometry_unique_ptr = std::unique_ptr< void, OGRGeometryDeleter>;
+  using ogr_geometry_unique_ptr = std::unique_ptr< std::remove_pointer<OGRGeometryH>::type, OGRGeometryDeleter >;
 
   /**
    * Scoped OGR field definition.
    */
-  using ogr_field_def_unique_ptr = std::unique_ptr< void, OGRFldDeleter >;
+  using ogr_field_def_unique_ptr = std::unique_ptr< std::remove_pointer<OGRFieldDefnH>::type, OGRFldDeleter >;
 
   /**
    * Scoped OGR feature.
    */
-  using ogr_feature_unique_ptr = std::unique_ptr< void, OGRFeatureDeleter >;
+  using ogr_feature_unique_ptr = std::unique_ptr< std::remove_pointer<OGRFeatureH>::type, OGRFeatureDeleter >;
 
   /**
    * Scoped GDAL dataset.
    */
-  using dataset_unique_ptr = std::unique_ptr< void, GDALDatasetCloser >;
+  using dataset_unique_ptr = std::unique_ptr< std::remove_pointer<GDALDatasetH>::type, GDALDatasetCloser >;
 
   /**
    * Performs a fast close of an unwanted GDAL dataset handle by deleting the underlying
    * data store. Use when the resultant dataset is no longer required, e.g. as a result
-   * of user cancelation of an operation.
+   * of user cancellation of an operation.
    *
    * Requires a gdal \a dataset pointer, the corresponding gdal \a driver and underlying
    * dataset file \a path.
@@ -155,8 +155,8 @@ namespace gdal
  * \brief Utilities for working with OGR features and layers
  *
  * Contains helper utilities for assisting work with both OGR features and layers.
- * \since QGIS 2.16
  * \note not available in Python bindings
+ * \since QGIS 2.16
  */
 class CORE_EXPORT QgsOgrUtils
 {
@@ -189,7 +189,21 @@ class CORE_EXPORT QgsOgrUtils
      * \returns attribute converted to a QVariant object
      * \see readOgrFeatureAttributes()
      */
-    static QVariant getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsFields &fields, int attIndex, QTextCodec *encoding, bool *ok = 0 );
+    static QVariant getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsFields &fields, int attIndex, QTextCodec *encoding, bool *ok = nullptr );
+
+    /**
+     * Retrieves an attribute value from an OGR feature, using a provided \a field definition.
+     * \param ogrFet OGR feature handle
+     * \param field definition of corresponding field
+     * \param attIndex index of attribute to retrieve from \a ogrFet
+     * \param encoding text encoding
+     * \param ok optional storage for success of retrieval
+     * \returns attribute converted to a QVariant object
+     * \see readOgrFeatureAttributes()
+     *
+     * \since QGIS 3.10.1
+     */
+    static QVariant getOgrFeatureAttribute( OGRFeatureH ogrFet, const QgsField &field, int attIndex, QTextCodec *encoding, bool *ok = nullptr );
 
     /**
      * Reads all attributes from an OGR feature into a QgsFeature.
@@ -197,7 +211,7 @@ class CORE_EXPORT QgsOgrUtils
      * \param fields fields collection corresponding to feature
      * \param feature QgsFeature to store attributes in
      * \param encoding text encoding
-     * \returns true if attribute read was successful
+     * \returns TRUE if attribute read was successful
      * \see getOgrFeatureAttribute()
      */
     static bool readOgrFeatureAttributes( OGRFeatureH ogrFet, const QgsFields &fields, QgsFeature &feature, QTextCodec *encoding );
@@ -206,7 +220,7 @@ class CORE_EXPORT QgsOgrUtils
      * Reads the geometry from an OGR feature into a QgsFeature.
      * \param ogrFet OGR feature handle
      * \param feature QgsFeature to store geometry in
-     * \returns true if geometry read was successful
+     * \returns TRUE if geometry read was successful
      * \see readOgrFeatureAttributes()
      * \see ogrGeometryToQgsGeometry()
      */
@@ -240,6 +254,72 @@ class CORE_EXPORT QgsOgrUtils
      * \see stringToFeatureList()
      */
     static QgsFields stringToFields( const QString &string, QTextCodec *encoding );
+
+    /**
+     * Converts a c string list to a QStringList. Presumes a null terminated string list.
+     *
+     * \since QGIS 3.2
+     */
+    static QStringList cStringListToQStringList( char **stringList );
+
+    /**
+     * Converts a OGRwkbGeometryType to QgsWkbTypes::Type
+     *
+     * \since QGIS 3.4.9
+     */
+    static QgsWkbTypes::Type ogrGeometryTypeToQgsWkbType( OGRwkbGeometryType ogrGeomType );
+
+    /**
+     * Returns a WKT string corresponding to the specified OGR \a srs object.
+     *
+     * The WKT string format will be selected using the most appropriate format (usually WKT2 if GDAL 3 is available).
+     *
+     * \since QGIS 3.10.1
+     */
+    static QString OGRSpatialReferenceToWkt( OGRSpatialReferenceH srs );
+
+    /**
+     * Returns a QgsCoordinateReferenceSystem corresponding to the specified OGR \a srs object, or an invalid
+     * QgsCoordinateReferenceSystem if \a srs could not be converted.
+     *
+     * \since QGIS 3.10.1
+     */
+    static QgsCoordinateReferenceSystem OGRSpatialReferenceToCrs( OGRSpatialReferenceH srs );
+
+    /**
+     * Reads the encoding of the shapefile at the specified \a path (where \a path is the
+     * location of the ".shp" file).
+     *
+     * This method considers both the CPG specified encoding and the DBF LDID encoding
+     * (priority goes to CPG based encoding)
+     *
+     * \see readShapefileEncodingFromCpg()
+     * \see readShapefileEncodingFromLdid()
+     * \since QGIS 3.12
+     */
+    static QString readShapefileEncoding( const QString &path );
+
+    /**
+     * Reads the encoding of the shapefile at the specified \a path (where \a path is the
+     * location of the ".shp" file), from the CPG specified encoding.
+     *
+     * Return an empty string if CPG based encoding was not found.
+     *
+     * \see readShapefileEncoding()
+     * \since QGIS 3.12
+     */
+    static QString readShapefileEncodingFromCpg( const QString &path );
+
+    /**
+     * Reads the encoding of the shapefile at the specified \a path (where \a path is the
+     * location of the ".shp" file), from the DBF LDID encoding.
+     *
+     * Return an empty string if LDID based encoding was not found.
+     *
+     * \see readShapefileEncoding()
+     * \since QGIS 3.12
+     */
+    static QString readShapefileEncodingFromLdid( const QString &path );
 };
 
 #endif // QGSOGRUTILS_H

@@ -32,7 +32,7 @@
 #include "qgsvectorlayerlabeling.h"
 
 //qgis unit test includes
-#include <qgsrenderchecker.h>
+#include "qgsmultirenderchecker.h"
 
 /**
  * \ingroup UnitTests
@@ -47,7 +47,7 @@ class TestQgsMapRotation : public QObject
       mTestDataDir = QStringLiteral( TEST_DATA_DIR ) + '/';
     }
 
-    ~TestQgsMapRotation();
+    ~TestQgsMapRotation() override;
 
   private slots:
     void initTestCase();// will be called before the first testfunction is executed.
@@ -207,6 +207,7 @@ void TestQgsMapRotation::linesLayer()
   format.setSize( 16 );
   palSettings.setFormat( format );
   mLinesLayer->setLabeling( new QgsVectorLayerSimpleLabeling( palSettings ) );
+  mLinesLayer->setLabelsEnabled( true );
 
   QVERIFY( success );
   mMapSettings->setExtent( mLinesLayer->extent() ); //QgsRectangle(-150,-150,150,150) );
@@ -221,7 +222,7 @@ bool TestQgsMapRotation::render( const QString &testType )
 {
   mReport += "<h2>" + testType + "</h2>\n";
   mMapSettings->setOutputDpi( 96 );
-  QgsRenderChecker checker;
+  QgsMultiRenderChecker checker;
   checker.setControlPathPrefix( QStringLiteral( "maprotation" ) );
   checker.setControlName( "expected_" + testType );
   checker.setMapSettings( *mMapSettings );

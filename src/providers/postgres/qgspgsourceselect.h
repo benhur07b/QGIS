@@ -36,6 +36,7 @@ class QStringList;
 class QgsGeomColumnTypeThread;
 class QgisApp;
 class QgsPgSourceSelect;
+class QgsProxyProgressTask;
 
 class QgsPgSourceSelectDelegate : public QItemDelegate
 {
@@ -68,7 +69,7 @@ class QgsPgSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsDbS
     //! Constructor
     QgsPgSourceSelect( QWidget *parent = nullptr, Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags, QgsProviderRegistry::WidgetMode widgetMode = QgsProviderRegistry::WidgetMode::None );
 
-    ~QgsPgSourceSelect();
+    ~QgsPgSourceSelect() override;
     //! Populate the connection list combo box
     void populateConnectionList();
     //! String list containing the selected tables
@@ -121,6 +122,8 @@ class QgsPgSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsDbS
 
     void columnThreadFinished();
 
+    void reset() override;
+
   private:
     typedef QPair<QString, QString> geomPair;
     typedef QList<geomPair> geomCol;
@@ -138,6 +141,8 @@ class QgsPgSourceSelect : public QgsAbstractDataSourceWidget, private Ui::QgsDbS
     QStringList mColumnLabels;
     // Our thread for doing long running queries
     QgsGeomColumnTypeThread *mColumnTypeThread = nullptr;
+    QgsProxyProgressTask *mColumnTypeTask = nullptr;
+
     QgsDataSourceUri mDataSrcUri;
     QStringList mSelectedTables;
     bool mUseEstimatedMetadata = false;

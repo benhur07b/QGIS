@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 """
@@ -22,15 +21,12 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
 from qgis.core import (QgsRasterFileWriter,
+                       QgsProcessingException,
                        QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterRasterDestination)
@@ -42,7 +38,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class rgb2pct(GdalAlgorithm):
-
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     NCOLORS = 'NCOLORS'
@@ -70,24 +65,30 @@ class rgb2pct(GdalAlgorithm):
     def group(self):
         return self.tr('Raster conversion')
 
+    def groupId(self):
+        return 'rasterconversion'
+
     def icon(self):
         return QIcon(os.path.join(pluginPath, 'images', 'gdaltools', '24-to-8-bits.png'))
 
-    def getConsoleCommands(self, parameters, context, feedback):
-        arguments = []
-        arguments.append('-n')
-        arguments.append(str(self.parameterAsInt(parameters, self.NCOLORS, context)))
+    def commandName(self):
+        return 'rgb2pct'
 
+    def getConsoleCommands(self, parameters, context, feedback, executing=True):
         out = self.parameterAsOutputLayer(parameters, self.OUTPUT, context)
-        arguments.append('-of')
-        arguments.append(QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]))
-        arguments.append(self.parameterAsRasterLayer(parameters, self.INPUT, context).source())
-        arguments.append(out)
+        self.setOutputValue(self.OUTPUT, out)
 
-        if isWindows():
-            commands = ['cmd.exe', '/C ', 'rgb2pct.bat',
-                        GdalUtils.escapeAndJoin(arguments)]
-        else:
-            commands = ['rgb2pct.py', GdalUtils.escapeAndJoin(arguments)]
+        raster = self.parameterAsRasterLayer(parameters, self.INPUT, context)
+        if raster is None:
+            raise QgsProcessingException(self.invalidRasterError(parameters, self.INPUT))
 
-        return commands
+        arguments = [
+            '-n',
+            str(self.parameterAsInt(parameters, self.NCOLORS, context)),
+            '-of',
+            QgsRasterFileWriter.driverForExtension(os.path.splitext(out)[1]),
+            raster.source(),
+            out
+        ]
+
+        return [self.commandName() + ('.bat' if isWindows() else '.py'), GdalUtils.escapeAndJoin(arguments)]

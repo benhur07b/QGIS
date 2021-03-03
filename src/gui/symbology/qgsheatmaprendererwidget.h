@@ -16,7 +16,7 @@
 #define QGSHEATMAPRENDERERWIDGET_H
 
 #include "ui_qgsheatmaprendererwidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrendererwidget.h"
 #include "qgis_gui.h"
 
@@ -49,8 +49,8 @@ class GUI_EXPORT QgsHeatmapRendererWidget : public QgsRendererWidget, private Ui
      */
     QgsHeatmapRendererWidget( QgsVectorLayer *layer, QgsStyle *style, QgsFeatureRenderer *renderer );
 
-    virtual QgsFeatureRenderer *renderer() override;
-    virtual void setContext( const QgsSymbolWidgetContext &context ) override;
+    QgsFeatureRenderer *renderer() override;
+    void setContext( const QgsSymbolWidgetContext &context ) override;
 
   private:
     QgsHeatmapRenderer *mRenderer = nullptr;

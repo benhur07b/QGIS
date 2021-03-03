@@ -18,16 +18,17 @@
 #include <memory>
 
 #include "qgsexpressioncontext.h"
+#include "qgssymbol.h"
 #include "qgis_gui.h"
 
 
 class QgsMapCanvas;
-
+class QgsMessageBar;
 
 /**
  * \ingroup gui
  * \class QgsSymbolWidgetContext
- * Contains settings which reflect the context in which a symbol (or renderer) widget is shown, e.g., the
+ * \brief Contains settings which reflect the context in which a symbol (or renderer) widget is shown, e.g., the
  * map canvas and relevant expression contexts.
  *
  * \since QGIS 3.0
@@ -62,6 +63,21 @@ class GUI_EXPORT QgsSymbolWidgetContext // clazy:exclude=rule-of-three
      * \see setMapCanvas()
      */
     QgsMapCanvas *mapCanvas() const;
+
+    /**
+     * Sets the message \a bar associated with the widget. This allows the widget to push feedback messages
+     * to the appropriate message bar.
+     * \see messageBar()
+     * \since QGIS 3.6
+     */
+    void setMessageBar( QgsMessageBar *bar );
+
+    /**
+     * Returns the message bar associated with the widget.
+     * \see setMessageBar()
+     * \since QGIS 3.6
+     */
+    QgsMessageBar *messageBar() const;
 
     /**
      * Sets the optional expression context used for the widget. This expression context is used for
@@ -101,11 +117,31 @@ class GUI_EXPORT QgsSymbolWidgetContext // clazy:exclude=rule-of-three
      */
     QList<QgsExpressionContextScope *> globalProjectAtlasMapLayerScopes( const QgsMapLayer *layer ) const SIP_FACTORY;
 
+    /**
+     * Returns the associated symbol type, if the widget is being shown as a subcomponent
+     * of a parent symbol configuration widget.
+     *
+     * \see setSymbolType()
+     * \since QGIS 3.18
+     */
+    QgsSymbol::SymbolType symbolType() const;
+
+    /**
+     * Sets the associated symbol \a type, if the widget is being shown as a subcomponent
+     * of a parent symbol configuration widget.
+     *
+     * \see symbolType()
+     * \since QGIS 3.18
+     */
+    void setSymbolType( QgsSymbol::SymbolType type );
+
   private:
 
     QgsMapCanvas *mMapCanvas = nullptr;
+    QgsMessageBar *mMessageBar = nullptr;
     std::unique_ptr< QgsExpressionContext > mExpressionContext;
     QList< QgsExpressionContextScope > mAdditionalScopes;
+    QgsSymbol::SymbolType mSymbolType = QgsSymbol::Hybrid;
 
 };
 

@@ -18,14 +18,15 @@
 #define QGSMAPTOOLREGULARPOLYGONCENTERPOINT_H
 
 #include "qgsmaptooladdregularpolygon.h"
+#include "qgis_app.h"
 
-class QgsMapToolRegularPolygonCenterPoint: public QgsMapToolAddRegularPolygon
+class APP_EXPORT QgsMapToolRegularPolygonCenterPoint: public QgsMapToolAddRegularPolygon
 {
     Q_OBJECT
 
   public:
     QgsMapToolRegularPolygonCenterPoint( QgsMapToolCapture *parentTool, QgsMapCanvas *canvas, CaptureMode mode = CaptureLine );
-    ~QgsMapToolRegularPolygonCenterPoint();
+    ~QgsMapToolRegularPolygonCenterPoint() override;
 
     void cadCanvasReleaseEvent( QgsMapMouseEvent *e ) override;
     void cadCanvasMoveEvent( QgsMapMouseEvent *e ) override;

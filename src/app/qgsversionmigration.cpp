@@ -3,7 +3,7 @@
 
  ---------------------
  begin                : 30.7.2017
- copyright            : (C) 2017 by nathan
+ copyright            : (C) 2017 by Nathan Woodrow
  email                : woodrow.nathan at gmail dot com
  ***************************************************************************
  *                                                                         *
@@ -23,6 +23,7 @@
 #include "qgsstyle.h"
 #include "qgssymbollayerutils.h"
 #include "qgsreadwritecontext.h"
+#include "qgsuserprofilemanager.h"
 
 #include <QFile>
 #include <QTextStream>
@@ -32,35 +33,46 @@
 #include <QSqlError>
 #include <QDomDocument>
 
-QgsVersionMigration::QgsVersionMigration()
-{
-
-}
-
-QgsVersionMigration::~QgsVersionMigration()
-{
-
-}
-
-QgsVersionMigration *QgsVersionMigration::canMigrate( int fromVersion, int toVersion )
+std::unique_ptr<QgsVersionMigration> QgsVersionMigration::canMigrate( int fromVersion, int toVersion )
 {
   if ( fromVersion == 20000 && toVersion >= 29900 )
   {
-    return new Qgs2To3Migration();
+    return std::make_unique< Qgs2To3Migration >();
   }
   return nullptr;
 }
 
 QgsError Qgs2To3Migration::runMigration()
 {
-  QgsError error;
+  QgsError errors;
   QgsError settingsErrors = migrateSettings();
   if ( !settingsErrors.isEmpty() )
   {
-    // TODO Merge error messages
+    const QList<QgsErrorMessage> errorList( settingsErrors.messageList( ) );
+    for ( const auto &err : errorList )
+    {
+      errors.append( err );
+    }
   }
-  QgsError stylesError = migrateStyles();
-  return error;
+  QgsError stylesErrors = migrateStyles();
+  if ( !stylesErrors.isEmpty() )
+  {
+    const QList<QgsErrorMessage> errorList( stylesErrors.messageList( ) );
+    for ( const auto &err : errorList )
+    {
+      errors.append( err );
+    }
+  }
+  QgsError authDbErrors = migrateAuthDb();
+  if ( !authDbErrors.isEmpty() )
+  {
+    const QList<QgsErrorMessage> errorList( authDbErrors.messageList( ) );
+    for ( const auto &err : errorList )
+    {
+      errors.append( err );
+    }
+  }
+  return errors;
 }
 
 bool Qgs2To3Migration::requiresMigration()
@@ -77,14 +89,13 @@ bool Qgs2To3Migration::requiresMigration()
     {
       QStringList parts = line.split( '=' );
       mMigrationFileVersion = parts.at( 1 ).toInt();
-      QgsDebugMsg( QString( "File version is=%1" ).arg( mMigrationFileVersion ) );
+      QgsDebugMsgLevel( QStringLiteral( "File version is=%1" ).arg( mMigrationFileVersion ), 2 );
     }
     migrationFile.close();
   }
   else
   {
-    QString msg = QString( "Can not open %1" ).arg( migrationFile.fileName() );
-    QgsDebugMsg( msg );
+    QgsDebugMsg( QStringLiteral( "Can not open %1" ).arg( migrationFile.fileName() ) );
     mMigrationFileVersion = settingsMigrationVersion;
   }
 
@@ -96,7 +107,7 @@ QgsError Qgs2To3Migration::migrateStyles()
   QgsError error;
   QString oldHome = QStringLiteral( "%1/.qgis2" ).arg( QDir::homePath() );
   QString oldStyleFile = QStringLiteral( "%1/symbology-ng-style.db" ).arg( oldHome );
-  QgsDebugMsg( QString( "OLD STYLE FILE %1" ).arg( oldStyleFile ) );
+  QgsDebugMsgLevel( QStringLiteral( "OLD STYLE FILE %1" ).arg( oldStyleFile ), 2 );
   QSqlDatabase db = QSqlDatabase::addDatabase( "QSQLITE", "migration" );
   db.setDatabaseName( oldStyleFile );
   if ( !db.open() )
@@ -139,7 +150,7 @@ QgsError Qgs2To3Migration::migrateStyles()
       }
 
       QDomElement symElement = doc.documentElement();
-      QgsDebugMsg( QString( "MIGRATION: Importing %1" ).arg( name ) );
+      QgsDebugMsgLevel( QStringLiteral( "MIGRATION: Importing %1" ).arg( name ), 2 );
       QgsSymbol *symbol = QgsSymbolLayerUtils::loadSymbol( symElement, QgsReadWriteContext() );
       tags << "QGIS 2";
       if ( style->symbolId( name ) == 0 )
@@ -149,7 +160,7 @@ QgsError Qgs2To3Migration::migrateStyles()
     }
   }
 
-  QgsDebugMsg( oldStyleFile );
+  QgsDebugMsgLevel( oldStyleFile, 2 );
   return error;
 }
 
@@ -189,7 +200,7 @@ QgsError Qgs2To3Migration::migrateSettings()
       if ( line.isEmpty() )
         continue;
 
-      QStringList parts = line.split( ";" );
+      const QStringList parts = line.split( ';' );
 
       Q_ASSERT_X( parts.count() == 2, "QgsVersionMigration::migrateSettings()", "Can't split line in 2 parts." );
 
@@ -223,7 +234,7 @@ QgsError Qgs2To3Migration::migrateSettings()
 
   if ( keys.count() > 0 )
   {
-    QgsDebugMsg( "MIGRATION: Translating settings keys" );
+    QgsDebugMsgLevel( QStringLiteral( "MIGRATION: Translating settings keys" ), 2 );
     QList<QPair<QString, QString>>::iterator i;
     for ( i = keys.begin(); i != keys.end(); ++i )
     {
@@ -234,9 +245,51 @@ QgsError Qgs2To3Migration::migrateSettings()
 
       if ( oldKey.contains( oldKey ) )
       {
-        QgsDebugMsg( QString( " -> %1 -> %2" ).arg( oldKey, newKey ) );
+        QgsDebugMsgLevel( QStringLiteral( " -> %1 -> %2" ).arg( oldKey, newKey ), 2 );
         newSettings.setValue( newKey, mOldSettings->value( oldKey ) );
       }
+    }
+  }
+  return error;
+}
+
+QgsError Qgs2To3Migration::migrateAuthDb()
+{
+  QgsError error;
+  QString oldHome = QStringLiteral( "%1/.qgis2" ).arg( QDir::homePath() );
+  QString oldAuthDbFilePath = QStringLiteral( "%1/qgis-auth.db" ).arg( oldHome );
+  // Try to retrieve the current profile folder (I didn't find an QgsApplication API for it)
+  QDir settingsDir = QFileInfo( QgsSettings().fileName() ).absoluteDir();
+  settingsDir.cdUp();
+  QString newAuthDbFilePath = QStringLiteral( "%1/qgis-auth.db" ).arg( settingsDir.absolutePath() );
+  // Do not overwrite!
+  if ( QFile( newAuthDbFilePath ).exists( ) )
+  {
+    QString msg = QStringLiteral( "Could not copy old auth DB to %1: file already exists!" ).arg( newAuthDbFilePath );
+    QgsDebugMsg( msg );
+    error.append( msg );
+  }
+  else
+  {
+    QFile oldDbFile( oldAuthDbFilePath );
+    if ( oldDbFile.exists( ) )
+    {
+      if ( oldDbFile.copy( newAuthDbFilePath ) )
+      {
+        QgsDebugMsgLevel( QStringLiteral( "Old auth DB successfully copied to %1" ).arg( newAuthDbFilePath ), 2 );
+      }
+      else
+      {
+        QString msg = QStringLiteral( "Could not copy auth DB %1 to %2" ).arg( oldAuthDbFilePath, newAuthDbFilePath );
+        QgsDebugMsg( msg );
+        error.append( msg );
+      }
+    }
+    else
+    {
+      QString msg = QStringLiteral( "Could not copy auth DB %1 to %2: old DB does not exists!" ).arg( oldAuthDbFilePath, newAuthDbFilePath );
+      QgsDebugMsg( msg );
+      error.append( msg );
     }
   }
   return error;
@@ -246,13 +299,15 @@ QList<QPair<QString, QString> > Qgs2To3Migration::walk( QString group, QString n
 {
   mOldSettings->beginGroup( group );
   QList<QPair<QString, QString> > foundKeys;
-  Q_FOREACH ( const QString &group, mOldSettings->childGroups() )
+  const auto constChildGroups = mOldSettings->childGroups();
+  for ( const QString &group : constChildGroups )
   {
     QList<QPair<QString, QString> > data = walk( group, newkey );
     foundKeys.append( data );
   }
 
-  Q_FOREACH ( const QString &key, mOldSettings->childKeys() )
+  const auto constChildKeys = mOldSettings->childKeys();
+  for ( const QString &key : constChildKeys )
   {
     QString fullKey = mOldSettings->group() + "/" + key;
     foundKeys.append( transformKey( fullKey, newkey ) );
@@ -266,17 +321,17 @@ QPair<QString, QString> Qgs2To3Migration::transformKey( QString fullOldKey, QStr
   QString newKey = newKeyPart;
   QString oldKey = fullOldKey;
 
-  if ( newKeyPart == QStringLiteral( "*" ) )
+  if ( newKeyPart == QLatin1String( "*" ) )
   {
     newKey = fullOldKey;
   }
 
   if ( newKeyPart.endsWith( "/*" ) )
   {
-    QStringList newKeyparts = newKeyPart.split( "/" );
+    QStringList newKeyparts = newKeyPart.split( '/' );
     // Throw away the *
     newKeyparts.removeLast();
-    QStringList oldKeyParts = fullOldKey.split( "/" );
+    QStringList oldKeyParts = fullOldKey.split( '/' );
     for ( int i = 0; i < newKeyparts.count(); ++i )
     {
       oldKeyParts.replace( i, newKeyparts.at( i ) );
@@ -289,5 +344,5 @@ QPair<QString, QString> Qgs2To3Migration::transformKey( QString fullOldKey, QStr
 
 QString Qgs2To3Migration::migrationFilePath()
 {
-  return QgsApplication::pkgDataPath() +  "/resources/2to3migration.txt";
+  return QgsApplication::resolvePkgPath() +  "/resources/2to3migration.txt";
 }

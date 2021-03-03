@@ -21,10 +21,6 @@ __author__ = 'Nyall Dawson'
 __date__ = 'February 2017'
 __copyright__ = '(C) 2017, Nyall Dawson'
 
-# This will get replaced with a git SHA1 when you do a git archive323
-
-__revision__ = '$Format:%H$'
-
 import os
 import operator
 import sys
@@ -38,7 +34,9 @@ from qgis.core import (QgsField,
                        QgsPointXY,
                        NULL,
                        QgsProcessing,
+                       QgsProcessingException,
                        QgsProcessingParameterFeatureSource,
+                       QgsProcessingParameterDistance,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterEnum,
                        QgsProcessingParameterFeatureSink)
@@ -63,18 +61,24 @@ class TopoColor(QgisAlgorithm):
     def group(self):
         return self.tr('Cartography')
 
+    def groupId(self):
+        return 'cartography'
+
     def __init__(self):
         super().__init__()
 
     def initAlgorithm(self, config=None):
 
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT,
-                                                              self.tr('Input layer'), [QgsProcessing.TypeVectorPolygon]))
+                                                              self.tr('Input layer'),
+                                                              [QgsProcessing.TypeVectorPolygon]))
         self.addParameter(QgsProcessingParameterNumber(self.MIN_COLORS,
-                                                       self.tr('Minimum number of colors'), minValue=1, maxValue=1000, defaultValue=4))
-        self.addParameter(QgsProcessingParameterNumber(self.MIN_DISTANCE,
-                                                       self.tr('Minimum distance between features'), type=QgsProcessingParameterNumber.Double,
-                                                       minValue=0.0, maxValue=999999999.0, defaultValue=0.0))
+                                                       self.tr('Minimum number of colors'), minValue=1, maxValue=1000,
+                                                       defaultValue=4))
+        self.addParameter(QgsProcessingParameterDistance(self.MIN_DISTANCE,
+                                                         self.tr('Minimum distance between features'),
+                                                         parentParameterName=self.INPUT, minValue=0.0,
+                                                         defaultValue=0.0))
         balance_by = [self.tr('By feature count'),
                       self.tr('By assigned area'),
                       self.tr('By distance between colors')]
@@ -83,7 +87,8 @@ class TopoColor(QgisAlgorithm):
             self.tr('Balance color assignment'),
             options=balance_by, defaultValue=0))
 
-        self.addParameter(QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Colored'), QgsProcessing.TypeVectorPolygon))
+        self.addParameter(
+            QgsProcessingParameterFeatureSink(self.OUTPUT, self.tr('Colored'), QgsProcessing.TypeVectorPolygon))
 
     def name(self):
         return 'topologicalcoloring'
@@ -93,6 +98,9 @@ class TopoColor(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
+
         min_colors = self.parameterAsInt(parameters, self.MIN_COLORS, context)
         balance_by = self.parameterAsEnum(parameters, self.BALANCE, context)
         min_distance = self.parameterAsDouble(parameters, self.MIN_DISTANCE, context)
@@ -102,6 +110,8 @@ class TopoColor(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                fields, source.wkbType(), source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         features = {f.id(): f for f in source.getFeatures()}
 
@@ -176,7 +186,7 @@ class TopoColor(QgisAlgorithm):
                     if id_graph:
                         id_graph.add_edge(f.id(), f2.id())
 
-            index.insertFeature(f)
+            index.addFeature(f)
             i += 1
             feedback.setProgress(int(i * total))
 
@@ -222,10 +232,11 @@ class ColoringAlgorithm:
                 break
 
             # first work out which already assigned colors are adjacent to this feature
-            adjacent_colors = set()
-            for neighbour in graph.node_edge[feature_id]:
-                if neighbour in feature_colors:
-                    adjacent_colors.add(feature_colors[neighbour])
+            adjacent_colors = {
+                feature_colors[neighbour]
+                for neighbour in graph.node_edge[feature_id]
+                if neighbour in feature_colors
+            }
 
             # from the existing colors, work out which are available (ie non-adjacent)
             available_colors = color_pool.difference(adjacent_colors)

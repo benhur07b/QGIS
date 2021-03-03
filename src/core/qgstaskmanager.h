@@ -20,7 +20,6 @@
 
 #include <QObject>
 #include "qgis_sip.h"
-#include "qgis.h"
 #include <QMap>
 #include <QFuture>
 #include <QReadWriteLock>
@@ -45,7 +44,7 @@ typedef QList< QgsTask * > QgsTaskList;
  * task commences (ie via calling run() ).
  *
  * Long running tasks should periodically check the isCanceled() flag to detect if the task
- * has been canceled via some external event. If this flag is true then the task should
+ * has been canceled via some external event. If this flag is TRUE then the task should
  * clean up and terminate at the earliest possible convenience.
  *
  * \since QGIS 3.0
@@ -65,11 +64,13 @@ class CORE_EXPORT QgsTask : public QObject
       Complete, //!< Task successfully completed
       Terminated, //!< Task was terminated or errored
     };
+    Q_ENUM( TaskStatus )
 
     //! Task flags
     enum Flag
     {
       CanCancel = 1 << 1, //!< Task can be canceled
+      CancelWithoutPrompt = 1 << 2, //!< Task can be canceled without any users prompts, e.g. when closing a project or QGIS.
       AllFlags = CanCancel, //!< Task supports all flags
     };
     Q_DECLARE_FLAGS( Flags, Flag )
@@ -79,9 +80,9 @@ class CORE_EXPORT QgsTask : public QObject
      * \param description text description of task
      * \param flags task flags
      */
-    QgsTask( const QString &description = QString(), const Flags &flags = AllFlags );
+    QgsTask( const QString &description = QString(), QgsTask::Flags flags = AllFlags );
 
-    ~QgsTask();
+    ~QgsTask() override;
 
     /**
      * Returns the flags associated with the task.
@@ -89,12 +90,19 @@ class CORE_EXPORT QgsTask : public QObject
     Flags flags() const { return mFlags; }
 
     /**
-     * Returns true if the task can be canceled.
+     * Sets the task's \a description. This must be called before adding the task to a QgsTaskManager,
+     * changing the description after queuing the task has no effect.
+     * \since QGIS 3.10
+     */
+    void setDescription( const QString &description );
+
+    /**
+     * Returns TRUE if the task can be canceled.
      */
     bool canCancel() const { return mFlags & CanCancel; }
 
     /**
-     * Returns true if the task is active, ie it is not complete and has
+     * Returns TRUE if the task is active, ie it is not complete and has
      * not been canceled.
      */
     bool isActive() const { return mOverallStatus == Running; }
@@ -113,6 +121,15 @@ class CORE_EXPORT QgsTask : public QObject
      * Returns the task's progress (between 0.0 and 100.0)
      */
     double progress() const { return mTotalProgress; }
+
+    /**
+     * Returns the elapsed time since the task commenced, in milliseconds.
+     *
+     * The value is undefined for tasks which have not begun.
+     *
+     * \since QGIS 3.4
+     */
+    qint64 elapsedTime() const;
 
     /**
      * Notifies the task that it should terminate. Calling this is not guaranteed
@@ -175,7 +192,7 @@ class CORE_EXPORT QgsTask : public QObject
     /**
      * Sets a list of layers on which the task depends. The task will automatically
      * be canceled if any of these layers are about to be removed.
-     * \see dependentLayerIds()
+     * \see dependentLayers()
      */
     void setDependentLayers( const QList<QgsMapLayer *> &dependentLayers );
 
@@ -191,11 +208,11 @@ class CORE_EXPORT QgsTask : public QObject
      * If \a timeout is ``0`` the thread will be blocked forever.
      * In case of a timeout, the task will still be running.
      * In case the task already is finished, the method will return immediately while
-     * returning ``true``.
+     * returning ``TRUE``.
      *
-     * The result will be false if the wait timed out and true in any other case.
+     * The result will be FALSE if the wait timed out and TRUE in any other case.
      */
-    bool waitForFinished( unsigned long timeout = 30000 );
+    bool waitForFinished( int timeout = 30000 );
 
   signals:
 
@@ -260,14 +277,14 @@ class CORE_EXPORT QgsTask : public QObject
      * for the duration of this method so tasks should avoid performing any
      * lengthy operations here.
      */
-    virtual void finished( bool result ) { Q_UNUSED( result ); }
+    virtual void finished( bool result ) { Q_UNUSED( result ) }
 
     /**
-     * Will return true if task should terminate ASAP. If the task reports the CanCancel
+     * Will return TRUE if task should terminate ASAP. If the task reports the CanCancel
      * flag, then derived classes' run() methods should periodically check this and
      * terminate in a safe manner.
      */
-    bool isCanceled() const { return mShouldTerminate; }
+    bool isCanceled() const;
 
   protected slots:
 
@@ -296,18 +313,23 @@ class CORE_EXPORT QgsTask : public QObject
      */
     QMutex mNotFinishedMutex;
 
+    /**
+     * This semaphore remains locked from task creation until the task actually start,
+     * it's used in waitForFinished to actually wait the task to be started.
+     */
+    QSemaphore mNotStartedMutex;
+
     //! Progress of this (parent) task alone
     double mProgress = 0.0;
     //! Overall progress of this task and all subtasks
     double mTotalProgress = 0.0;
     bool mShouldTerminate = false;
+    mutable QMutex mShouldTerminateMutex;
     int mStartCount = 0;
-
-    QWaitCondition mTaskFinished;
 
     struct SubTask
     {
-      SubTask( QgsTask *task, QgsTaskList dependencies, SubTaskDependency dependency )
+      SubTask( QgsTask *task, const QgsTaskList &dependencies, SubTaskDependency dependency )
         : task( task )
         , dependencies( dependencies )
         , dependency( dependency )
@@ -319,6 +341,8 @@ class CORE_EXPORT QgsTask : public QObject
     QList< SubTask > mSubTasks;
 
     QgsWeakMapLayerPointerList mDependentLayers;
+
+    QElapsedTimer mElapsedTime;
 
 
     /**
@@ -332,19 +356,22 @@ class CORE_EXPORT QgsTask : public QObject
     void completed();
 
     /**
-     * Called when the task has failed, as either a result of an internal failure or via cancelation.
+     * Called when the task has failed, as either a result of an internal failure or via cancellation.
      */
     void terminated();
 
-    void processSubTasksForCompletion();
-
-    void processSubTasksForTermination();
 
     void processSubTasksForHold();
 
     friend class QgsTaskManager;
     friend class QgsTaskRunnableWrapper;
     friend class TestQgsTaskManager;
+
+  private slots:
+
+    void processSubTasksForCompletion();
+
+    void processSubTasksForTermination();
 
 };
 
@@ -368,9 +395,9 @@ class CORE_EXPORT QgsTaskManager : public QObject
      * Constructor for QgsTaskManager.
      * \param parent parent QObject
      */
-    QgsTaskManager( QObject *parent SIP_TRANSFERTHIS = 0 );
+    QgsTaskManager( QObject *parent SIP_TRANSFERTHIS = nullptr );
 
-    virtual ~QgsTaskManager();
+    ~QgsTaskManager() override;
 
     /**
      * Definition of a task for inclusion in the manager.
@@ -382,7 +409,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
        * Constructor for TaskDefinition. Ownership of the task is not transferred to the definition,
        * but will be transferred to a QgsTaskManager.
        */
-      explicit TaskDefinition( QgsTask *task, QgsTaskList dependentTasks = QgsTaskList() )
+      explicit TaskDefinition( QgsTask *task, const QgsTaskList &dependentTasks = QgsTaskList() )
         : task( task )
         , dependentTasks( dependentTasks )
       {}
@@ -405,7 +432,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
      * the task. The priority argument can be used to control the run queue's
      * order of execution, with larger numbers
      * taking precedence over lower priority numbers.
-     * \returns unique task ID
+     * \returns unique task ID, or 0 if task could not be added
      */
     long addTask( QgsTask *task SIP_TRANSFER, int priority = 0 );
 
@@ -415,14 +442,14 @@ class CORE_EXPORT QgsTaskManager : public QObject
      * manager will be responsible for starting the task. The priority argument can
      * be used to control the run queue's order of execution, with larger numbers
      * taking precedence over lower priority numbers.
-     * \returns unique task ID
+     * \returns unique task ID, or 0 if task could not be added
      */
     long addTask( const TaskDefinition &task SIP_TRANSFER, int priority = 0 );
 
     /**
      * Returns the task with matching ID.
      * \param id task ID
-     * \returns task if found, or nullptr
+     * \returns task if found, or NULLPTR
      */
     QgsTask *task( long id ) const;
 
@@ -448,7 +475,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
      */
     void cancelAll();
 
-    //! Returns true if all dependencies for the specified task are satisfied
+    //! Returns TRUE if all dependencies for the specified task are satisfied
     bool dependenciesSatisfied( long taskId ) const;
 
     /**
@@ -459,7 +486,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
 
     /**
      * Returns a list of layers on which as task is dependent. The task will automatically
-     * be canceled if any of these layers are above to be removed.
+     * be canceled if any of these layers are about to be removed.
      * \param taskId task ID
      * \returns list of layers
      * \see tasksDependentOnLayer()
@@ -484,6 +511,14 @@ class CORE_EXPORT QgsTaskManager : public QObject
      * \see countActiveTasksChanged()
      */
     int countActiveTasks() const;
+
+  public slots:
+
+    /**
+     * Triggers a task, e.g. as a result of a GUI interaction.
+     * \see taskTriggered()
+     */
+    void triggerTask( QgsTask *task );
 
   signals:
 
@@ -532,6 +567,14 @@ class CORE_EXPORT QgsTaskManager : public QObject
      */
     void countActiveTasksChanged( int count );
 
+    /**
+     * Emitted when a \a task is triggered. This occurs when a user clicks on
+     * the task from the QGIS GUI, and can be used to show detailed progress
+     * reports or re-open a related dialog.
+     * \see triggerTask()
+     */
+    void taskTriggered( QgsTask *task );
+
   private slots:
 
     void taskProgressChanged( double progress );
@@ -543,11 +586,14 @@ class CORE_EXPORT QgsTaskManager : public QObject
     struct TaskInfo
     {
       TaskInfo( QgsTask *task = nullptr, int priority = 0 );
+      void createRunnable();
       QgsTask *task = nullptr;
       QAtomicInt added;
       int priority;
       QgsTaskRunnableWrapper *runnable = nullptr;
     };
+
+    bool mInitialized = false;
 
     mutable QMutex *mTaskMutex;
 
@@ -556,7 +602,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
     QMap< long, QgsWeakMapLayerPointerList > mLayerDependencies;
 
     //! Tracks the next unique task ID
-    long mNextTaskId = 0;
+    long mNextTaskId = 1;
 
     //! List of active (queued or running) tasks. Includes subtasks.
     QSet< QgsTask * > mActiveTasks;
@@ -589,7 +635,7 @@ class CORE_EXPORT QgsTaskManager : public QObject
 
     bool resolveDependencies( long firstTaskId, long currentTaskId, QSet< long > &results ) const;
 
-    //! Will return true if the specified task has circular dependencies
+    //! Will return TRUE if the specified task has circular dependencies
     bool hasCircularDependencies( long taskId ) const;
 
     friend class TestQgsTaskManager;

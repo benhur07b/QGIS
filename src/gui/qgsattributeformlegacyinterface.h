@@ -25,7 +25,7 @@
 
 /**
  * \ingroup gui
- * This class helps to support legacy open form scripts to be compatible with the new
+ * \brief This class helps to support legacy open form scripts to be compatible with the new
  * QgsAttributeForm style interface.
  * \note not available in Python bindings
  */
@@ -33,7 +33,7 @@ class GUI_EXPORT QgsAttributeFormLegacyInterface : public QgsAttributeFormInterf
 {
   public:
     explicit QgsAttributeFormLegacyInterface( const QString &function, const QString &pyFormName, QgsAttributeForm *form );
-    ~QgsAttributeFormLegacyInterface();
+    ~QgsAttributeFormLegacyInterface() override;
 
     // QgsAttributeFormInterface interface
     void featureChanged() override;

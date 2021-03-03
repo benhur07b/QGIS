@@ -21,6 +21,21 @@
 #include "qgslinestring.h"
 #include "qgspoint.h"
 #include "qgsmultipoint.h"
+#include "qgsgeos.h"
+
+bool QgsCurve::operator==( const QgsAbstractGeometry &other ) const
+{
+  const QgsCurve *otherCurve = qgsgeometry_cast< const QgsCurve * >( &other );
+  if ( !otherCurve )
+    return false;
+
+  return equals( *otherCurve );
+}
+
+bool QgsCurve::operator!=( const QgsAbstractGeometry &other ) const
+{
+  return !operator==( other );
+}
 
 bool QgsCurve::isClosed() const
 {
@@ -31,10 +46,10 @@ bool QgsCurve::isClosed() const
   QgsPoint start = startPoint();
   QgsPoint end = endPoint();
 
-  bool closed = qgsDoubleNear( start.x(), end.x(), 1E-8 ) &&
-                qgsDoubleNear( start.y(), end.y(), 1E-8 );
+  bool closed = qgsDoubleNear( start.x(), end.x() ) &&
+                qgsDoubleNear( start.y(), end.y() );
   if ( is3D() && closed )
-    closed &= qgsDoubleNear( start.z(), end.z(), 1E-8 ) || ( std::isnan( start.z() ) && std::isnan( end.z() ) );
+    closed &= qgsDoubleNear( start.z(), end.z() ) || ( std::isnan( start.z() ) && std::isnan( end.z() ) );
   return closed;
 }
 
@@ -43,16 +58,21 @@ bool QgsCurve::isRing() const
   return ( isClosed() && numPoints() >= 4 );
 }
 
+QPainterPath QgsCurve::asQPainterPath() const
+{
+  QPainterPath p;
+  addToPainterPath( p );
+  return p;
+}
+
 QgsCoordinateSequence QgsCurve::coordinateSequence() const
 {
-  if ( !mCoordinateSequence.isEmpty() )
-    return mCoordinateSequence;
+  QgsCoordinateSequence sequence;
+  sequence.append( QgsRingSequence() );
+  sequence.back().append( QgsPointSequence() );
+  points( sequence.back().back() );
 
-  mCoordinateSequence.append( QgsRingSequence() );
-  mCoordinateSequence.back().append( QgsPointSequence() );
-  points( mCoordinateSequence.back().back() );
-
-  return mCoordinateSequence;
+  return sequence;
 }
 
 bool QgsCurve::nextVertex( QgsVertexId &id, QgsPoint &vertex ) const
@@ -126,9 +146,21 @@ QgsAbstractGeometry *QgsCurve::boundary() const
     return nullptr;
 
   QgsMultiPoint *multiPoint = new QgsMultiPoint();
+  multiPoint->reserve( 2 );
   multiPoint->addGeometry( new QgsPoint( startPoint() ) );
   multiPoint->addGeometry( new QgsPoint( endPoint() ) );
   return multiPoint;
+}
+
+QString QgsCurve::asKml( int precision ) const
+{
+  std::unique_ptr<QgsLineString> lineString( curveToLine() );
+  if ( !lineString )
+  {
+    return QString();
+  }
+  QString kml = lineString->asKml( precision );
+  return kml;
 }
 
 QgsCurve *QgsCurve::segmentize( double tolerance, SegmentationToleranceType toleranceType ) const
@@ -138,14 +170,14 @@ QgsCurve *QgsCurve::segmentize( double tolerance, SegmentationToleranceType tole
 
 int QgsCurve::vertexCount( int part, int ring ) const
 {
-  Q_UNUSED( part );
-  Q_UNUSED( ring );
+  Q_UNUSED( part )
+  Q_UNUSED( ring )
   return numPoints();
 }
 
 int QgsCurve::ringCount( int part ) const
 {
-  Q_UNUSED( part );
+  Q_UNUSED( part )
   return numPoints() > 0 ? 1 : 0;
 }
 
@@ -176,22 +208,57 @@ QgsRectangle QgsCurve::boundingBox() const
   return mBoundingBox;
 }
 
+bool QgsCurve::isValid( QString &error, int flags ) const
+{
+  if ( flags == 0 && mHasCachedValidity )
+  {
+    // use cached validity results
+    error = mValidityFailureReason;
+    return error.isEmpty();
+  }
+
+  QgsGeos geos( this );
+  bool res = geos.isValid( &error, flags & QgsGeometry::FlagAllowSelfTouchingHoles, nullptr );
+  if ( flags == 0 )
+  {
+    mValidityFailureReason = !res ? error : QString();
+    mHasCachedValidity = true;
+  }
+  return res;
+}
+
 QPolygonF QgsCurve::asQPolygonF() const
 {
-  const int nb = numPoints();
-  QPolygonF points;
-  points.reserve( nb );
-  for ( int i = 0; i < nb; ++i )
-  {
-    points << QPointF( xAt( i ), yAt( i ) );
-  }
-  return points;
+  std::unique_ptr< QgsLineString > segmentized( curveToLine() );
+  return segmentized->asQPolygonF();
+}
+
+double QgsCurve::straightDistance2d() const
+{
+  return startPoint().distance( endPoint() );
+}
+
+double QgsCurve::sinuosity() const
+{
+  double d = straightDistance2d();
+  if ( qgsDoubleNear( d, 0.0 ) )
+    return std::numeric_limits<double>::quiet_NaN();
+
+  return length() / d;
+}
+
+QgsCurve::Orientation QgsCurve::orientation() const
+{
+  double a = 0;
+  sumUpArea( a );
+  return a < 0 ? Clockwise : CounterClockwise;
 }
 
 void QgsCurve::clearCache() const
 {
   mBoundingBox = QgsRectangle();
-  mCoordinateSequence.clear();
+  mHasCachedValidity = false;
+  mValidityFailureReason.clear();
   QgsAbstractGeometry::clearCache();
 }
 
@@ -206,7 +273,7 @@ QgsPoint QgsCurve::childPoint( int index ) const
   QgsVertexId::VertexType type;
   bool res = pointAt( index, point, type );
   Q_ASSERT( res );
-  Q_UNUSED( res );
+  Q_UNUSED( res )
   return point;
 }
 

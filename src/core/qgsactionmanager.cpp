@@ -30,6 +30,7 @@
 #include "qgslogger.h"
 #include "qgsexpression.h"
 #include "qgsdataprovider.h"
+#include "qgsexpressioncontextutils.h"
 
 #include <QList>
 #include <QStringList>
@@ -65,7 +66,7 @@ void QgsActionManager::addAction( const QgsAction &action )
     mLayer->dataProvider()->setListening( true );
     if ( !mOnNotifyConnected )
     {
-      QgsDebugMsg( "connecting to notify" );
+      QgsDebugMsg( QStringLiteral( "connecting to notify" ) );
       connect( mLayer->dataProvider(), &QgsDataProvider::notify, this, &QgsActionManager::onNotifyRunActions );
       mOnNotifyConnected = true;
     }
@@ -95,7 +96,7 @@ void QgsActionManager::onNotifyRunActions( const QString &message )
   }
 }
 
-void QgsActionManager::removeAction( const QUuid &actionId )
+void QgsActionManager::removeAction( QUuid actionId )
 {
   int i = 0;
   for ( const QgsAction &action : qgis::as_const( mActions ) )
@@ -123,10 +124,10 @@ void QgsActionManager::removeAction( const QUuid &actionId )
   }
 }
 
-void QgsActionManager::doAction( const QUuid &actionId, const QgsFeature &feature, int defaultValueIndex )
+void QgsActionManager::doAction( QUuid actionId, const QgsFeature &feature, int defaultValueIndex, const QgsExpressionContextScope &scope )
 {
   QgsExpressionContext context = createExpressionContext();
-  QgsExpressionContextScope *actionScope = new QgsExpressionContextScope();
+  QgsExpressionContextScope *actionScope = new QgsExpressionContextScope( scope );
   actionScope->addVariable( QgsExpressionContextScope::StaticVariable( QStringLiteral( "field_index" ), defaultValueIndex, true ) );
   if ( defaultValueIndex >= 0 && defaultValueIndex < feature.fields().size() )
     actionScope->addVariable( QgsExpressionContextScope::StaticVariable( QStringLiteral( "field_name" ), feature.fields().at( defaultValueIndex ).name(), true ) );
@@ -135,7 +136,7 @@ void QgsActionManager::doAction( const QUuid &actionId, const QgsFeature &featur
   doAction( actionId, feature, context );
 }
 
-void QgsActionManager::doAction( const QUuid &actionId, const QgsFeature &feat, const QgsExpressionContext &context )
+void QgsActionManager::doAction( QUuid actionId, const QgsFeature &feat, const QgsExpressionContext &context )
 {
   QgsAction act = action( actionId );
 
@@ -267,7 +268,7 @@ bool QgsActionManager::readXml( const QDomNode &layer_node )
   return true;
 }
 
-QgsAction QgsActionManager::action( const QUuid &id )
+QgsAction QgsActionManager::action( QUuid id )
 {
   for ( const QgsAction &action : qgis::as_const( mActions ) )
   {
@@ -278,7 +279,7 @@ QgsAction QgsActionManager::action( const QUuid &id )
   return QgsAction();
 }
 
-void QgsActionManager::setDefaultAction( const QString &actionScope, const QUuid &actionId )
+void QgsActionManager::setDefaultAction( const QString &actionScope, QUuid actionId )
 {
   mDefaultActions[ actionScope ] = actionId;
 }

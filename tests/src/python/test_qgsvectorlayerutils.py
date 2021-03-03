@@ -9,11 +9,13 @@ the Free Software Foundation; either version 2 of the License, or
 __author__ = 'Nyall Dawson'
 __date__ = '25/10/2016'
 __copyright__ = 'Copyright 2016, The QGIS Project'
-# This will get replaced with a git SHA1 when you do a git archive
-__revision__ = '$Format:%H$'
 
+import os
 import qgis  # NOQA
+import shutil
+import tempfile
 
+from qgis.PyQt.QtCore import QVariant, QDate
 from qgis.core import (QgsProject,
                        QgsVectorLayer,
                        QgsVectorLayerUtils,
@@ -24,10 +26,16 @@ from qgis.core import (QgsProject,
                        QgsPointXY,
                        QgsDefaultValue,
                        QgsRelation,
+                       QgsFields,
+                       QgsField,
+                       QgsMemoryProviderUtils,
+                       QgsWkbTypes,
+                       QgsCoordinateReferenceSystem,
+                       QgsVectorLayerJoinInfo,
                        NULL
                        )
 from qgis.testing import start_app, unittest
-
+from utilities import unitTestDataPath
 
 start_app()
 
@@ -39,11 +47,139 @@ def createLayerWithOnePoint():
     f = QgsFeature()
     f.setAttributes(["test", 123])
     assert pr.addFeatures([f])
-    assert layer.pendingFeatureCount() == 1
+    assert layer.featureCount() == 1
     return layer
 
 
 class TestQgsVectorLayerUtils(unittest.TestCase):
+
+    def test_field_is_read_only(self):
+        """
+        Test fieldIsReadOnly
+        """
+        layer = createLayerWithOnePoint()
+        # layer is not editable => all fields are read only
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+
+        layer.startEditing()
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+
+        field = QgsField('test', QVariant.String)
+        layer.addAttribute(field)
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+
+        # simulate read-only field from provider
+        field = QgsField('test2', QVariant.String)
+        field.setReadOnly(True)
+        layer.addAttribute(field)
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 3))
+
+        layer.rollBack()
+        layer.startEditing()
+
+        # edit form config specifies read only
+        form_config = layer.editFormConfig()
+        form_config.setReadOnly(1, True)
+        layer.setEditFormConfig(form_config)
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+        form_config.setReadOnly(1, False)
+        layer.setEditFormConfig(form_config)
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+
+        # joined field
+        layer2 = QgsVectorLayer("Point?field=fldtxt2:string&field=fldint:integer",
+                                "addfeat", "memory")
+        join_info = QgsVectorLayerJoinInfo()
+        join_info.setJoinLayer(layer2)
+        join_info.setJoinFieldName('fldint')
+        join_info.setTargetFieldName('fldint')
+        join_info.setUsingMemoryCache(True)
+        layer.addJoin(join_info)
+        layer.updateFields()
+
+        self.assertEqual([f.name() for f in layer.fields()], ['fldtxt', 'fldint', 'addfeat_fldtxt2'])
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 1))
+        # join layer is not editable
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+
+        # make join editable
+        layer.removeJoin(layer2.id())
+        join_info.setEditable(True)
+        layer.addJoin(join_info)
+        layer.updateFields()
+        self.assertEqual([f.name() for f in layer.fields()], ['fldtxt', 'fldint', 'addfeat_fldtxt2'])
+
+        # should still be read only -- the join layer itself is not editable
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+
+        layer2.startEditing()
+        self.assertFalse(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+
+        # but now we set a property on the join layer which blocks editing for the feature...
+        form_config = layer2.editFormConfig()
+        form_config.setReadOnly(0, True)
+        layer2.setEditFormConfig(form_config)
+        # should now be read only -- the joined layer edit form config prohibits edits
+        self.assertTrue(QgsVectorLayerUtils.fieldIsReadOnly(layer, 2))
+
+    def test_field_editability_depends_on_feature(self):
+        """
+        Test QgsVectorLayerUtils.fieldEditabilityDependsOnFeature
+        """
+        layer = createLayerWithOnePoint()
+
+        # not joined fields, so answer should be False
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 1))
+
+        # joined field
+        layer2 = QgsVectorLayer("Point?field=fldtxt2:string&field=fldint:integer",
+                                "addfeat", "memory")
+        join_info = QgsVectorLayerJoinInfo()
+        join_info.setJoinLayer(layer2)
+        join_info.setJoinFieldName('fldint')
+        join_info.setTargetFieldName('fldint')
+        join_info.setUsingMemoryCache(True)
+        layer.addJoin(join_info)
+        layer.updateFields()
+
+        self.assertEqual([f.name() for f in layer.fields()], ['fldtxt', 'fldint', 'addfeat_fldtxt2'])
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 0))
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 1))
+        # join layer is not editable => regardless of the feature, the field will always be read-only
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 2))
+
+        # make join editable
+        layer.removeJoin(layer2.id())
+        join_info.setEditable(True)
+        join_info.setUpsertOnEdit(True)
+        layer.addJoin(join_info)
+        layer.updateFields()
+        self.assertEqual([f.name() for f in layer.fields()], ['fldtxt', 'fldint', 'addfeat_fldtxt2'])
+
+        # has upsert on edit => regardless of feature, we can create the join target to make the field editable
+        self.assertFalse(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 2))
+
+        layer.removeJoin(layer2.id())
+        join_info.setEditable(True)
+        join_info.setUpsertOnEdit(False)
+        layer.addJoin(join_info)
+        layer.updateFields()
+        self.assertEqual([f.name() for f in layer.fields()], ['fldtxt', 'fldint', 'addfeat_fldtxt2'])
+
+        # No upsert on edit => depending on feature, we either can edit the field or not, depending on whether
+        # the join target feature already exists or not
+        self.assertTrue(QgsVectorLayerUtils.fieldEditabilityDependsOnFeature(layer, 2))
 
     def test_value_exists(self):
         layer = createLayerWithOnePoint()
@@ -86,6 +222,43 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         self.assertFalse(QgsVectorLayerUtils.valueExists(layer, 1, 125, [99999, 3]))
         self.assertFalse(QgsVectorLayerUtils.valueExists(layer, 1, 125, [2, 4, 5, 3]))
 
+    def test_value_exists_joins(self):
+        """Test that unique values in fields from joined layers, see GH #36167"""
+
+        p = QgsProject()
+        main_layer = QgsVectorLayer("Point?field=fid:integer",
+                                    "main_layer", "memory")
+        self.assertTrue(main_layer.isValid())
+        # Attr layer is joined with layer on fk ->
+        attr_layer = QgsVectorLayer("Point?field=id:integer&field=fk:integer",
+                                    "attr_layer", "memory")
+        self.assertTrue(attr_layer.isValid())
+
+        p.addMapLayers([main_layer, attr_layer])
+        join_info = QgsVectorLayerJoinInfo()
+        join_info.setJoinLayer(attr_layer)
+        join_info.setJoinFieldName('fk')
+        join_info.setTargetFieldName('fid')
+        join_info.setUsingMemoryCache(True)
+        main_layer.addJoin(join_info)
+        main_layer.updateFields()
+        join_buffer = main_layer.joinBuffer()
+        self.assertTrue(join_buffer.containsJoins())
+        self.assertEqual(main_layer.fields().names(), ['fid', 'attr_layer_id'])
+
+        f = QgsFeature(main_layer.fields())
+        f.setAttributes([1])
+        main_layer.dataProvider().addFeatures([f])
+
+        f = QgsFeature(attr_layer.fields())
+        f.setAttributes([1, 1])
+        attr_layer.dataProvider().addFeatures([f])
+
+        self.assertTrue(QgsVectorLayerUtils.valueExists(main_layer, 0, 1))
+        self.assertTrue(QgsVectorLayerUtils.valueExists(main_layer, 1, 1))
+        self.assertFalse(QgsVectorLayerUtils.valueExists(main_layer, 0, 2))
+        self.assertFalse(QgsVectorLayerUtils.valueExists(main_layer, 1, 2))
+
     def test_validate_attribute(self):
         """ test validating attributes against constraints """
         layer = createLayerWithOnePoint()
@@ -104,7 +277,8 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         print(errors)
         # checking only for provider constraints
-        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1, origin=QgsFieldConstraints.ConstraintOriginProvider)
+        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1,
+                                                            origin=QgsFieldConstraints.ConstraintOriginProvider)
         self.assertTrue(res)
         self.assertEqual(len(errors), 0)
 
@@ -130,7 +304,8 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         print(errors)
 
         # checking only for provider constraints
-        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1, origin=QgsFieldConstraints.ConstraintOriginProvider)
+        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1,
+                                                            origin=QgsFieldConstraints.ConstraintOriginProvider)
         self.assertTrue(res)
         self.assertEqual(len(errors), 0)
 
@@ -147,13 +322,15 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         print(errors)
 
         # checking only for provider constraints
-        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1, origin=QgsFieldConstraints.ConstraintOriginProvider)
+        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1,
+                                                            origin=QgsFieldConstraints.ConstraintOriginProvider)
         self.assertTrue(res)
         self.assertEqual(len(errors), 0)
 
         # checking only for soft constraints
         layer.setFieldConstraint(1, QgsFieldConstraints.ConstraintUnique, QgsFieldConstraints.ConstraintStrengthHard)
-        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1, strength=QgsFieldConstraints.ConstraintStrengthSoft)
+        res, errors = QgsVectorLayerUtils.validateAttribute(layer, f, 1,
+                                                            strength=QgsFieldConstraints.ConstraintStrengthSoft)
         self.assertTrue(res)
         self.assertEqual(len(errors), 0)
         # checking for hard constraints
@@ -243,7 +420,7 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         g = QgsGeometry.fromPointXY(QgsPointXY(100, 200))
         f = QgsVectorLayerUtils.createFeature(layer, g)
         self.assertTrue(f.hasGeometry())
-        self.assertEqual(f.geometry().exportToWkt(), g.exportToWkt())
+        self.assertEqual(f.geometry().asWkt(), g.asWkt())
 
         # using attribute map
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'a', 2: 6.0})
@@ -252,23 +429,85 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         # layer with default value expression
         layer.setDefaultValueDefinition(2, QgsDefaultValue('3*4'))
         f = QgsVectorLayerUtils.createFeature(layer)
-        self.assertEqual(f.attributes(), [NULL, NULL, 12.0])
-        # we expect the default value expression to take precedence over the attribute map
+        self.assertEqual(f.attributes(), [NULL, NULL, 12])
+        # we do not expect the default value expression to take precedence over the attribute map
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'a', 2: 6.0})
+        self.assertEqual(f.attributes(), ['a', NULL, 6.0])
+        # default value takes precedence if it's apply on update
+        layer.setDefaultValueDefinition(2, QgsDefaultValue('3*4', True))
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'a', 2: 6.0})
         self.assertEqual(f.attributes(), ['a', NULL, 12.0])
         # layer with default value expression based on geometry
         layer.setDefaultValueDefinition(2, QgsDefaultValue('3*$x'))
         f = QgsVectorLayerUtils.createFeature(layer, g)
+        # adjusted so that input value and output feature are the same
         self.assertEqual(f.attributes(), [NULL, NULL, 300.0])
         layer.setDefaultValueDefinition(2, QgsDefaultValue(None))
 
         # test with violated unique constraints
         layer.setFieldConstraint(1, QgsFieldConstraints.ConstraintUnique)
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and sets to 128
         self.assertEqual(f.attributes(), ['test_1', 128, NULL])
         layer.setFieldConstraint(0, QgsFieldConstraints.ConstraintUnique)
+        # since field 0 and 1 already have values test_1 and 123, the output must be a new unique value
         f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
         self.assertEqual(f.attributes(), ['test_4', 128, NULL])
+
+        # test with violated unique constraints and default value expression providing unique value
+        layer.setDefaultValueDefinition(1, QgsDefaultValue('130'))
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and adds the default value
+        self.assertEqual(f.attributes(), ['test_4', 130, NULL])
+        # fallback: test with violated unique constraints and default value expression providing already existing value
+        # add the feature with the default value:
+        self.assertTrue(layer.dataProvider().addFeatures([f]))
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 123})
+        # since field 1 has Unique Constraint, it ignores value 123 that already has been set and adds the default value
+        # and since the default value providing an already existing value (130) it generates a unique value (next int: 131)
+        self.assertEqual(f.attributes(), ['test_5', 131, NULL])
+        layer.setDefaultValueDefinition(1, QgsDefaultValue(None))
+
+        # test with manually correct unique constraint
+        f = QgsVectorLayerUtils.createFeature(layer, attributes={0: 'test_1', 1: 132})
+        self.assertEqual(f.attributes(), ['test_5', 132, NULL])
+
+        """ test creating a feature respecting unique values of postgres provider """
+        layer = QgsVectorLayer("Point?field=fldtxt:string&field=fldint:integer&field=flddbl:double",
+                               "addfeat", "memory")
+
+        # init connection string
+        dbconn = 'service=qgis_test'
+        if 'QGIS_PGTEST_DB' in os.environ:
+            dbconn = os.environ['QGIS_PGTEST_DB']
+
+        # create a vector layer
+        pg_layer = QgsVectorLayer('{} table="qgis_test"."authors" sql='.format(dbconn), "authors", "postgres")
+        self.assertTrue(pg_layer.isValid())
+        # check the default clause
+        default_clause = 'nextval(\'qgis_test.authors_pk_seq\'::regclass)'
+        self.assertEqual(pg_layer.dataProvider().defaultValueClause(0), default_clause)
+
+        # though default_clause is after the first create not unique (until save), it should fill up all the features with it
+        pg_layer.startEditing()
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        self.assertTrue(QgsVectorLayerUtils.valueExists(pg_layer, 0, default_clause))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [default_clause, NULL])
+        self.assertTrue(pg_layer.addFeatures([f]))
+        # if a unique value is passed, use it
+        f = QgsVectorLayerUtils.createFeature(pg_layer, attributes={0: 40, 1: NULL})
+        self.assertEqual(f.attributes(), [40, NULL])
+        # and if a default value is configured use it as well
+        pg_layer.setDefaultValueDefinition(0, QgsDefaultValue('11*4'))
+        f = QgsVectorLayerUtils.createFeature(pg_layer)
+        self.assertEqual(f.attributes(), [44, NULL])
+        pg_layer.rollBack()
 
     def testDuplicateFeature(self):
         """ test duplicating a feature """
@@ -392,7 +631,7 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
         print( "\nFeatures on layer2 (after duplication)")
         for f in layer2.getFeatures():
             print( f.attributes() )
-            
+
         print( "\nAll Features and relations")
         featit=layer1.getFeatures()
         f=QgsFeature()
@@ -422,6 +661,214 @@ class TestQgsVectorLayerUtils(unittest.TestCase):
 
         # - check if the ids are still the same
         self.assertEqual(copyValueList, origValueList)
+
+    def test_make_features_compatible_attributes(self):
+        """Test corner cases for attributes"""
+
+        # Test feature with attributes
+        fields = QgsFields()
+        fields.append(QgsField('int_f', QVariant.Int))
+        fields.append(QgsField('str_f', QVariant.String))
+        f1 = QgsFeature(fields)
+        f1['int_f'] = 1
+        f1['str_f'] = 'str'
+        f1.setGeometry(QgsGeometry.fromWkt('Point(9 45)'))
+        f2 = f1
+        QgsVectorLayerUtils.matchAttributesToFields(f2, fields)
+        self.assertEqual(f1.attributes(), f2.attributes())
+        self.assertTrue(f1.geometry().asWkt(), f2.geometry().asWkt())
+
+        # Test pad with 0 with fields
+        f1.setAttributes([])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 2)
+        self.assertEqual(f1.attributes()[0], QVariant())
+        self.assertEqual(f1.attributes()[1], QVariant())
+
+        # Test pad with 0 without fields
+        f1 = QgsFeature()
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 2)
+        self.assertEqual(f1.attributes()[0], QVariant())
+        self.assertEqual(f1.attributes()[1], QVariant())
+
+        # Test drop extra attrs
+        f1 = QgsFeature(fields)
+        f1.setAttributes([1, 'foo', 'extra'])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 2)
+        self.assertEqual(f1.attributes()[0], 1)
+        self.assertEqual(f1.attributes()[1], 'foo')
+
+        # Rearranged fields
+        fields2 = QgsFields()
+        fields2.append(QgsField('str_f', QVariant.String))
+        fields2.append(QgsField('int_f', QVariant.Int))
+        f1 = QgsFeature(fields2)
+        f1.setAttributes([1, 'foo', 'extra'])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 2)
+        self.assertEqual(f1.attributes()[0], 'foo')
+        self.assertEqual(f1.attributes()[1], 1)
+
+        # mixed
+        fields2.append(QgsField('extra', QVariant.String))
+        fields.append(QgsField('extra2', QVariant.Int))
+        f1.setFields(fields2)
+        f1.setAttributes([1, 'foo', 'blah'])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 3)
+        self.assertEqual(f1.attributes()[0], 'foo')
+        self.assertEqual(f1.attributes()[1], 1)
+        self.assertEqual(f1.attributes()[2], QVariant())
+
+        fields.append(QgsField('extra', QVariant.Int))
+        f1.setAttributes([1, 'foo', 'blah'])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 4)
+        self.assertEqual(f1.attributes()[0], 1)
+        self.assertEqual(f1.attributes()[1], 'foo')
+        self.assertEqual(f1.attributes()[2], 'blah')
+        self.assertEqual(f1.attributes()[3], QVariant())
+
+        # case insensitive
+        fields2.append(QgsField('extra3', QVariant.String))
+        fields.append(QgsField('EXTRA3', QVariant.Int))
+        f1.setFields(fields2)
+        f1.setAttributes([1, 'foo', 'blah', 'blergh'])
+        QgsVectorLayerUtils.matchAttributesToFields(f1, fields)
+        self.assertEqual(len(f1.attributes()), 5)
+        self.assertEqual(f1.attributes()[0], 'foo')
+        self.assertEqual(f1.attributes()[1], 1)
+        self.assertEqual(f1.attributes()[2], QVariant())
+        self.assertEqual(f1.attributes()[3], 'blah')
+        self.assertEqual(f1.attributes()[4], 'blergh')
+
+    def test_create_multiple_unique_constraint(self):
+        """Test create multiple features with unique constraint"""
+
+        vl = createLayerWithOnePoint()
+        vl.setFieldConstraint(1, QgsFieldConstraints.ConstraintUnique)
+
+        features_data = []
+        context = vl.createExpressionContext()
+        for i in range(2):
+            features_data.append(
+                QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 44)'), {0: 'test_%s' % i, 1: 123}))
+        features = QgsVectorLayerUtils.createFeatures(vl, features_data, context)
+
+        self.assertEqual(features[0].attributes()[1], 124)
+        self.assertEqual(features[1].attributes()[1], 125)
+
+    def test_create_nulls_and_defaults(self):
+        """Test bug #21304 when pasting features from another layer and default values are not honored"""
+
+        vl = createLayerWithOnePoint()
+        vl.setDefaultValueDefinition(1, QgsDefaultValue('300'))
+
+        features_data = []
+        context = vl.createExpressionContext()
+        features_data.append(
+            QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 44)'), {0: 'test_1', 1: None}))
+        features_data.append(
+            QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 45)'), {0: 'test_2', 1: QVariant()}))
+        features_data.append(QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 46)'),
+                                                                {0: 'test_3', 1: QVariant(QVariant.Int)}))
+        features_data.append(QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 46)'), {0: 'test_4'}))
+        features = QgsVectorLayerUtils.createFeatures(vl, features_data, context)
+
+        for f in features:
+            self.assertEqual(f.attributes()[1], 300, f.id())
+
+        vl = createLayerWithOnePoint()
+        vl.setDefaultValueDefinition(0, QgsDefaultValue("'my_default'"))
+
+        features_data = []
+        context = vl.createExpressionContext()
+        features_data.append(QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 44)'), {0: None}))
+        features_data.append(QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 45)'), {0: QVariant()}))
+        features_data.append(
+            QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 46)'), {0: QVariant(QVariant.String)}))
+        features_data.append(QgsVectorLayerUtils.QgsFeatureData(QgsGeometry.fromWkt('Point (7 46)'), {}))
+        features = QgsVectorLayerUtils.createFeatures(vl, features_data, context)
+
+        for f in features:
+            self.assertEqual(f.attributes()[0], 'my_default', f.id())
+
+    def test_unique_pk_when_subset(self):
+        """Test unique values on filtered layer GH #30062"""
+
+        src = unitTestDataPath('points_gpkg.gpkg')
+        dest = tempfile.mktemp() + '.gpkg'
+        shutil.copy(src, dest)
+        vl = QgsVectorLayer(dest, 'vl', 'ogr')
+        self.assertTrue(vl.isValid())
+        features_data = []
+        it = vl.getFeatures()
+        for _ in range(3):
+            f = next(it)
+            features_data.append(
+                QgsVectorLayerUtils.QgsFeatureData(f.geometry(), dict(zip(range(f.fields().count()), f.attributes()))))
+        # Set a filter
+        vl.setSubsetString('"fid" in (4,5,6)')
+        self.assertTrue(vl.isValid())
+        context = vl.createExpressionContext()
+        features = QgsVectorLayerUtils.createFeatures(vl, features_data, context)
+        self.assertTrue(vl.startEditing())
+        vl.addFeatures(features)
+        self.assertTrue(vl.commitChanges())
+
+    def testGuessFriendlyIdentifierField(self):
+        """
+        Test guessing a user friendly identifier field
+        """
+        fields = QgsFields()
+        self.assertFalse(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields))
+
+        fields.append(QgsField('id', QVariant.Int))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'id')
+
+        fields.append(QgsField('name', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'name')
+
+        fields.append(QgsField('title', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'name')
+
+        # regardless of actual field order, we prefer "name" over "title"
+        fields = QgsFields()
+        fields.append(QgsField('title', QVariant.String))
+        fields.append(QgsField('name', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'name')
+
+        # test with an "anti candidate", which is a substring which makes a field containing "name" less preferred...
+        fields = QgsFields()
+        fields.append(QgsField('id', QVariant.Int))
+        fields.append(QgsField('typename', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'typename')
+        fields.append(QgsField('title', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'title')
+
+        fields = QgsFields()
+        fields.append(QgsField('id', QVariant.Int))
+        fields.append(QgsField('classname', QVariant.String))
+        fields.append(QgsField('x', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'classname')
+        fields.append(QgsField('desc', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'desc')
+
+        fields = QgsFields()
+        fields.append(QgsField('id', QVariant.Int))
+        fields.append(QgsField('areatypename', QVariant.String))
+        fields.append(QgsField('areaadminname', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'areaadminname')
+
+        # if no good matches by name found, the first string field should be used
+        fields = QgsFields()
+        fields.append(QgsField('id', QVariant.Int))
+        fields.append(QgsField('date', QVariant.Date))
+        fields.append(QgsField('station', QVariant.String))
+        fields.append(QgsField('org', QVariant.String))
+        self.assertEqual(QgsVectorLayerUtils.guessFriendlyIdentifierField(fields), 'station')
 
 
 if __name__ == '__main__':

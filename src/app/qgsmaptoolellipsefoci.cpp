@@ -19,7 +19,8 @@
 #include "qgslinestring.h"
 #include "qgsmapcanvas.h"
 #include "qgspoint.h"
-#include <QMouseEvent>
+#include "qgsmapmouseevent.h"
+#include "qgssnapindicator.h"
 #include <memory>
 
 QgsMapToolEllipseFoci::QgsMapToolEllipseFoci( QgsMapToolCapture *parentTool,
@@ -30,31 +31,39 @@ QgsMapToolEllipseFoci::QgsMapToolEllipseFoci( QgsMapToolCapture *parentTool,
 
 void QgsMapToolEllipseFoci::cadCanvasReleaseEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  if ( !currentVectorLayer() )
+  {
+    notifyNotVectorLayer();
+    clean();
+    stopCapturing();
+    e->ignore();
+    return;
+  }
 
   if ( e->button() == Qt::LeftButton )
   {
-    mPoints.append( mapPoint );
+    if ( mPoints.size() < 2 )
+      mPoints.append( point );
 
-    if ( !mPoints.isEmpty() && !mTempRubberBand )
+    if ( !mTempRubberBand )
     {
-      mTempRubberBand = createGeometryRubberBand( ( mode() == CapturePolygon ) ? QgsWkbTypes::PolygonGeometry : QgsWkbTypes::LineGeometry, true );
+      mTempRubberBand = createGeometryRubberBand( mLayerType, true );
       mTempRubberBand->show();
     }
   }
   else if ( e->button() == Qt::RightButton )
   {
-    deactivate();
-    if ( mParentTool )
-    {
-      mParentTool->canvasReleaseEvent( e );
-    }
+    release( e );
   }
 }
 
 void QgsMapToolEllipseFoci::cadCanvasMoveEvent( QgsMapMouseEvent *e )
 {
-  QgsPoint mapPoint( e->mapPoint() );
+  QgsPoint point = mapPoint( *e );
+
+  mSnapIndicator->setMatch( e->mapPointMatch() );
 
   if ( mTempRubberBand )
   {
@@ -64,13 +73,13 @@ void QgsMapToolEllipseFoci::cadCanvasMoveEvent( QgsMapMouseEvent *e )
       {
         std::unique_ptr<QgsLineString> line( new QgsLineString() );
         line->addVertex( mPoints.at( 0 ) );
-        line->addVertex( mapPoint );
+        line->addVertex( point );
         mTempRubberBand->setGeometry( line.release() );
       }
       break;
       case 2:
       {
-        mEllipse = QgsEllipse().fromFoci( mPoints.at( 0 ), mPoints.at( 1 ), mapPoint );
+        mEllipse = QgsEllipse().fromFoci( mPoints.at( 0 ), mPoints.at( 1 ), point );
         mTempRubberBand->setGeometry( mEllipse.toPolygon() );
       }
       break;

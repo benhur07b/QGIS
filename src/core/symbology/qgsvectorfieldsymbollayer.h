@@ -24,7 +24,8 @@
 
 /**
  * \ingroup core
- * A symbol layer class for displaying displacement arrows based on point layer attributes*/
+ * \brief A symbol layer class for displaying displacement arrows based on point layer attributes.
+*/
 class CORE_EXPORT QgsVectorFieldSymbolLayer: public QgsMarkerSymbolLayer
 {
   public:
@@ -49,7 +50,8 @@ class CORE_EXPORT QgsVectorFieldSymbolLayer: public QgsMarkerSymbolLayer
 
     QgsVectorFieldSymbolLayer();
 
-    static QgsSymbolLayer *create( const QgsStringMap &properties = QgsStringMap() );
+    //! Creates the symbol layer
+    static QgsSymbolLayer *create( const QVariantMap &properties = QVariantMap() );
     static QgsSymbolLayer *createFromSld( QDomElement &element );
 
     QString layerType() const override { return QStringLiteral( "VectorField" ); }
@@ -58,20 +60,22 @@ class CORE_EXPORT QgsVectorFieldSymbolLayer: public QgsMarkerSymbolLayer
     QgsSymbol *subSymbol() override { return mLineSymbol.get(); }
 
     void setColor( const QColor &color ) override;
-    virtual QColor color() const override;
+    QColor color() const override;
 
     void renderPoint( QPointF point, QgsSymbolRenderContext &context ) override;
     void startRender( QgsSymbolRenderContext &context ) override;
     void stopRender( QgsSymbolRenderContext &context ) override;
 
     QgsVectorFieldSymbolLayer *clone() const override SIP_FACTORY;
-    QgsStringMap properties() const override;
+    QVariantMap properties() const override;
+    bool usesMapUnits() const override;
 
-    void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props ) const override;
+    void toSld( QDomDocument &doc, QDomElement &element, const QVariantMap &props ) const override;
 
     void drawPreviewIcon( QgsSymbolRenderContext &context, QSize size ) override;
 
     QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool hasDataDefinedProperties() const override;
 
     //setters and getters
     void setXAttribute( const QString &attribute ) { mXAttribute = attribute; }
@@ -110,7 +114,7 @@ class CORE_EXPORT QgsVectorFieldSymbolLayer: public QgsMarkerSymbolLayer
     const QgsMapUnitScale &distanceMapUnitScale() const { return mDistanceMapUnitScale; }
 
     // TODO - implement properly
-    virtual QRectF bounds( QPointF, QgsSymbolRenderContext & ) override { return QRectF(); }
+    QRectF bounds( QPointF, QgsSymbolRenderContext & ) override { return QRectF(); }
 
   private:
 #ifdef SIP_RUN

@@ -18,7 +18,7 @@
 #ifndef QGSLAYOUTSERIALIZABLEOBJECT_H
 #define QGSLAYOUTSERIALIZABLEOBJECT_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_core.h"
 #include "qgslayoutundocommand.h"
 
@@ -29,17 +29,15 @@ class QgsAbstractLayoutUndoCommand;
 
 /**
  * \ingroup core
- * An interface for layout objects which can be stored and read from DOM elements.
+ * \brief An interface for layout objects which can be stored and read from DOM elements.
  * \since QGIS 3.0
 */
 class CORE_EXPORT QgsLayoutSerializableObject : public QgsLayoutUndoObjectInterface
 {
   public:
 
-    virtual ~QgsLayoutSerializableObject() = default;
-
     /**
-     * Return the object type as a string.
+     * Returns the object type as a string.
      *
      * This string must be a unique, single word, character only representation of the item type, eg "LayoutScaleBar"
      */

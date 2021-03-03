@@ -21,16 +21,15 @@ __author__ = 'Victor Olaya'
 __date__ = 'August 2012'
 __copyright__ = '(C) 2012, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
 import os
 
 from qgis.PyQt.QtGui import QIcon
 
-from qgis.core import (QgsWkbTypes,
+from qgis.core import (QgsApplication,
+                       QgsWkbTypes,
                        QgsProcessing,
+                       QgsProcessingException,
+                       QgsProcessingAlgorithm,
                        QgsProcessingParameterFeatureSource,
                        QgsProcessingParameterField,
                        QgsProcessingParameterNumber,
@@ -45,7 +44,6 @@ pluginPath = os.path.split(os.path.split(os.path.dirname(__file__))[0])[0]
 
 
 class VariableDistanceBuffer(QgisAlgorithm):
-
     INPUT = 'INPUT'
     OUTPUT = 'OUTPUT'
     FIELD = 'FIELD'
@@ -56,13 +54,22 @@ class VariableDistanceBuffer(QgisAlgorithm):
     MITER_LIMIT = 'MITER_LIMIT'
 
     def icon(self):
-        return QIcon(os.path.join(pluginPath, 'images', 'ftools', 'buffer.png'))
+        return QgsApplication.getThemeIcon("/algorithms/mAlgorithmBuffer.svg")
+
+    def svgIconPath(self):
+        return QgsApplication.iconPath("/algorithms/mAlgorithmBuffer.svg")
 
     def group(self):
         return self.tr('Vector geometry')
 
+    def groupId(self):
+        return 'vectorgeometry'
+
     def __init__(self):
         super().__init__()
+
+    def flags(self):
+        return QgsProcessingAlgorithm.FlagSupportsBatch | QgsProcessingAlgorithm.FlagCanCancel | QgsProcessingAlgorithm.FlagDeprecated
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterFeatureSource(self.INPUT,
@@ -104,8 +111,10 @@ class VariableDistanceBuffer(QgisAlgorithm):
 
     def processAlgorithm(self, parameters, context, feedback):
         source = self.parameterAsSource(parameters, self.INPUT, context)
+        if source is None:
+            raise QgsProcessingException(self.invalidSourceError(parameters, self.INPUT))
 
-        dissolve = self.parameterAsBool(parameters, self.DISSOLVE, context)
+        dissolve = self.parameterAsBoolean(parameters, self.DISSOLVE, context)
         segments = self.parameterAsInt(parameters, self.SEGMENTS, context)
         end_cap_style = self.parameterAsEnum(parameters, self.END_CAP_STYLE, context) + 1
         join_style = self.parameterAsEnum(parameters, self.JOIN_STYLE, context) + 1
@@ -115,6 +124,8 @@ class VariableDistanceBuffer(QgisAlgorithm):
 
         (sink, dest_id) = self.parameterAsSink(parameters, self.OUTPUT, context,
                                                source.fields(), QgsWkbTypes.Polygon, source.sourceCrs())
+        if sink is None:
+            raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
 
         buff.buffering(feedback, context, sink, 0, field, True, source, dissolve, segments, end_cap_style,
                        join_style, miter_limit)

@@ -17,7 +17,7 @@
 #define QGSMAPCANVASITEM_H
 
 #include <QGraphicsItem>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsrectangle.h"
 #include "qgis_gui.h"
 
@@ -27,7 +27,7 @@ class QPainter;
 
 /**
  * \ingroup gui
- * An abstract class for items that can be placed on the
+ * \brief An abstract class for items that can be placed on the
  * map canvas.
  */
 class GUI_EXPORT QgsMapCanvasItem : public QGraphicsItem
@@ -37,23 +37,24 @@ class GUI_EXPORT QgsMapCanvasItem : public QGraphicsItem
     //! protected constructor: cannot be constructed directly
     QgsMapCanvasItem( QgsMapCanvas *mapCanvas SIP_TRANSFERTHIS );
 
-    virtual ~QgsMapCanvasItem();
+    ~QgsMapCanvasItem() override;
 
     //! function to be implemented by derived classes
     virtual void paint( QPainter *painter ) = 0;
 
-    virtual void paint( QPainter *painter,
-                        const QStyleOptionGraphicsItem *option,
-                        QWidget *widget = nullptr ) override;
+    void paint( QPainter *painter,
+                const QStyleOptionGraphicsItem *option,
+                QWidget *widget = nullptr ) override;
 
     //! schedules map canvas for repaint
     void updateCanvas();
 
     /**
      * Sets render context parameters
-    \param p painter for rendering
-    \param context out: configured context
-    \returns true in case of success */
+     * \param p painter for rendering
+     * \param context out: configured context
+     * \returns TRUE in case of success
+    */
     bool setRenderContextVariables( QPainter *p, QgsRenderContext &context ) const;
 
   public:
@@ -61,7 +62,7 @@ class GUI_EXPORT QgsMapCanvasItem : public QGraphicsItem
     //! called on changed extent or resize event to update position of the item
     virtual void updatePosition();
 
-    virtual QRectF boundingRect() const override;
+    QRectF boundingRect() const override;
 
     //! returns canvas item rectangle in map units
     QgsRectangle rect() const;

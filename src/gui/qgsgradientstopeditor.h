@@ -17,7 +17,7 @@
 #define QGSGRADIENTSTOPEDITOR_H
 
 #include "qgscolorramp.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include <QWidget>
 #include "qgis_gui.h"
 
@@ -25,7 +25,7 @@
 /**
  * \ingroup gui
  * \class QgsGradientStopEditor
- * An interactive editor for previewing a gradient color ramp and modifying the position of color
+ * \brief An interactive editor for previewing a gradient color ramp and modifying the position of color
  * stops along the gradient.
  * \since QGIS 2.16
  */
@@ -41,7 +41,7 @@ class GUI_EXPORT QgsGradientStopEditor : public QWidget
      * \param parent parent widget
      * \param ramp optional initial gradient ramp
      */
-    QgsGradientStopEditor( QWidget *parent SIP_TRANSFERTHIS = 0, QgsGradientColorRamp *ramp = nullptr );
+    QgsGradientStopEditor( QWidget *parent SIP_TRANSFERTHIS = nullptr, QgsGradientColorRamp *ramp = nullptr );
 
     /**
      * Sets the current ramp shown in the editor.
@@ -69,7 +69,7 @@ class GUI_EXPORT QgsGradientStopEditor : public QWidget
      */
     QgsGradientStop selectedStop() const;
 
-    virtual QSize sizeHint() const override;
+    QSize sizeHint() const override;
     void paintEvent( QPaintEvent *event ) override;
 
   public slots:
@@ -137,10 +137,10 @@ class GUI_EXPORT QgsGradientStopEditor : public QWidget
 
   protected:
 
-    virtual void mouseMoveEvent( QMouseEvent *event ) override;
-    virtual void mousePressEvent( QMouseEvent *event ) override;
-    virtual void mouseDoubleClickEvent( QMouseEvent *event ) override;
-    virtual void keyPressEvent( QKeyEvent *event ) override;
+    void mouseMoveEvent( QMouseEvent *event ) override;
+    void mousePressEvent( QMouseEvent *event ) override;
+    void mouseDoubleClickEvent( QMouseEvent *event ) override;
+    void keyPressEvent( QKeyEvent *event ) override;
 
     //Reimplemented to accept dragged colors
     void dragEnterEvent( QDragEnterEvent *e ) override;
@@ -161,7 +161,7 @@ class GUI_EXPORT QgsGradientStopEditor : public QWidget
      * \param painter destination painter
      * \param topMiddle coordinate corresponding to top middle point of desired marker
      * \param color color of marker
-     * \param selected set to true to draw the marker in a selected state
+     * \param selected set to TRUE to draw the marker in a selected state
      */
     void drawStopMarker( QPainter &painter, QPoint topMiddle, const QColor &color, bool selected = false );
 
@@ -171,7 +171,7 @@ class GUI_EXPORT QgsGradientStopEditor : public QWidget
     //! Converts a relative ramp position to a x-coordinate in the widget's coordinate system
     int relativePositionToPoint( double position ) const;
 
-    //! Returns true if the selected stop is movable and deletable
+    //! Returns TRUE if the selected stop is movable and deletable
     bool selectedStopIsMovable() const;
 
     //! Returns the closest stop to a mouse x position, or -1 if no stops within tolerance

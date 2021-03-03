@@ -21,20 +21,17 @@ __author__ = 'Victor Olaya'
 __date__ = 'January 2013'
 __copyright__ = '(C) 2013, Victor Olaya'
 
-# This will get replaced with a git SHA1 when you do a git archive
-
-__revision__ = '$Format:%H$'
-
-import plotly as plt
-import plotly.graph_objs as go
+import warnings
 
 from qgis.core import (QgsProcessingParameterRasterLayer,
                        QgsProcessingParameterBand,
                        QgsProcessingParameterNumber,
                        QgsProcessingParameterFileDestination,
-                       QgsProcessingOutputHtml)
+                       QgsProcessingException)
 from processing.algs.qgis.QgisAlgorithm import QgisAlgorithm
 from processing.tools import raster
+
+from qgis.PyQt.QtCore import QCoreApplication
 
 
 class RasterLayerHistogram(QgisAlgorithm):
@@ -45,7 +42,10 @@ class RasterLayerHistogram(QgisAlgorithm):
     BAND = 'BAND'
 
     def group(self):
-        return self.tr('Graphics')
+        return self.tr('Plots')
+
+    def groupId(self):
+        return 'plots'
 
     def __init__(self):
         super().__init__()
@@ -61,7 +61,6 @@ class RasterLayerHistogram(QgisAlgorithm):
                                                        self.tr('number of bins'), minValue=2, defaultValue=10))
 
         self.addParameter(QgsProcessingParameterFileDestination(self.OUTPUT, self.tr('Histogram'), self.tr('HTML files (*.html)')))
-        self.addOutput(QgsProcessingOutputHtml(self.OUTPUT, self.tr('Histogram')))
 
     def name(self):
         return 'rasterlayerhistogram'
@@ -70,6 +69,16 @@ class RasterLayerHistogram(QgisAlgorithm):
         return self.tr('Raster layer histogram')
 
     def processAlgorithm(self, parameters, context, feedback):
+        try:
+            # importing plotly throws Python warnings from within the library - filter these out
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=ResourceWarning)
+                warnings.filterwarnings("ignore", category=ImportWarning)
+                import plotly as plt
+                import plotly.graph_objs as go
+        except ImportError:
+            raise QgsProcessingException(QCoreApplication.translate('RasterLayerHistogram', 'This algorithm requires the Python “plotly” library. Please install this library and try again.'))
+
         layer = self.parameterAsRasterLayer(parameters, self.INPUT, context)
         band = self.parameterAsInt(parameters, self.BAND, context)
         nbins = self.parameterAsInt(parameters, self.BINS, context)
@@ -79,11 +88,11 @@ class RasterLayerHistogram(QgisAlgorithm):
         # ALERT: this is potentially blocking if the layer is too big
         values = raster.scanraster(layer, feedback, band)
 
-        valueslist = []
-        for v in values:
-            if v is not None:
-                valueslist.append(v)
-
+        valueslist = [
+            v
+            for v in values
+            if v is not None
+        ]
         data = [go.Histogram(x=valueslist,
                              nbinsx=nbins)]
         plt.offline.plot(data, filename=output, auto_open=False)

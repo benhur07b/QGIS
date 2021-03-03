@@ -37,6 +37,7 @@ bool QgsGuiVectorLayerTools::addFeature( QgsVectorLayer *layer, const QgsAttribu
 
   f->setGeometry( defaultGeometry );
   QgsFeatureAction a( tr( "Add feature" ), *f, layer );
+  a.setForceSuppressFormPopup( forceSuppressFormPopup() );
   bool added = a.addFeature( defaultValues );
   if ( !feat )
     delete f;
@@ -55,11 +56,11 @@ bool QgsGuiVectorLayerTools::startEditing( QgsVectorLayer *layer ) const
 
   if ( !layer->isEditable() && !layer->readOnly() )
   {
-    if ( !( layer->dataProvider()->capabilities() & QgsVectorDataProvider::EditingCapabilities ) )
+    if ( !layer->supportsEditing() )
     {
       QgisApp::instance()->messageBar()->pushMessage( tr( "Start editing failed" ),
           tr( "Provider cannot be opened for editing" ),
-          QgsMessageBar::INFO, QgisApp::instance()->messageTimeout() );
+          Qgis::Info );
       return false;
     }
 
@@ -102,10 +103,10 @@ bool QgsGuiVectorLayerTools::stopEditing( QgsVectorLayer *layer, bool allowCance
     if ( allowCancel )
       buttons |= QMessageBox::Cancel;
 
-    switch ( QMessageBox::information( nullptr,
-                                       tr( "Stop editing" ),
-                                       tr( "Do you want to save the changes to layer %1?" ).arg( layer->name() ),
-                                       buttons ) )
+    switch ( QMessageBox::question( nullptr,
+                                    tr( "Stop Editing" ),
+                                    tr( "Do you want to save the changes to layer %1?" ).arg( layer->name() ),
+                                    buttons ) )
     {
       case QMessageBox::Cancel:
         res = false;
@@ -130,7 +131,7 @@ bool QgsGuiVectorLayerTools::stopEditing( QgsVectorLayer *layer, bool allowCance
         {
           QgisApp::instance()->messageBar()->pushMessage( tr( "Error" ),
               tr( "Problems during roll back" ),
-              QgsMessageBar::CRITICAL );
+              Qgis::Critical );
           res = false;
         }
         QgisApp::instance()->freezeCanvases( false );
@@ -160,7 +161,7 @@ void QgsGuiVectorLayerTools::commitError( QgsVectorLayer *vlayer ) const
   mv->setWindowTitle( tr( "Commit Errors" ) );
   mv->setMessageAsPlainText( tr( "Could not commit changes to layer %1" ).arg( vlayer->name() )
                              + "\n\n"
-                             + tr( "Errors: %1\n" ).arg( vlayer->commitErrors().join( QStringLiteral( "\n  " ) ) )
+                             + tr( "Errors: %1\n" ).arg( vlayer->commitErrors().join( QLatin1String( "\n  " ) ) )
                            );
 
   QToolButton *showMore = new QToolButton();
@@ -181,7 +182,7 @@ void QgsGuiVectorLayerTools::commitError( QgsVectorLayer *vlayer ) const
     tr( "Commit errors" ),
     tr( "Could not commit changes to layer %1" ).arg( vlayer->name() ),
     showMore,
-    QgsMessageBar::WARNING,
+    Qgis::Warning,
     0,
     QgisApp::instance()->messageBar() );
   QgisApp::instance()->messageBar()->pushItem( errorMsg );

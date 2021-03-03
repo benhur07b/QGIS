@@ -21,6 +21,7 @@
 
 #include "qgis_server.h"
 #include "qgis_sip.h"
+#include "qgsserverexception.h"
 
 #include <QString>
 #include <QIODevice>
@@ -29,7 +30,7 @@ class QgsServerException;
 
 /**
  * \ingroup server
- * QgsServerResponse
+ * \brief QgsServerResponse
  * Class defining response interface passed to services QgsService::executeRequest() method
  *
  * \since QGIS 3.0
@@ -63,17 +64,17 @@ class SERVER_EXPORT QgsServerResponse
     virtual void removeHeader( const QString &key ) = 0;
 
     /**
-     * Return the header value
+     * Returns the header value
      */
     virtual QString header( const QString &key ) const = 0;
 
     /**
-     * Return the header value
+     * Returns the header value
      */
     virtual QMap<QString, QString> headers() const = 0;
 
     /**
-     * Return true if the headers have alredy been sent
+     * Returns TRUE if the headers have already been sent
      */
     virtual bool headersSent() const = 0;
 
@@ -85,7 +86,7 @@ class SERVER_EXPORT QgsServerResponse
     virtual void setStatusCode( int code ) = 0;
 
     /**
-     * Return the http status code
+     * Returns the http status code
      */
     virtual int statusCode() const = 0;
 
@@ -138,27 +139,39 @@ class SERVER_EXPORT QgsServerResponse
     virtual qint64 write( const char *data ) SIP_SKIP;
 
     /**
+     * Writes at most maxSize bytes of data
+     *
+     * This is a convenient method that will write directly
+     * to the underlying I/O device
+     * \returns the number of bytes written
+     * \note not available in Python bindings
+     * \since QGIS 3.10
+     */
+    virtual qint64 write( std::string data ) SIP_SKIP;
+
+    /**
      * Write server exception
      */
     virtual void write( const QgsServerException &ex );
 
     /**
-     * Return the underlying QIODevice
+     * Returns the underlying QIODevice
      */
     virtual QIODevice *io() = 0;
 
     /**
-     * Finish the response,  ending the transaction
+     * Finish the response, ending the transaction. The default implementation does nothing.
      */
-    virtual void finish() = 0;
+    virtual void finish() SIP_THROW( QgsServerException ) SIP_VIRTUALERRORHANDLER( server_exception_handler );
 
     /**
      * Flushes the current output buffer to the network
      *
      * 'flush()' may be called multiple times. For HTTP transactions
      * headers will be written on the first call to 'flush()'.
+     * The default implementation does nothing.
      */
-    virtual void flush() = 0;
+    virtual void flush() SIP_THROW( QgsServerException ) SIP_VIRTUALERRORHANDLER( server_exception_handler );
 
     /**
      * Reset all headers and content for this response
@@ -166,7 +179,7 @@ class SERVER_EXPORT QgsServerResponse
     virtual void clear() = 0;
 
     /**
-     * Get the data written so far
+     * Gets the data written so far
      *
      * This is implementation dependent: some implementations may not
      * give access to the underlying and return an empty array.

@@ -16,7 +16,7 @@
 #define QGSFLOATINGWIDGET_H
 
 #include <QWidget>
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 
 class QgsFloatingWidgetEventFilter;
@@ -24,7 +24,7 @@ class QgsFloatingWidgetEventFilter;
 /**
  * \ingroup gui
  * \class QgsFloatingWidget
- * A QWidget subclass for creating widgets which float outside of the normal Qt layout
+ * \brief A QWidget subclass for creating widgets which float outside of the normal Qt layout
  * system. Floating widgets use an "anchor widget" to determine how they are anchored
  * within their parent widget.
  * \since QGIS 3.0
@@ -52,13 +52,13 @@ class GUI_EXPORT QgsFloatingWidget: public QWidget
       BottomMiddle, //!< Bottom center of widget
       BottomRight, //!< Bottom-right of widget
     };
-    Q_ENUM( AnchorPoint );
+    Q_ENUM( AnchorPoint )
 
     /**
      * Constructor for QgsFloatingWidget.
      * \param parent parent widget
      */
-    QgsFloatingWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+    QgsFloatingWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
 
     /**
      * Sets the widget to "anchor" the floating widget to. The floating widget will be repositioned whenever the
@@ -112,14 +112,15 @@ class GUI_EXPORT QgsFloatingWidget: public QWidget
     void anchorWidgetChanged( QWidget *widget );
 
     //! Emitted when the anchor point changes
-    void anchorPointChanged( AnchorPoint point );
+    void anchorPointChanged( QgsFloatingWidget::AnchorPoint point );
 
     //! Emitted when the anchor widget point changes
-    void anchorWidgetPointChanged( AnchorPoint point );
+    void anchorWidgetPointChanged( QgsFloatingWidget::AnchorPoint point );
 
   protected:
     void showEvent( QShowEvent *e ) override;
-    virtual void paintEvent( QPaintEvent *e ) override;
+    void paintEvent( QPaintEvent *e ) override;
+    void resizeEvent( QResizeEvent *e ) override;
 
   private slots:
 
@@ -149,7 +150,7 @@ class QgsFloatingWidgetEventFilter: public QObject
 
     QgsFloatingWidgetEventFilter( QWidget *parent = nullptr );
 
-    virtual bool eventFilter( QObject *object, QEvent *event ) override;
+    bool eventFilter( QObject *object, QEvent *event ) override;
 
   signals:
 

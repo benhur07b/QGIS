@@ -39,10 +39,10 @@ QStringList QgsBabelFormat::importCommand( const QString &babel,
     const QString &input,
     const QString &output ) const
 {
-  Q_UNUSED( babel );
-  Q_UNUSED( featuretype );
-  Q_UNUSED( input );
-  Q_UNUSED( output );
+  Q_UNUSED( babel )
+  Q_UNUSED( featuretype )
+  Q_UNUSED( input )
+  Q_UNUSED( output )
   return QStringList();
 }
 
@@ -52,10 +52,10 @@ QStringList QgsBabelFormat::exportCommand( const QString &babel,
     const QString &input,
     const QString &output ) const
 {
-  Q_UNUSED( babel );
-  Q_UNUSED( featuretype );
-  Q_UNUSED( input );
-  Q_UNUSED( output );
+  Q_UNUSED( babel )
+  Q_UNUSED( featuretype )
+  Q_UNUSED( input )
+  Q_UNUSED( output )
   return QStringList();
 }
 
@@ -132,12 +132,20 @@ QgsBabelCommand::QgsBabelCommand( const QString &importCmd,
   mSupportsExport = false;
   if ( !importCmd.isEmpty() )
   {
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
     mImportCmd = importCmd.split( QRegExp( "\\s" ), QString::SkipEmptyParts );
+#else
+    mImportCmd = importCmd.split( QRegExp( "\\s" ), Qt::SkipEmptyParts );
+#endif
     mSupportsImport = true;
   }
   if ( !exportCmd.isEmpty() )
   {
+#if QT_VERSION < QT_VERSION_CHECK(5, 15, 0)
     mExportCmd = exportCmd.split( QRegExp( "\\s" ), QString::SkipEmptyParts );
+#else
+    mExportCmd = exportCmd.split( QRegExp( "\\s" ), Qt::SkipEmptyParts );
+#endif
     mSupportsExport = true;
   }
 }

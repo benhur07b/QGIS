@@ -19,14 +19,14 @@
 #define QGSRASTERPYRAMIDSOPTIONSWIDGET_H
 
 #include "ui_qgsrasterpyramidsoptionswidgetbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 
 class QCheckBox;
 
 /**
  * \ingroup gui
- * A widget to select format-specific raster saving options
+ * \brief A widget to select format-specific raster saving options
  */
 class GUI_EXPORT QgsRasterPyramidsOptionsWidget: public QWidget, private Ui::QgsRasterPyramidsOptionsWidgetBase
 {
@@ -34,7 +34,8 @@ class GUI_EXPORT QgsRasterPyramidsOptionsWidget: public QWidget, private Ui::Qgs
 
   public:
 
-    QgsRasterPyramidsOptionsWidget( QWidget *parent SIP_TRANSFERTHIS = 0, const QString &provider = "gdal" );
+    //! Constructor for QgsRasterPyramidsOptionsWidget
+    QgsRasterPyramidsOptionsWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr, const QString &provider = "gdal" );
 
     QStringList configOptions() const { return mSaveOptionsWidget->options(); }
     QgsRasterFormatSaveOptionsWidget *createOptionsWidget() SIP_FACTORY { return mSaveOptionsWidget; }

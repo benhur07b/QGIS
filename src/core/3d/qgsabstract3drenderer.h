@@ -35,7 +35,7 @@ namespace Qt3DCore
 
 /**
  * \ingroup core
- * Base class for all renderers that may to participate in 3D view.
+ * \brief Base class for all renderers that may to participate in 3D view.
  *
  * 3D renderers implement the method createEntity() that returns a new 3D entity - that entity
  * will be added to the 3D scene to represent data in renderer's display style.
@@ -63,6 +63,18 @@ class CORE_EXPORT QgsAbstract3DRenderer SIP_ABSTRACT
     virtual void readXml( const QDomElement &elem, const QgsReadWriteContext &context ) = 0;
     //! Resolves references to other objects - second phase of loading - after readXml()
     virtual void resolveReferences( const QgsProject &project );
+
+  protected:
+    //! Default constructor
+    QgsAbstract3DRenderer() = default;
+
+  private:
+#ifdef SIP_RUN
+    QgsAbstract3DRenderer( const QgsAbstract3DRenderer & );
+    QgsAbstract3DRenderer &operator=( const QgsAbstract3DRenderer & );
+#endif
+
+    Q_DISABLE_COPY( QgsAbstract3DRenderer )
 };
 
 

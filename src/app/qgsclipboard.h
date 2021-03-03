@@ -28,24 +28,22 @@
 #include "qgscoordinatereferencesystem.h"
 #include "qgis_app.h"
 
-/**
-  \brief QGIS internal clipboard for features.
-
-  An internal clipboard is required so that features can be retained in
-  their original fidelity.
-
-  The internal clipboard makes a copy of features that are presented to it,
-  therefore the original objects can safely be destructed independent of
-  the lifetime of the internal clipboard.
-
-  As this class matures it should also be able to accept CSV representations
-  of features in and out of the system clipboard (QClipboard).
-
-*/
-
 class QgsVectorLayer;
 class QgsFeatureStore;
 
+/**
+ * \brief QGIS internal clipboard for features.
+ *
+ * An internal clipboard is required so that features can be retained in
+ * their original fidelity.
+ *
+ * The internal clipboard makes a copy of features that are presented to it,
+ * therefore the original objects can safely be destructed independent of
+ * the lifetime of the internal clipboard.
+ *
+ * As this class matures it should also be able to accept CSV representations
+ * of features in and out of the system clipboard (QClipboard).
+*/
 class APP_EXPORT QgsClipboard : public QObject
 {
     Q_OBJECT
@@ -58,6 +56,7 @@ class APP_EXPORT QgsClipboard : public QObject
       AttributesWithWKT, //!< Tab delimited text, with geometry in WKT format
       GeoJSON, //!< GeoJSON FeatureCollection format
     };
+    Q_ENUM( CopyFormat )
 
     /**
      * Constructor for the clipboard.
@@ -92,7 +91,7 @@ class APP_EXPORT QgsClipboard : public QObject
     void insert( const QgsFeature &feature );
 
     /**
-     *  Returns true if the internal clipboard is empty, else false.
+     *  Returns TRUE if the internal clipboard is empty, else FALSE.
      */
     bool isEmpty() const;
 
@@ -132,7 +131,7 @@ class APP_EXPORT QgsClipboard : public QObject
     /**
      * Source fields
      */
-    QgsFields fields() const { return !mUseSystemClipboard ? mFeatureFields : retrieveFields(); }
+    QgsFields fields() const;
 
   private slots:
 
@@ -153,7 +152,7 @@ class APP_EXPORT QgsClipboard : public QObject
      * Creates a text representation of the clipboard features.
      * \returns clipboard text, respecting user export format
      */
-    QString generateClipboardText() const;
+    void generateClipboardText( QString &textContent, QString &htmlContent ) const;
 
     /**
      * Attempts to convert a string to a list of features, by parsing the string as WKT and GeoJSON
@@ -179,6 +178,9 @@ class APP_EXPORT QgsClipboard : public QObject
     QgsFields mFeatureFields;
     QgsCoordinateReferenceSystem mCRS;
     QPointer<QgsVectorLayer> mSrcLayer;
+
+    //! True if next system clipboard change should be ignored
+    bool mIgnoreNextSystemClipboardChange = false;
 
     //! True when the data from the system clipboard should be read
     bool mUseSystemClipboard = false;

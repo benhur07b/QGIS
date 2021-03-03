@@ -17,6 +17,8 @@
 
 #include "qgsnewauxiliaryfielddialog.h"
 #include "qgsauxiliarystorage.h"
+#include "qgsgui.h"
+#include "qgsapplication.h"
 
 #include <QMessageBox>
 
@@ -27,23 +29,13 @@ QgsNewAuxiliaryFieldDialog::QgsNewAuxiliaryFieldDialog( const QgsPropertyDefinit
   , mPropertyDefinition( def )
 {
   setupUi( this );
+  QgsGui::instance()->enableAutoGeometryRestore( this );
 
-  mType->addItem( tr( "String" ) );
-  mType->addItem( tr( "Real" ) );
-  mType->addItem( tr( "Integer" ) );
+  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldText.svg" ), tr( "String" ), QgsPropertyDefinition::DataTypeString );
+  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldFloat.svg" ), tr( "Real" ), QgsPropertyDefinition::DataTypeNumeric );
+  mType->addItem( QgsApplication::getThemeIcon( "/mIconFieldInteger.svg" ), tr( "Integer" ), QgsPropertyDefinition::DataTypeBoolean );
 
-  switch ( def.dataType() )
-  {
-    case QgsPropertyDefinition::DataTypeString:
-      mType->setCurrentIndex( mType->findText( tr( "String" ) ) );
-      break;
-    case QgsPropertyDefinition::DataTypeNumeric:
-      mType->setCurrentIndex( mType->findText( tr( "Real" ) ) );
-      break;
-    case QgsPropertyDefinition::DataTypeBoolean:
-      mType->setCurrentIndex( mType->findText( tr( "Integer" ) ) );
-      break;
-  }
+  mType->setCurrentIndex( mType->findData( def.dataType() ) );
 
   if ( mNameOnly )
     mType->setEnabled( false );
@@ -58,18 +50,7 @@ void QgsNewAuxiliaryFieldDialog::accept()
 
   if ( !mNameOnly )
   {
-    if ( mType->currentText().compare( tr( "String" ) ) == 0 )
-    {
-      def.setDataType( QgsPropertyDefinition::DataTypeString );
-    }
-    else if ( mType->currentText().compare( tr( "Real" ) ) == 0 )
-    {
-      def.setDataType( QgsPropertyDefinition::DataTypeNumeric );
-    }
-    else
-    {
-      def.setDataType( QgsPropertyDefinition::DataTypeBoolean );
-    }
+    def.setDataType( static_cast< QgsPropertyDefinition::DataType >( mType->currentData().toInt() ) );
 
     def.setOrigin( "user" );
     def.setName( "custom" );
@@ -79,14 +60,14 @@ void QgsNewAuxiliaryFieldDialog::accept()
   const int idx = mLayer->fields().lookupField( fieldName );
   if ( idx >= 0 )
   {
-    const QString title = tr( "Invalid name" );
-    const QString msg = tr( "Auxiliary field '%1' already exists" ).arg( fieldName );
+    const QString title = tr( "New Auxiliary Field" );
+    const QString msg = tr( "Invalid name. Auxiliary field '%1' already exists." ).arg( fieldName );
     QMessageBox::critical( this, title, msg, QMessageBox::Ok );
   }
   else if ( def.comment().isEmpty() )
   {
-    const QString title = tr( "Invalid name" );
-    const QString msg = tr( "Name is a mandatory parameter" );
+    const QString title = tr( "New Auxiliary Field" );
+    const QString msg = tr( "Name is a mandatory parameter." );
     QMessageBox::critical( this, title, msg, QMessageBox::Ok );
   }
   else

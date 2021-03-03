@@ -18,7 +18,7 @@
 #ifndef QGSGENERICPROJECTIONSELECTOR_H
 #define QGSGENERICPROJECTIONSELECTOR_H
 #include "ui_qgsgenericprojectionselectorbase.h"
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgsguiutils.h"
 
 #include <QSet>
@@ -29,18 +29,18 @@
 /**
  * \class QgsProjectionSelectionDialog
  * \ingroup gui
- * A generic dialog to prompt the user for a Coordinate Reference System.
+ * \brief A generic dialog to prompt the user for a Coordinate Reference System.
  *
  * Typically you will use this when you want to prompt the user for
  * a coordinate system identifier e.g. from a plugin you might do this
  * to get an epsg code:
- * \code
- * QgsProjectionSelectionDialog mySelector( mQGisIface->mainWindow() );
- * mySelector.setCrs( crs );
- * if ( mySelector.exec() )
- * {
- *   mCrs = mySelector.crs();
- * }
+ *
+ * \code{.py}
+ *     crs = QgsCoordinateReferenceSystem()
+ *     mySelector = QgsProjectionSelectionDialog( iface.mainWindow() )
+ *     mySelector.setCrs( crs )
+ *     if mySelector.exec():
+ *       mCrs = mySelector.crs()
  * \endcode
  *
  * If you wish to embed the projection selector into an existing dialog
@@ -56,25 +56,32 @@ class GUI_EXPORT QgsProjectionSelectionDialog : public QDialog, private Ui::QgsG
     /**
      * Constructor for QgsProjectionSelectionDialog.
      */
-    QgsProjectionSelectionDialog( QWidget *parent SIP_TRANSFERTHIS = 0,
+    QgsProjectionSelectionDialog( QWidget *parent SIP_TRANSFERTHIS = nullptr,
                                   Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags );
 
-
-    ~QgsProjectionSelectionDialog();
+    ~QgsProjectionSelectionDialog() override;
 
     /**
      * Returns the CRS currently selected in the widget.
-     * \since QGIS 3.0
      * \see setCrs()
+     * \since QGIS 3.0
      */
     QgsCoordinateReferenceSystem crs() const;
 
     /**
-     * Sets a \a message to show in the dialog. If an empty string is
-     * passed, the message will be a generic
-     * 'define the CRS for this layer'.
+     * Sets a \a message to show in the dialog.
+     *
+     * \see showNoCrsForLayerMessage()
      */
     void setMessage( const QString &message );
+
+    /**
+     * When called, the dialog will show a default "layer has no CRS set" message above the projection selector.
+     *
+     * \see setMessage()
+     * \since QGIS 3.16
+     */
+    void showNoCrsForLayerMessage();
 
     /**
      * Sets whether a "no/invalid" projection option should be shown. If this
@@ -87,17 +94,32 @@ class GUI_EXPORT QgsProjectionSelectionDialog : public QDialog, private Ui::QgsG
     /**
      * Returns whether the "no/invalid" projection option is shown. If this
      * option is selected, calling crs() will return an invalid QgsCoordinateReferenceSystem.
-     * \since QGIS 3.0
      * \see setShowNoProjection()
+     * \since QGIS 3.0
      */
     bool showNoProjection() const;
+
+    /**
+     * Sets the text to show for the not set option. Note that this option is not shown
+     * by default and must be set visible by calling setShowNoProjection().
+     * \since QGIS 3.16
+     */
+    void setNotSetText( const QString &text );
+
+    /**
+     * Sets the dialog to require a valid selection only, preventing users from accepting the
+     * dialog if no selection is present.
+     *
+     * \since QGIS 3.18
+     */
+    void setRequireValidSelection();
 
   public slots:
 
     /**
      * Sets the initial \a crs to show within the dialog.
-     * \since QGIS 3.0
      * \see crs()
+     * \since QGIS 3.0
      */
     void setCrs( const QgsCoordinateReferenceSystem &crs );
 
@@ -108,7 +130,7 @@ class GUI_EXPORT QgsProjectionSelectionDialog : public QDialog, private Ui::QgsG
      * by the given Coordinate Reference Systems.
      *
      * \param crsFilter a list of OGC Coordinate Reference Systems to filter the
-     *                  list of projections by.  This is useful in (e.g.) WMS situations
+     *                  list of projections by. This is useful in (e.g.) WMS situations
      *                  where you just want to offer what the WMS server can support.
      *
      * \warning This function's behavior is undefined if it is called after the dialog is shown.

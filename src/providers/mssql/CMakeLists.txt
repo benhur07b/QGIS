@@ -1,5 +1,7 @@
-SET(MSSQL_SRCS
+set(MSSQL_SRCS
+  qgsmssqlconnection.cpp
   qgsmssqlprovider.cpp
+  qgsmssqlproviderconnection.cpp
   qgsmssqlgeometryparser.cpp
   qgsmssqltablemodel.cpp
   qgsmssqldataitems.cpp
@@ -8,75 +10,49 @@ SET(MSSQL_SRCS
   qgsmssqlgeomcolumntypethread.cpp
 )
 
-SET(MSSQL_MOC_HDRS
-  qgsmssqlprovider.h
-  qgsmssqltablemodel.h
-  qgsmssqldataitems.h
-  qgsmssqlgeomcolumntypethread.h
-)
-
-IF (WITH_GUI)
-  SET(MSSQL_SRCS ${MSSQL_SRCS}
+if (WITH_GUI)
+  set(MSSQL_SRCS ${MSSQL_SRCS}
+    qgsmssqlprovidergui.cpp
+    qgsmssqldataitemguiprovider.cpp
     qgsmssqlsourceselect.cpp
     qgsmssqlnewconnection.cpp
   )
-  SET(MSSQL_MOC_HDRS ${MSSQL_MOC_HDRS}
-    qgsmssqlsourceselect.h
-    qgsmssqlnewconnection.h
-  )
-ENDIF ()
+endif()
 
-SET(MSSQL_HDRS
+set(MSSQL_HDRS
   qgsmssqlexpressioncompiler.h
 )
 
 ########################################################
 # Build
 
-QT5_WRAP_CPP(MSSQL_MOC_SRCS ${MSSQL_MOC_HDRS})
+include_directories(
 
-INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/gui
-
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/ui
 )
-INCLUDE_DIRECTORIES(SYSTEM
-  ${GDAL_INCLUDE_DIR}
-  ${GEOS_INCLUDE_DIR}
-  ${QT_INCLUDE_DIR}
-  ${PROJ_INCLUDE_DIR}
-)
-
-IF (WITH_GUI)
-  INCLUDE_DIRECTORIES(SYSTEM
-    ${QSCINTILLA_INCLUDE_DIR}
-  )
-ENDIF ()
 
 
-ADD_LIBRARY(mssqlprovider MODULE ${MSSQL_SRCS} ${MSSQL_MOC_SRCS} ${MSSQL_HDRS})
+add_library(mssqlprovider MODULE ${MSSQL_SRCS} ${MSSQL_HDRS})
 
-TARGET_LINK_LIBRARIES(mssqlprovider
+# require c++17
+target_compile_features(mssqlprovider PRIVATE cxx_std_17)
+
+target_link_libraries(mssqlprovider
   qgis_core
-  ${QT_QTSQL_LIBRARY}
+  ${Qt5Sql_LIBRARIES}
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES (mssqlprovider
+if (WITH_GUI)
+  target_link_libraries (mssqlprovider
     qgis_gui
   )
-ENDIF ()
+  add_dependencies(mssqlprovider ui)
+endif()
 
 ########################################################
 # Install
 
-INSTALL (TARGETS mssqlprovider
+install (TARGETS mssqlprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})
 

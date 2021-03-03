@@ -38,6 +38,7 @@ class QTextStream;
 * The delimited text parser is used by the QgsDelimitedTextProvider to parse
 * a QTextStream into records of QStringList.  It provides a number of variants
 * for parsing each record.  The following options are supported:
+*
 * - Basic whitespace parsing.  Each line in the file is treated as a record.
 *   Extracts all contiguous sequences of non-whitespace
 *   characters.  Leading and trailing whitespace are ignored.
@@ -57,6 +58,7 @@ class QTextStream;
 *
 * The delimiters can be encode in and decoded from a QUrl as query items.  The
 * items used are:
+*
 * - delimiterType, one of plain (delimiter is any of a set of characters),
 *   regexp, csv, whitespace
 * - delimiter, interpreted according to the type.  For plain characters this is
@@ -96,7 +98,7 @@ class QgsDelimitedTextFile : public QObject
 
     explicit QgsDelimitedTextFile( const QString &url = QString() );
 
-    virtual ~QgsDelimitedTextFile();
+    ~QgsDelimitedTextFile() override;
 
     /**
      * Set the filename
@@ -105,7 +107,7 @@ class QgsDelimitedTextFile : public QObject
     void setFileName( const QString &filename );
 
     /**
-     * Return the filename
+     * Returns the filename
      * \returns filename  the name of the file
      */
     QString fileName()
@@ -120,7 +122,7 @@ class QgsDelimitedTextFile : public QObject
     void setEncoding( const QString &encoding );
 
     /**
-     * Return the file encoding
+     * Returns the file encoding
      *  \returns encoding The file encoding
      */
     QString encoding() { return mEncoding; }
@@ -170,7 +172,7 @@ class QgsDelimitedTextFile : public QObject
     void setSkipLines( int skiplines );
 
     /**
-     * Return the number of header lines to skip
+     * Returns the number of header lines to skip
      * \returns skiplines The maximum lines to skip
      */
     int skipLines()
@@ -185,7 +187,7 @@ class QgsDelimitedTextFile : public QObject
     void setUseHeader( bool useheader = true );
 
     /**
-     * Return the option for reading field names from the first record
+     * Returns the option for reading field names from the first record
      * \returns useheaders Field names will be read if true
      */
     bool useHeader()
@@ -194,13 +196,13 @@ class QgsDelimitedTextFile : public QObject
     }
 
     /**
-     * Set the option for dicarding empty fields
+     * Set the option for discarding empty fields
      * \param useheaders Empty fields will be discarded if true
      */
     void setDiscardEmptyFields( bool discardEmptyFields = true );
 
     /**
-     * Return the option for discarding empty fields
+     * Returns the option for discarding empty fields
      * \returns useheaders Empty fields will be discarded if true
      */
     bool discardEmptyFields()
@@ -215,7 +217,7 @@ class QgsDelimitedTextFile : public QObject
     void setTrimFields( bool trimFields = true );
 
     /**
-     * Return the option for trimming empty fields
+     * Returns the option for trimming empty fields
      * \returns useheaders Empty fields will be trimmed if true
      */
     bool trimFields()
@@ -231,7 +233,7 @@ class QgsDelimitedTextFile : public QObject
     void setMaxFields( int maxFields );
 
     /**
-     * Return the maximum number of fields that will be read
+     * Returns the maximum number of fields that will be read
      *  \returns maxFields The maximum number of fields that will be read
      */
     int maxFields() { return mMaxFields; }
@@ -246,7 +248,7 @@ class QgsDelimitedTextFile : public QObject
     void setFieldNames( const QStringList &names );
 
     /**
-     * Return the field names read from the header, or default names
+     * Returns the field names read from the header, or default names
      *  field_## if none defined.  Will open and read the head of the file
      *  if required, then reset.  Note that if header record record has
      *  not been read then the field names are empty until records have
@@ -257,7 +259,7 @@ class QgsDelimitedTextFile : public QObject
     QStringList &fieldNames();
 
     /**
-     * Return the index of a names field
+     * Returns the index of a names field
      *  \param name    The name of the field to find.  This will also accept an
      *                 integer string ("1" = first field).
      *  \returns index  The zero based index of the field name, or -1 if the field
@@ -276,7 +278,7 @@ class QgsDelimitedTextFile : public QObject
     Status nextRecord( QStringList &fields );
 
     /**
-     * Return the line number of the start of the last record read
+     * Returns the line number of the start of the last record read
      *  \returns linenumber  The line number of the start of the record
      */
     int recordId()
@@ -304,7 +306,7 @@ class QgsDelimitedTextFile : public QObject
     Status reset();
 
     /**
-     * Return a string defining the type of the delimiter as a string
+     * Returns a string defining the type of the delimiter as a string
      *  \returns type The delimiter type as a string
      */
     QString type();
@@ -379,7 +381,7 @@ class QgsDelimitedTextFile : public QObject
     Status parseQuoted( QString &buffer, QStringList &fields );
 
     /**
-     * Return the next line from the data file.  If skipBlank is true then
+     * Returns the next line from the data file.  If skipBlank is true then
      * blank lines will be skipped - this is for compatibility with previous
      * delimited text parser implementation.
      */
@@ -428,6 +430,10 @@ class QgsDelimitedTextFile : public QObject
     long mLineNumber = -1;
     long mRecordLineNumber = -1;
     long mRecordNumber = -1;
+    QString mBuffer;
+    int mPosInBuffer = 0;
+    int mMaxBufferSize = 0;
+    QChar mFirstEOLChar = 0; // '\r' if EOL is "\r" or "\r\n", or `\n' if EOL is "\n"
     QStringList mCurrentRecord;
     bool mHoldCurrentRecord = false;
     // Maximum number of record (ie maximum record number visited)

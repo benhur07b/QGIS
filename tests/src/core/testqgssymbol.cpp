@@ -30,6 +30,7 @@
 #include "qgslinesymbollayer.h"
 #include "qgsfillsymbollayer.h"
 #include "qgssinglesymbolrenderer.h"
+#include "qgsmarkersymbollayer.h"
 
 #include "qgsstyle.h"
 
@@ -176,7 +177,8 @@ void TestQgsSymbol::testCanvasClip()
   ms.setLayers( QList<QgsMapLayer *>() << mpLinesLayer );
 
   QgsMarkerLineSymbolLayer *markerLine = new QgsMarkerLineSymbolLayer();
-  markerLine->setPlacement( QgsMarkerLineSymbolLayer:: CentralPoint );
+  markerLine->setPlacement( QgsTemplatedLineSymbolLayerBase::CentralPoint );
+  static_cast< QgsSimpleMarkerSymbolLayer *>( markerLine->subSymbol()->symbolLayer( 0 ) )->setStrokeColor( Qt::black );
   QgsLineSymbol *lineSymbol = new QgsLineSymbol();
   lineSymbol->changeSymbolLayer( 0, markerLine );
   QgsSingleSymbolRenderer *renderer = new QgsSingleSymbolRenderer( lineSymbol );
@@ -196,6 +198,7 @@ void TestQgsSymbol::testCanvasClip()
   ms.setLayers( QList<QgsMapLayer *>() << mpPolysLayer );
 
   QgsCentroidFillSymbolLayer *centroidFill = new QgsCentroidFillSymbolLayer();
+  static_cast< QgsSimpleMarkerSymbolLayer * >( centroidFill->subSymbol()->symbolLayer( 0 ) )->setStrokeColor( Qt::black );
   QgsFillSymbol *fillSymbol = new QgsFillSymbol();
   fillSymbol->changeSymbolLayer( 0, centroidFill );
   renderer = new QgsSingleSymbolRenderer( fillSymbol );
@@ -248,6 +251,14 @@ void TestQgsSymbol::testParseColor()
   colorTests.insert( QStringLiteral( "rgb(256,60,0)" ), qMakePair( QColor(), false ) );
   colorTests.insert( QStringLiteral( " rgb(  127, 60 ,  0 ) " ), qMakePair( QColor( 127, 60, 0 ), false ) );
   colorTests.insert( QStringLiteral( "rgb(127,60,0);" ), qMakePair( QColor( 127, 60, 0 ), false ) );
+  colorTests.insert( QStringLiteral( "hsl(30,19%,90%)" ), qMakePair( QColor::fromHsl( 30, 48, 229 ), false ) );
+  colorTests.insert( QStringLiteral( "hsl( 30 , 19 % , 90 % )" ), qMakePair( QColor::fromHsl( 30, 48, 229 ), false ) );
+  colorTests.insert( QStringLiteral( " hsl(  30, 19%,  90% ) " ), qMakePair( QColor::fromHsl( 30, 48, 229 ), false ) );
+  colorTests.insert( QStringLiteral( "hsl(30,19%,90%);" ), qMakePair( QColor::fromHsl( 30, 48, 229 ), false ) );
+  colorTests.insert( QStringLiteral( "hsla(30,19%,90%,0.4)" ), qMakePair( QColor::fromHsl( 30, 48, 229, 102 ), true ) );
+  colorTests.insert( QStringLiteral( "hsla( 30 , 19 % , 90 % , 0.4 )" ), qMakePair( QColor::fromHsl( 30, 48, 229, 102 ), true ) );
+  colorTests.insert( QStringLiteral( " hsla(  30, 19%,  90%, 0.4 ) " ), qMakePair( QColor::fromHsl( 30, 48, 229, 102 ), true ) );
+  colorTests.insert( QStringLiteral( "hsla(30,19%,90%,0.4);" ), qMakePair( QColor::fromHsl( 30, 48, 229, 102 ), true ) );
   colorTests.insert( QStringLiteral( "(127,60,0);" ), qMakePair( QColor( 127, 60, 0 ), false ) );
   colorTests.insert( QStringLiteral( "(127,60,0)" ), qMakePair( QColor( 127, 60, 0 ), false ) );
   colorTests.insert( QStringLiteral( "127,060,000" ), qMakePair( QColor( 127, 60, 0 ), false ) );

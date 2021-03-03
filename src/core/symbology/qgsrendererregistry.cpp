@@ -22,6 +22,7 @@
 #include "qgspointdisplacementrenderer.h"
 #include "qgspointclusterrenderer.h"
 #include "qgsinvertedpolygonrenderer.h"
+#include "qgsmergedfeaturerenderer.h"
 #include "qgsheatmaprenderer.h"
 #include "qgs25drenderer.h"
 #include "qgsnullsymbolrenderer.h"
@@ -31,11 +32,11 @@ QgsRendererRegistry::QgsRendererRegistry()
 {
   // add default renderers
   addRenderer( new QgsRendererMetadata( QStringLiteral( "nullSymbol" ),
-                                        QObject::tr( "No symbols" ),
+                                        QObject::tr( "No Symbols" ),
                                         QgsNullSymbolRenderer::create ) );
 
   addRenderer( new QgsRendererMetadata( QStringLiteral( "singleSymbol" ),
-                                        QObject::tr( "Single symbol" ),
+                                        QObject::tr( "Single Symbol" ),
                                         QgsSingleSymbolRenderer::create,
                                         QgsSingleSymbolRenderer::createFromSld ) );
 
@@ -53,21 +54,28 @@ QgsRendererRegistry::QgsRendererRegistry()
                                         QgsRuleBasedRenderer::createFromSld ) );
 
   addRenderer( new QgsRendererMetadata( QStringLiteral( "pointDisplacement" ),
-                                        QObject::tr( "Point displacement" ),
+                                        QObject::tr( "Point Displacement" ),
                                         QgsPointDisplacementRenderer::create,
                                         QIcon(),
                                         nullptr,
                                         QgsRendererAbstractMetadata::PointLayer ) );
 
   addRenderer( new QgsRendererMetadata( QStringLiteral( "pointCluster" ),
-                                        QObject::tr( "Point cluster" ),
+                                        QObject::tr( "Point Cluster" ),
                                         QgsPointClusterRenderer::create,
                                         QIcon(),
                                         nullptr,
                                         QgsRendererAbstractMetadata::PointLayer ) );
 
+  addRenderer( new QgsRendererMetadata( QStringLiteral( "mergedFeatureRenderer" ),
+                                        QObject::tr( "Merged Features" ),
+                                        QgsMergedFeatureRenderer::create,
+                                        QIcon(),
+                                        nullptr,
+                                        QgsRendererAbstractMetadata::LineLayer | QgsRendererAbstractMetadata::PolygonLayer ) );
+
   addRenderer( new QgsRendererMetadata( QStringLiteral( "invertedPolygonRenderer" ),
-                                        QObject::tr( "Inverted polygons" ),
+                                        QObject::tr( "Inverted Polygons" ),
                                         QgsInvertedPolygonRenderer::create,
                                         QIcon(),
                                         nullptr,
@@ -123,7 +131,8 @@ QgsRendererAbstractMetadata *QgsRendererRegistry::rendererMetadata( const QStrin
 QStringList QgsRendererRegistry::renderersList( QgsRendererAbstractMetadata::LayerTypes layerTypes ) const
 {
   QStringList renderers;
-  Q_FOREACH ( const QString &renderer, mRenderersOrder )
+  const auto constMRenderersOrder = mRenderersOrder;
+  for ( const QString &renderer : constMRenderersOrder )
   {
     QgsRendererAbstractMetadata *r = mRenderers.value( renderer );
     if ( r && r->compatibleLayerTypes() & layerTypes )

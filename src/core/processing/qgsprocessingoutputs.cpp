@@ -55,6 +55,10 @@ QgsProcessingOutputString::QgsProcessingOutputString( const QString &name, const
   : QgsProcessingOutputDefinition( name, description )
 {}
 
+QgsProcessingOutputBoolean::QgsProcessingOutputBoolean( const QString &name, const QString &description )
+  : QgsProcessingOutputDefinition( name, description )
+{}
+
 QgsProcessingOutputFolder::QgsProcessingOutputFolder( const QString &name, const QString &description )
   : QgsProcessingOutputDefinition( name, description )
 {}
@@ -62,3 +66,27 @@ QgsProcessingOutputFolder::QgsProcessingOutputFolder( const QString &name, const
 QgsProcessingOutputFile::QgsProcessingOutputFile( const QString &name, const QString &description )
   : QgsProcessingOutputDefinition( name, description )
 {}
+
+QgsProcessingOutputMapLayer::QgsProcessingOutputMapLayer( const QString &name, const QString &description )
+  : QgsProcessingOutputDefinition( name, description )
+{}
+
+QString QgsProcessingOutputMapLayer::type() const
+{
+  return typeName();
+}
+
+QgsProcessingOutputMultipleLayers::QgsProcessingOutputMultipleLayers( const QString &name, const QString &description )
+  : QgsProcessingOutputDefinition( name, description )
+{}
+
+QString QgsProcessingOutputMultipleLayers::type() const
+{
+  return typeName();
+}
+
+QgsProcessingOutputConditionalBranch::QgsProcessingOutputConditionalBranch( const QString &name, const QString &description )
+  : QgsProcessingOutputDefinition( name, description )
+{
+
+}

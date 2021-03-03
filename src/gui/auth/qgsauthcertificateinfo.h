@@ -19,7 +19,7 @@
 #define QGSAUTHCERTIFICATEINFO_H
 
 #include <QFile>
-#include "qgis.h"
+#include "qgis_sip.h"
 
 #ifndef QT_NO_SSL
 #include <QtCrypto>
@@ -34,16 +34,18 @@
 
 /**
  * \ingroup gui
- * Widget for viewing detailed info on a certificate and its hierarchical trust chain
+ * \brief Widget for viewing detailed info on a certificate and its hierarchical trust chain
  */
 class GUI_EXPORT QgsAuthCertInfo : public QWidget, private Ui::QgsAuthCertInfo
 {
     Q_OBJECT
 
   public:
+
+    //! Constructor for QgsAuthCertInfo
     explicit QgsAuthCertInfo( const QSslCertificate &cert,
                               bool manageCertTrust = false,
-                              QWidget *parent SIP_TRANSFERTHIS = 0,
+                              QWidget *parent SIP_TRANSFERTHIS = nullptr,
                               const QList<QSslCertificate> &connectionCAs = QList<QSslCertificate>() );
 
     bool trustCacheRebuilt() { return mTrustCacheRebuilt; }
@@ -138,7 +140,7 @@ class GUI_EXPORT QgsAuthCertInfo : public QWidget, private Ui::QgsAuthCertInfo
 
 /**
  * \ingroup gui
- * Dialog wrapper for widget displaying detailed info on a certificate and its hierarchical trust chain
+ * \brief Dialog wrapper for widget displaying detailed info on a certificate and its hierarchical trust chain
  */
 class GUI_EXPORT QgsAuthCertInfoDialog : public QDialog
 {
@@ -155,10 +157,10 @@ class GUI_EXPORT QgsAuthCertInfoDialog : public QDialog
      */
     explicit QgsAuthCertInfoDialog( const QSslCertificate &cert,
                                     bool manageCertTrust,
-                                    QWidget *parent SIP_TRANSFERTHIS = 0,
+                                    QWidget *parent SIP_TRANSFERTHIS = nullptr,
                                     const QList<QSslCertificate> &connectionCAs = QList<QSslCertificate>() );
 
-    //! Get access to embedded info widget
+    //! Gets access to embedded info widget
     QgsAuthCertInfo *certInfoWidget() { return mCertInfoWdgt; }
 
     /**

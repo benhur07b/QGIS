@@ -27,7 +27,7 @@ class QgsMapLayer;
 /**
  * \ingroup gui
  * \class QgsLayerTreeEmbeddedWidgetProvider
- * Provider interface to be implemented in order to introduce new kinds of embedded widgets for use in layer tree.
+ * \brief Provider interface to be implemented in order to introduce new kinds of embedded widgets for use in layer tree.
  * Embedded widgets are assigned per individual map layers and they are shown before any legend entries.
  * \see QgsLayerTreeEmbeddedWidgetRegistry
  * \since QGIS 2.16
@@ -57,7 +57,7 @@ class GUI_EXPORT QgsLayerTreeEmbeddedWidgetProvider
 /**
  * \ingroup gui
  * \class QgsLayerTreeEmbeddedWidgetRegistry
- * Registry of widgets that may be embedded into layer tree view.
+ * \brief Registry of widgets that may be embedded into layer tree view.
  * Embedded widgets are assigned per individual map layers and they are shown before any legend entries.
  * Layer tree must have UseEmbeddedWidgets flag enabled in order to show assigned widgets.
  *
@@ -86,20 +86,22 @@ class GUI_EXPORT QgsLayerTreeEmbeddedWidgetRegistry
     //! QgsLayerTreeEmbeddedWidgetRegistry cannot be copied.
     QgsLayerTreeEmbeddedWidgetRegistry &operator=( const QgsLayerTreeEmbeddedWidgetRegistry &other ) = delete;
 
-    //! Return list of all registered providers
+    //! Returns list of all registered providers
     QStringList providers() const;
 
-    //! Get provider object from the provider's ID
+    //! Gets provider object from the provider's ID
     QgsLayerTreeEmbeddedWidgetProvider *provider( const QString &providerId ) const;
 
     /**
      * Register a provider, takes ownership of the object.
-     * Returns true on success, false if the provider is already registered. */
+     * Returns TRUE on success, FALSE if the provider is already registered.
+    */
     bool addProvider( QgsLayerTreeEmbeddedWidgetProvider *provider SIP_TRANSFER );
 
     /**
      * Unregister a provider, the provider object is deleted.
-     * Returns true on success, false if the provider was not registered. */
+     * Returns TRUE on success, FALSE if the provider was not registered.
+    */
     bool removeProvider( const QString &providerId );
 
   protected:

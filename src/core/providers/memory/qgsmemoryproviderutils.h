@@ -19,7 +19,7 @@
 #define QGSMEMORYPROVIDERUTILS_H
 
 #include "qgis_core.h"
-#include "qgis.h"
+#include "qgswkbtypes.h"
 #include "qgscoordinatereferencesystem.h"
 #include <QString>
 #include <QVariant>
@@ -30,7 +30,7 @@ class QgsFields;
 /**
  * \class QgsMemoryProviderUtils
  * \ingroup core
- * Utility functions for use with the memory vector data provider.
+ * \brief Utility functions for use with the memory vector data provider.
  * \since QGIS 3.0
  */
 class CORE_EXPORT QgsMemoryProviderUtils

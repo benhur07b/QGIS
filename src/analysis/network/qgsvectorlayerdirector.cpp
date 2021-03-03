@@ -32,7 +32,7 @@
 #include <QString>
 #include <QtAlgorithms>
 
-#include "SpatialIndex.h"
+#include <spatialindex/SpatialIndex.h>
 
 using namespace SpatialIndex;
 
@@ -48,7 +48,7 @@ struct TiePointInfo
 
   int additionalPointId = -1;
   QgsPointXY mTiedPoint;
-  double mLength = DBL_MAX;
+  double mLength = std::numeric_limits<double>::max();
   QgsFeatureId mNetworkFeatureId = -1;
   QgsPointXY mFirstPoint;
   QgsPointXY mLastPoint;
@@ -85,7 +85,7 @@ QgsAttributeList QgsVectorLayerDirector::requiredAttributes() const
   {
     attrs.unite( strategy->requiredAttributes() );
   }
-  return attrs.toList();
+  return qgis::setToList( attrs );
 }
 
 QgsVectorLayerDirector::Direction QgsVectorLayerDirector::directionForFeature( const QgsFeature &feature ) const
@@ -120,7 +120,7 @@ class QgsNetworkVisitor : public SpatialIndex::IVisitor
       : mPoints( pointIndexes ) {}
 
     void visitNode( const INode &n ) override
-    { Q_UNUSED( n ); }
+    { Q_UNUSED( n ) }
 
     void visitData( const IData &d ) override
     {
@@ -128,7 +128,7 @@ class QgsNetworkVisitor : public SpatialIndex::IVisitor
     }
 
     void visitData( std::vector<const IData *> &v ) override
-    { Q_UNUSED( v ); }
+    { Q_UNUSED( v ) }
 
   private:
     QVector< int > &mPoints;
@@ -203,7 +203,7 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
   };
 
   // first iteration - get all nodes from network, and snap additional points to network
-  QgsFeatureIterator fit = mSource->getFeatures( QgsFeatureRequest().setSubsetOfAttributes( QgsAttributeList() ) );
+  QgsFeatureIterator fit = mSource->getFeatures( QgsFeatureRequest().setNoAttributes() );
   QgsFeature feature;
   while ( fit.nextFeature( feature ) )
   {
@@ -245,7 +245,7 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
           {
 
             QgsPointXY snappedPoint;
-            double thisSegmentClosestDist = DBL_MAX;
+            double thisSegmentClosestDist = std::numeric_limits<double>::max();
             if ( pt1 == pt2 )
             {
               thisSegmentClosestDist = additionalPoint.sqrDist( pt1 );
@@ -254,7 +254,7 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
             else
             {
               thisSegmentClosestDist = additionalPoint.sqrDistToSegment( pt1.x(), pt1.y(),
-                                       pt2.x(), pt2.y(), snappedPoint );
+                                       pt2.x(), pt2.y(), snappedPoint, 0 );
             }
 
             if ( thisSegmentClosestDist < additionalTiePoints[ i ].mLength )
@@ -347,6 +347,9 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
       for ( const QgsPointXY &point : line )
       {
         pt2 = ct.transform( point );
+        int pPt2idx = findPointWithinTolerance( pt2 );
+        Q_ASSERT_X( pPt2idx >= 0, "QgsVectorLayerDirectory::makeGraph", "encountered a vertex which was not present in graph" );
+        pt2 = graphVertices.at( pPt2idx );
 
         if ( !isFirstPoint )
         {
@@ -364,22 +367,24 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
             }
           }
 
-          QgsPointXY pt1;
-          QgsPointXY pt2;
+          QgsPointXY arcPt1;
+          QgsPointXY arcPt2;
           int pt1idx = -1;
           int pt2idx = -1;
           bool isFirstPoint = true;
           for ( auto arcPointIt = pointsOnArc.constBegin(); arcPointIt != pointsOnArc.constEnd(); ++arcPointIt )
           {
-            pt2 = arcPointIt.value();
+            arcPt2 = arcPointIt.value();
 
-            pt2idx = findPointWithinTolerance( pt2 );
+            pt2idx = findPointWithinTolerance( arcPt2 );
             Q_ASSERT_X( pt2idx >= 0, "QgsVectorLayerDirectory::makeGraph", "encountered a vertex which was not present in graph" );
+            arcPt2 = graphVertices.at( pt2idx );
 
-            if ( !isFirstPoint && pt1 != pt2 )
+            if ( !isFirstPoint && arcPt1 != arcPt2 )
             {
-              double distance = builder->distanceArea()->measureLine( pt1, pt2 );
+              double distance = builder->distanceArea()->measureLine( arcPt1, arcPt2 );
               QVector< QVariant > prop;
+              prop.reserve( mStrategies.size() );
               for ( QgsNetworkStrategy *strategy : mStrategies )
               {
                 prop.push_back( strategy->cost( distance, feature ) );
@@ -388,16 +393,16 @@ void QgsVectorLayerDirector::makeGraph( QgsGraphBuilderInterface *builder, const
               if ( direction == Direction::DirectionForward ||
                    direction == Direction::DirectionBoth )
               {
-                builder->addEdge( pt1idx, pt1, pt2idx, pt2, prop );
+                builder->addEdge( pt1idx, arcPt1, pt2idx, arcPt2, prop );
               }
               if ( direction == Direction::DirectionBackward ||
                    direction == Direction::DirectionBoth )
               {
-                builder->addEdge( pt2idx, pt2, pt1idx, pt1, prop );
+                builder->addEdge( pt2idx, arcPt2, pt1idx, arcPt1, prop );
               }
             }
             pt1idx = pt2idx;
-            pt1 = pt2;
+            arcPt1 = arcPt2;
             isFirstPoint = false;
           }
         }

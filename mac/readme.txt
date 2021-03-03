@@ -1,10 +1,12 @@
 Mac Notes
+*********
 
 The 'cmake' folder scripts handle bundling dependent libraries in the QGIS
 application package and fixing up the library paths.  It is automatic during
 installation.  There are 2 levels currently, specified with the cmake config
 option QGIS_MACAPP_BUNDLE, and one that always occurs:
 
+-1 = do not run bundle install scrips
 0 = (default) fixup the library paths for all QGIS libraries if @loader_path
     is available in the system (OS X 10.5+)
 1 = bundle Qt, PyQt, PyQwt and OSG/osgEarth

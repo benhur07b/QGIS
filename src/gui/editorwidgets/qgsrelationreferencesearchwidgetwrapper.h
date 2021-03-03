@@ -21,7 +21,9 @@
 #include <QComboBox>
 #include <QListWidget>
 #include <QLineEdit>
+
 #include "qgis_gui.h"
+#include "qgis_sip.h"
 
 class QgsRelationReferenceWidgetFactory;
 class QgsMapCanvas;
@@ -30,7 +32,7 @@ class QgsRelationReferenceWidget;
 /**
  * \ingroup gui
  * \class QgsRelationReferenceSearchWidgetWrapper
- * Wraps a relation reference search widget.
+ * \brief Wraps a relation reference search widget.
  * \since QGIS 2.16
  */
 
@@ -58,13 +60,17 @@ class GUI_EXPORT QgsRelationReferenceSearchWidgetWrapper : public QgsSearchWidge
     QString expression() const override;
     bool valid() const override;
     QgsSearchWidgetWrapper::FilterFlags supportedFlags() const override;
+
+    /**
+     * Returns the default flags (equalTo)
+     */
     QgsSearchWidgetWrapper::FilterFlags defaultFlags() const override;
-    virtual QString createExpression( QgsSearchWidgetWrapper::FilterFlags flags ) const override;
+    QString createExpression( QgsSearchWidgetWrapper::FilterFlags flags ) const override;
 
   public slots:
 
-    virtual void clearWidget() override;
-    virtual void setEnabled( bool enabled ) override;
+    void clearWidget() override;
+    void setEnabled( bool enabled ) override;
 
   protected:
     QWidget *createWidget( QWidget *parent ) override;
@@ -72,13 +78,17 @@ class GUI_EXPORT QgsRelationReferenceSearchWidgetWrapper : public QgsSearchWidge
 
   public slots:
 
-    //! Called when current value of search widget changes
-    void onValueChanged( const QVariant &value );
+    /**
+     * Called when current value of search widget changes
+     * \deprecated since QGIS 3.10 made private
+     */
+    Q_DECL_DEPRECATED void onValueChanged( const QVariant &value ) SIP_DEPRECATED;
 
   protected slots:
     void setExpression( const QString &exp ) override;
 
   private:
+    void onValuesChanged( const QVariantList &values );
 
     QgsRelationReferenceWidget *mWidget = nullptr;
     QgsVectorLayer *mLayer = nullptr;

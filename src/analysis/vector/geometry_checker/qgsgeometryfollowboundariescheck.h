@@ -23,22 +23,35 @@
 class QgsSpatialIndex;
 
 
+/**
+ * \ingroup analysis
+ * \brief A follow boundaries check.
+ */
 class ANALYSIS_EXPORT QgsGeometryFollowBoundariesCheck : public QgsGeometryCheck
 {
-    Q_OBJECT
-
+    Q_DECLARE_TR_FUNCTIONS( QgsGeometryFollowBoundariesCheck )
   public:
-    QgsGeometryFollowBoundariesCheck( QgsGeometryCheckerContext *context, QgsVectorLayer *checkLayer );
-    ~QgsGeometryFollowBoundariesCheck();
-    void collectErrors( QList<QgsGeometryCheckError *> &errors, QStringList &messages, QAtomicInt *progressCounter = nullptr, const QMap<QString, QgsFeatureIds> &ids = QMap<QString, QgsFeatureIds>() ) const override;
-    void fixError( QgsGeometryCheckError *error, int method, const QMap<QString, int> &mergeAttributeIndices, Changes &changes ) const override;
-    QStringList getResolutionMethods() const override;
-    QString errorDescription() const override { return tr( "Polygon does not follow boundaries" ); }
-    QString errorName() const override { return QStringLiteral( "QgsGeometryFollowBoundariesCheck" ); }
+    QgsGeometryFollowBoundariesCheck( QgsGeometryCheckContext *context, const QVariantMap &configuration, QgsVectorLayer *checkLayer );
+    ~QgsGeometryFollowBoundariesCheck() override;
+    static QList<QgsWkbTypes::GeometryType> factoryCompatibleGeometryTypes() {return {QgsWkbTypes::PolygonGeometry}; }
+    static bool factoryIsCompatible( QgsVectorLayer *layer ) SIP_SKIP { return factoryCompatibleGeometryTypes().contains( layer->geometryType() ); }
+    QList<QgsWkbTypes::GeometryType> compatibleGeometryTypes() const override { return factoryCompatibleGeometryTypes(); }
+    void collectErrors( const QMap<QString, QgsFeaturePool *> &featurePools, QList<QgsGeometryCheckError *> &errors, QStringList &messages, QgsFeedback *feedback, const LayerFeatureIds &ids = LayerFeatureIds() ) const override;
+    void fixError( const QMap<QString, QgsFeaturePool *> &featurePools, QgsGeometryCheckError *error, int method, const QMap<QString, int> &mergeAttributeIndices, Changes &changes ) const override;
+    Q_DECL_DEPRECATED QStringList resolutionMethods() const override;
+    static QString factoryDescription() { return tr( "Polygon does not follow boundaries" ); }
+    QString description() const override { return factoryDescription(); }
+    static QString factoryId() { return QStringLiteral( "QgsGeometryFollowBoundariesCheck" ); }
+    QString id() const override { return factoryId(); }
+    QgsGeometryCheck::CheckType checkType() const override { return factoryCheckType(); }
+    static QgsGeometryCheck::CheckType factoryCheckType() SIP_SKIP;
   private:
     enum ResolutionMethod { NoChange };
     QgsVectorLayer *mCheckLayer;
     QgsSpatialIndex *mIndex = nullptr;
+
+    QgsGeometryFollowBoundariesCheck( const QgsGeometryFollowBoundariesCheck & ) = delete;
+    QgsGeometryFollowBoundariesCheck &operator=( const QgsGeometryFollowBoundariesCheck & ) = delete;
 };
 
 #endif // QGSGEOMETRYFOLLOWBOUNDARIESCHECK_H

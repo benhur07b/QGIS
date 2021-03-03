@@ -15,20 +15,14 @@
 
 #include "qgstilingscheme.h"
 
+#include "qgschunknode_p.h"
 #include "qgsrectangle.h"
-
-
-QgsTilingScheme::QgsTilingScheme()
-  : mMapOrigin()
-  , mBaseTileSide( 0 )
-{
-}
 
 QgsTilingScheme::QgsTilingScheme( const QgsRectangle &fullExtent, const QgsCoordinateReferenceSystem &crs )
   : mCrs( crs )
 {
   mMapOrigin = QgsPointXY( fullExtent.xMinimum(), fullExtent.yMinimum() );
-  mBaseTileSide = qMax( fullExtent.width(), fullExtent.height() );
+  mBaseTileSide = std::max( fullExtent.width(), fullExtent.height() );
 }
 
 QgsPointXY QgsTilingScheme::tileToMap( int x, int y, int z ) const
@@ -53,10 +47,15 @@ QgsRectangle QgsTilingScheme::tileToExtent( int x, int y, int z ) const
   return QgsRectangle( pt0, pt1 );
 }
 
+QgsRectangle QgsTilingScheme::tileToExtent( const QgsChunkNodeId &nodeId ) const
+{
+  return tileToExtent( nodeId.x, nodeId.y, nodeId.d );
+}
+
 void QgsTilingScheme::extentToTile( const QgsRectangle &extent, int &x, int &y, int &z ) const
 {
   x = y = z = 0;  // start with root tile
-  while ( 1 )
+  while ( true )
   {
     // try to see if any child tile fully contains our extent - if so, go deeper
     if ( tileToExtent( x * 2, y * 2, z + 1 ).contains( extent ) )

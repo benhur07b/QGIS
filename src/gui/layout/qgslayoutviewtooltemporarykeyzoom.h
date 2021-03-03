@@ -16,7 +16,7 @@
 #ifndef QGSLAYOUTVIEWTOOLTEMPORARYKEYZOOM_H
 #define QGSLAYOUTVIEWTOOLTEMPORARYKEYZOOM_H
 
-#include "qgis.h"
+#include "qgis_sip.h"
 #include "qgis_gui.h"
 #include "qgslayoutviewtoolzoom.h"
 #include "qgslayoutviewrubberband.h"
@@ -24,7 +24,7 @@
 
 /**
  * \ingroup gui
- * Layout view tool for temporarily zooming a layout while a key is depressed.
+ * \brief Layout view tool for temporarily zooming a layout while a key is depressed.
  * \since QGIS 3.0
  */
 class GUI_EXPORT QgsLayoutViewToolTemporaryKeyZoom : public QgsLayoutViewToolZoom

@@ -18,9 +18,11 @@
 #define QGSSVGSELECTORWIDGET_H
 
 #include "ui_widget_svgselector.h"
-#include "qgis.h"
-
+#include "qgis_sip.h"
+#include "qgis_gui.h"
 #include "qgsguiutils.h"
+#include "qgsproperty.h"
+
 #include <QAbstractListModel>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -29,7 +31,8 @@
 #include <QWidget>
 #include <QThread>
 #include <QElapsedTimer>
-#include "qgis_gui.h"
+#include <QStyledItemDelegate>
+
 
 class QCheckBox;
 class QLayout;
@@ -38,14 +41,107 @@ class QListView;
 class QPushButton;
 class QTreeView;
 
+class QgsExpressionContextGenerator;
+
 
 #ifndef SIP_RUN
 ///@cond PRIVATE
 
+
+/**
+ * \ingroup gui
+ * \class QgsSvgParametersModel
+ * \brief A model to hold dynamic SVG parameters
+ * \since QGIS 3.18
+ */
+class GUI_EXPORT QgsSvgParametersModel : public QAbstractTableModel
+{
+    Q_OBJECT
+
+  public:
+    enum class Column : int
+    {
+      NameColumn = 0,
+      ExpressionColumn = 1,
+    };
+
+    QgsSvgParametersModel( QObject *parent = nullptr );
+
+    //! Sets the parameters
+    void setParameters( const QMap<QString, QgsProperty> &parameters );
+    //! Returns the valid parameters of the model
+    QMap<QString, QgsProperty> parameters() const;
+
+    //! Remove the parameters at the given indexes
+    void removeParameters( const QModelIndexList &indexList );
+
+    //! Sets the vector layer
+    void setLayer( QgsVectorLayer *layer );
+    //! Returns the vector layer
+    QgsVectorLayer *layer() const {return mLayer;}
+
+    //! Sets the expression context generator
+    void setExpressionContextGenerator( const QgsExpressionContextGenerator *generator );
+    //! Returns the expression context generator
+    const QgsExpressionContextGenerator *expressionContextGenerator() const {return mExpressionContextGenerator;}
+
+    int rowCount( const QModelIndex &parent ) const override;
+    int columnCount( const QModelIndex &parent ) const override;
+    QVariant data( const QModelIndex &index, int role ) const override;
+    bool setData( const QModelIndex &index, const QVariant &value, int role ) override;
+    QVariant headerData( int section, Qt::Orientation orientation, int role ) const override;
+    Qt::ItemFlags flags( const QModelIndex &index ) const override;
+
+  public slots:
+    //! Adds a new parameter
+    void addParameter();
+
+  signals:
+    //! Emitted when the parameters have changed
+    void parametersChanged( const QMap<QString, QgsProperty> &parameters );
+
+  private:
+    struct Parameter
+    {
+      Parameter( const QString &name, const QgsProperty &property )
+        : name( name ), property( property ) {}
+
+      QString name;
+      QgsProperty property;
+    };
+
+    QList<Parameter> mParameters;
+    QgsVectorLayer *mLayer = nullptr;
+    const QgsExpressionContextGenerator *mExpressionContextGenerator = nullptr;
+};
+
+/**
+ * \ingroup gui
+ * \class QgsSvgParameterValueDelegate
+ * \brief A delegate which will show a field expression widget to set the value of the SVG parameter
+ * \since QGIS 3.18
+ */
+class GUI_EXPORT QgsSvgParameterValueDelegate : public QStyledItemDelegate
+{
+    Q_OBJECT
+
+  public:
+    QgsSvgParameterValueDelegate( QObject *parent = nullptr )
+      : QStyledItemDelegate( parent )
+    {}
+
+    QWidget *createEditor( QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index ) const override;
+    void setEditorData( QWidget *editor, const QModelIndex &index ) const override;
+    void setModelData( QWidget *editor, QAbstractItemModel *model, const QModelIndex &index ) const override;
+    void updateEditorGeometry( QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index ) const override;
+};
+
+
+
 /**
  * \ingroup gui
  * \class QgsSvgSelectorLoader
- * Recursively loads SVG images from a path in a background thread.
+ * \brief Recursively loads SVG images from a path in a background thread.
  * \since QGIS 2.18
  */
 class GUI_EXPORT QgsSvgSelectorLoader : public QThread
@@ -60,14 +156,14 @@ class GUI_EXPORT QgsSvgSelectorLoader : public QThread
      */
     QgsSvgSelectorLoader( QObject *parent = nullptr );
 
-    ~QgsSvgSelectorLoader();
+    ~QgsSvgSelectorLoader() override;
 
     /**
      * Starts the loader finding and generating previews for SVG images. foundSvgs() will be
      * emitted as the loader encounters SVG images.
      * \brief run
      */
-    virtual void run() override;
+    void run() override;
 
     /**
      * Cancels the current loading operation. Waits until the thread has finished operation
@@ -111,7 +207,7 @@ class GUI_EXPORT QgsSvgSelectorLoader : public QThread
 /**
  * \ingroup gui
  * \class QgsSvgGroupLoader
- * Recursively loads SVG paths in a background thread.
+ * \brief Recursively loads SVG paths in a background thread.
  * \since QGIS 2.18
  */
 class GUI_EXPORT QgsSvgGroupLoader : public QThread
@@ -126,13 +222,13 @@ class GUI_EXPORT QgsSvgGroupLoader : public QThread
      */
     QgsSvgGroupLoader( QObject *parent = nullptr );
 
-    ~QgsSvgGroupLoader();
+    ~QgsSvgGroupLoader() override;
 
     /**
      * Starts the loader finding folders for SVG images.
      * \brief run
      */
-    virtual void run() override;
+    void run() override;
 
     /**
      * Cancels the current loading operation. Waits until the thread has finished operation
@@ -174,7 +270,7 @@ class GUI_EXPORT QgsSvgGroupLoader : public QThread
 /**
  * \ingroup gui
  * \class QgsSvgSelectorListModel
- * A model for displaying SVG files with a preview icon. Population of the model is performed in
+ * \brief A model for displaying SVG files with a preview icon. Population of the model is performed in
  * a background thread to ensure that initial creation of the model is responsive and does
  * not block the GUI.
  */
@@ -226,7 +322,7 @@ class GUI_EXPORT QgsSvgSelectorListModel : public QAbstractListModel
 /**
  * \ingroup gui
  * \class QgsSvgSelectorGroupsModel
- * A model for displaying SVG search paths. Population of the model is performed in
+ * \brief A model for displaying SVG search paths. Population of the model is performed in
  * a background thread to ensure that initial creation of the model is responsive and does
  * not block the GUI.
  */
@@ -236,7 +332,7 @@ class GUI_EXPORT QgsSvgSelectorGroupsModel : public QStandardItemModel
 
   public:
     QgsSvgSelectorGroupsModel( QObject *parent SIP_TRANSFERTHIS );
-    ~QgsSvgSelectorGroupsModel();
+    ~QgsSvgSelectorGroupsModel() override;
 
   private:
     QgsSvgGroupLoader *mLoader = nullptr;
@@ -256,16 +352,54 @@ class GUI_EXPORT QgsSvgSelectorWidget : public QWidget, private Ui::WidgetSvgSel
     Q_OBJECT
 
   public:
-    QgsSvgSelectorWidget( QWidget *parent SIP_TRANSFERTHIS = 0 );
+
+    //! Constructor for QgsSvgSelectorWidget
+    QgsSvgSelectorWidget( QWidget *parent SIP_TRANSFERTHIS = nullptr );
+
+    /**
+     * Initialize the parameters model so the context and the layer are referenced.
+     * \since QGIS 3.18
+     */
+    void initParametersModel( const QgsExpressionContextGenerator *generator, QgsVectorLayer *layer );
 
     QString currentSvgPath() const;
+
+    /**
+     * Returns the source line edit
+     * \since QGIS 3.16
+     */
+    QgsSvgSourceLineEdit *sourceLineEdit() const {return mSvgSourceLineEdit;}
+
+    /**
+     * Defines if the group box to fill parameters is visible
+     * \since QGIS 3.18
+     */
+    void setAllowParameters( bool allow );
+
+    /**
+     * Returns if the group box to fill parameters is visible
+     * \since QGIS 3.18
+     */
+    bool allowParamerters() const {return mAllowParameters;}
 
   public slots:
     //! Accepts absolute paths
     void setSvgPath( const QString &svgPath );
 
+    /**
+     * Sets the dynamic parameters
+     * \since QGIS 3.18
+     */
+    void setSvgParameters( const QMap<QString, QgsProperty> &parameters );
+
   signals:
     void svgSelected( const QString &path );
+
+    /**
+     * Emitted when the parameters have changed
+     * \since QGIS 3.18
+     */
+    void svgParametersChanged( const QMap<QString, QgsProperty> &parameters );
 
   protected:
     void populateList();
@@ -274,17 +408,13 @@ class GUI_EXPORT QgsSvgSelectorWidget : public QWidget, private Ui::WidgetSvgSel
     void populateIcons( const QModelIndex &idx );
     void svgSelectionChanged( const QModelIndex &idx );
     void updateCurrentSvgPath( const QString &svgPath );
-
-    void mFilePushButton_clicked();
-    void updateLineEditFeedback( bool ok, const QString &tip = QString() );
-    void mFileLineEdit_textChanged( const QString &text );
+    void svgSourceChanged( const QString &text );
 
   private:
-
     int mIconSize = 30;
-
     QString mCurrentSvgPath; //!< Always stored as absolute path
-
+    bool mAllowParameters = false;
+    QgsSvgParametersModel *mParametersModel = nullptr;
 };
 
 /**
@@ -303,7 +433,6 @@ class GUI_EXPORT QgsSvgSelectorDialog : public QDialog
                           Qt::WindowFlags fl = QgsGuiUtils::ModalDialogFlags,
                           QDialogButtonBox::StandardButtons buttons = QDialogButtonBox::Close | QDialogButtonBox::Ok,
                           Qt::Orientation orientation = Qt::Horizontal );
-    ~QgsSvgSelectorDialog();
 
     //! Returns pointer to the embedded SVG selector widget
     QgsSvgSelectorWidget *svgSelector() { return mSvgSelector; }

@@ -28,13 +28,14 @@ class APP_EXPORT QgsSvgAnnotationDialog: public QDialog, private Ui::QgsFormAnno
 {
     Q_OBJECT
   public:
-    QgsSvgAnnotationDialog( QgsMapCanvasAnnotationItem *item, QWidget *parent = nullptr, Qt::WindowFlags f = 0 );
+    QgsSvgAnnotationDialog( QgsMapCanvasAnnotationItem *item, QWidget *parent = nullptr, Qt::WindowFlags f = Qt::WindowFlags() );
 
   private slots:
     void mBrowseToolButton_clicked();
     void applySettingsToItem();
     void deleteItem();
     void mButtonBox_clicked( QAbstractButton *button );
+    void showHelp();
 
   private:
     QgsSvgAnnotationDialog() = delete; //forbidden

@@ -17,6 +17,7 @@
 
 #include "qgsalgorithmfiledownloader.h"
 #include "qgsfiledownloader.h"
+#include "qgsfileutils.h"
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QTimer>
@@ -31,7 +32,7 @@ QString QgsFileDownloaderAlgorithm::name() const
 
 QString QgsFileDownloaderAlgorithm::displayName() const
 {
-  return tr( "File downloader" );
+  return tr( "Download file" );
 }
 
 QStringList QgsFileDownloaderAlgorithm::tags() const
@@ -42,6 +43,11 @@ QStringList QgsFileDownloaderAlgorithm::tags() const
 QString QgsFileDownloaderAlgorithm::group() const
 {
   return tr( "File tools" );
+}
+
+QString QgsFileDownloaderAlgorithm::groupId() const
+{
+  return QStringLiteral( "filetools" );
 }
 
 QString QgsFileDownloaderAlgorithm::shortHelpString() const
@@ -58,22 +64,25 @@ void QgsFileDownloaderAlgorithm::initAlgorithm( const QVariantMap & )
 {
   addParameter( new QgsProcessingParameterString( QStringLiteral( "URL" ), tr( "URL" ), QVariant(), false, false ) );
   addParameter( new QgsProcessingParameterFileDestination( QStringLiteral( "OUTPUT" ),
-                tr( "File destination" ), QObject::tr( "*.*" ), QVariant(), true ) );
-  addOutput( new QgsProcessingOutputFile( QStringLiteral( "OUTPUT" ), tr( "File destination" ) ) );
+                tr( "File destination" ), QObject::tr( "All files (*.*)" ), QVariant(), true ) );
 }
 
 QVariantMap QgsFileDownloaderAlgorithm::processAlgorithm( const QVariantMap &parameters, QgsProcessingContext &context, QgsProcessingFeedback *feedback )
 {
   mFeedback = feedback;
   QString url = parameterAsString( parameters, QStringLiteral( "URL" ), context );
+  if ( url.isEmpty() )
+    throw QgsProcessingException( tr( "No URL specified" ) );
   QString outputFile = parameterAsFileOutput( parameters, QStringLiteral( "OUTPUT" ), context );
 
   QEventLoop loop;
   QTimer timer;
+  QUrl downloadedUrl;
   QgsFileDownloader *downloader = new QgsFileDownloader( QUrl( url ), outputFile, QString(), true );
   connect( mFeedback, &QgsFeedback::canceled, downloader, &QgsFileDownloader::cancelDownload );
   connect( downloader, &QgsFileDownloader::downloadError, this, &QgsFileDownloaderAlgorithm::reportErrors );
   connect( downloader, &QgsFileDownloader::downloadProgress, this, &QgsFileDownloaderAlgorithm::receiveProgressFromDownloader );
+  connect( downloader, &QgsFileDownloader::downloadCompleted, this, [&downloadedUrl]( const QUrl url ) { downloadedUrl = url; } );
   connect( downloader, &QgsFileDownloader::downloadExited, &loop, &QEventLoop::quit );
   connect( &timer, &QTimer::timeout, this, &QgsFileDownloaderAlgorithm::sendProgressFeedback );
   downloader->startDownload();
@@ -82,16 +91,33 @@ QVariantMap QgsFileDownloaderAlgorithm::processAlgorithm( const QVariantMap &par
   loop.exec();
 
   timer.stop();
-  bool exists = QFileInfo( outputFile ).exists();
+  bool exists = QFileInfo::exists( outputFile );
   if ( !feedback->isCanceled() && !exists )
     throw QgsProcessingException( tr( "Output file doesn't exist." ) );
+
+  url = downloadedUrl.toDisplayString();
+  feedback->pushInfo( QObject::tr( "Successfully downloaded %1" ).arg( url ) );
+
+  if ( outputFile.startsWith( QgsProcessingUtils::tempFolder() ) )
+  {
+    // the output is temporary and its file name automatically generated, try to add a file extension
+    const int length = url.size();
+    const int lastDotIndex = url.lastIndexOf( "." );
+    const int lastSlashIndex = url.lastIndexOf( "/" );
+    if ( lastDotIndex > -1 && lastDotIndex > lastSlashIndex && length - lastDotIndex <= 6 )
+    {
+      QFile tmpFile( outputFile );
+      tmpFile.rename( tmpFile.fileName() + url.mid( lastDotIndex ) );
+      outputFile += url.mid( lastDotIndex );
+    }
+  }
 
   QVariantMap outputs;
   outputs.insert( QStringLiteral( "OUTPUT" ), exists ? outputFile : QString() );
   return outputs;
 }
 
-void QgsFileDownloaderAlgorithm::reportErrors( QStringList errors )
+void QgsFileDownloaderAlgorithm::reportErrors( const QStringList &errors )
 {
   throw QgsProcessingException( errors.join( '\n' ) );
 }
@@ -104,36 +130,20 @@ void QgsFileDownloaderAlgorithm::sendProgressFeedback()
     if ( mTotal.isEmpty() )
       mFeedback->pushInfo( tr( "%1 downloaded." ).arg( mReceived ) );
     else
-      mFeedback->pushInfo( tr( "%1 of %2 downloaded." ).arg( mReceived ).arg( mTotal ) );
+      mFeedback->pushInfo( tr( "%1 of %2 downloaded." ).arg( mReceived, mTotal ) );
   }
 }
 
 void QgsFileDownloaderAlgorithm::receiveProgressFromDownloader( qint64 bytesReceived, qint64 bytesTotal )
 {
-  mReceived = humanSize( bytesReceived );
+  mReceived = QgsFileUtils::representFileSize( bytesReceived );
   if ( bytesTotal > 0 )
   {
     if ( mTotal.isEmpty() )
-      mTotal = humanSize( bytesTotal );
+      mTotal = QgsFileUtils::representFileSize( bytesTotal );
 
     mFeedback->setProgress( ( bytesReceived * 100 ) / bytesTotal );
   }
-}
-
-QString QgsFileDownloaderAlgorithm::humanSize( qint64 bytes )
-{
-  QStringList list;
-  list << "KB" << "MB" << "GB" << "TB";
-
-  QStringListIterator i( list );
-  QString unit( "bytes" );
-
-  while ( bytes >= 1024.0 && i.hasNext() )
-  {
-    unit = i.next();
-    bytes /= 1024.0;
-  }
-  return QString( "%1 %2" ).arg( QString::number( bytes ) ).arg( unit );
 }
 
 ///@endcond

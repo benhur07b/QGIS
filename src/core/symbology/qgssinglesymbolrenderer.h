@@ -12,15 +12,15 @@
  *   (at your option) any later version.                                   *
  *                                                                         *
  ***************************************************************************/
-#ifndef QGSSINGLESYMBOLRENDERERV2_H
-#define QGSSINGLESYMBOLRENDERERV2_H
+#ifndef QGSSINGLESYMBOLRENDERER_H
+#define QGSSINGLESYMBOLRENDERER_H
 
 #include "qgis_core.h"
 #include "qgis.h"
 #include "qgsrenderer.h"
-#include "qgssymbol.h"
-#include "qgsexpression.h"
-#include "qgsdatadefinedsizelegend.h"
+
+class QgsDataDefinedSizeLegend;
+class QgsSymbol;
 
 /**
  * \ingroup core
@@ -30,38 +30,69 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
 {
   public:
 
+    /**
+     * Constructor for QgsSingleSymbolRenderer.
+     *
+     * The same \a symbol will be used to render every feature. Ownership
+     * of \a symbol is transferred to the renderer.
+     */
     QgsSingleSymbolRenderer( QgsSymbol *symbol SIP_TRANSFER );
+    ~QgsSingleSymbolRenderer() override;
 
-    virtual QgsSymbol *symbolForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
-    virtual QgsSymbol *originalSymbolForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
-    virtual void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
-    virtual void stopRender( QgsRenderContext &context ) override;
-    virtual QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
-
-    QgsSymbol *symbol() const;
-    void setSymbol( QgsSymbol *s SIP_TRANSFER );
-
-    virtual QString dump() const override;
-
-    virtual QgsSingleSymbolRenderer *clone() const override SIP_FACTORY;
-
-    virtual void toSld( QDomDocument &doc, QDomElement &element, const QgsStringMap &props = QgsStringMap() ) const override;
-    static QgsFeatureRenderer *createFromSld( QDomElement &element, QgsWkbTypes::GeometryType geomType );
-
-    virtual QgsFeatureRenderer::Capabilities capabilities() override { return SymbolLevels; }
-    virtual QgsSymbolList symbols( QgsRenderContext &context ) override;
-
-    //! create renderer from XML element
-    static QgsFeatureRenderer *create( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
-    virtual QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
-    virtual QgsLegendSymbolList legendSymbolItems() const override;
-    virtual QSet< QString > legendKeysForFeature( QgsFeature &feature, QgsRenderContext &context ) override;
-    virtual void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER ) override;
+    QgsSymbol *symbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    QgsSymbol *originalSymbolForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    void startRender( QgsRenderContext &context, const QgsFields &fields ) override;
+    void stopRender( QgsRenderContext &context ) override;
+    QSet<QString> usedAttributes( const QgsRenderContext &context ) const override;
+    bool accept( QgsStyleEntityVisitorInterface *visitor ) const override;
 
     /**
-     * creates a QgsSingleSymbolRenderer from an existing renderer.
+     * Returns the symbol which will be rendered for every feature.
+     * \see setSymbol()
+     */
+    QgsSymbol *symbol() const;
+
+    /**
+     * Sets the symbol which will be rendered for every feature. Ownership
+     * of the symbol is transferred to the renderer.
+     * \see symbol()
+     */
+    void setSymbol( QgsSymbol *s SIP_TRANSFER );
+
+    QString dump() const override;
+
+    QgsSingleSymbolRenderer *clone() const override SIP_FACTORY;
+
+    void toSld( QDomDocument &doc, QDomElement &element, const QVariantMap &props = QVariantMap() ) const override;
+
+    /**
+     * Creates a new single symbol renderer from an SLD \a element.
+     *
+     * The geometry type for features to be rendered must be specified via the \a geomType argument.
+     *
+     * The caller takes ownership of the returned renderer.
+     */
+    static QgsFeatureRenderer *createFromSld( QDomElement &element, QgsWkbTypes::GeometryType geomType ) SIP_FACTORY;
+
+    QgsFeatureRenderer::Capabilities capabilities() override { return SymbolLevels; }
+    QgsSymbolList symbols( QgsRenderContext &context ) const override;
+
+    /**
+     * Creates a new single symbol renderer from an XML \a element, using the supplied read/write \a context.
+     *
+     * The caller takes ownership of the returned renderer.
+     */
+    static QgsFeatureRenderer *create( QDomElement &element, const QgsReadWriteContext &context ) SIP_FACTORY;
+
+    QDomElement save( QDomDocument &doc, const QgsReadWriteContext &context ) override;
+    QgsLegendSymbolList legendSymbolItems() const override;
+    QSet< QString > legendKeysForFeature( const QgsFeature &feature, QgsRenderContext &context ) const override;
+    void setLegendSymbolItem( const QString &key, QgsSymbol *symbol SIP_TRANSFER ) override;
+
+    /**
+     * Creates a new single symbol renderer from an existing \a renderer.
+     * \returns a new renderer if the conversion was possible, otherwise NULLPTR.
      * \since QGIS 2.5
-     * \returns a new renderer if the conversion was possible, otherwise 0.
      */
     static QgsSingleSymbolRenderer *convertFromRenderer( const QgsFeatureRenderer *renderer ) SIP_FACTORY;
 
@@ -71,7 +102,7 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
      * different symbol sizes collapsed in one legend node or separated across multiple legend nodes etc.
      *
      * When renderer does not use data-defined size or does not use marker symbols, these settings will be ignored.
-     * Takes ownership of the passed settings objects. Null pointer is a valid input that disables data-defined
+     * Takes ownership of the passed settings objects. NULLPTR is a valid input that disables data-defined
      * size legend.
      * \since QGIS 3.0
      */
@@ -79,7 +110,7 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
 
     /**
      * Returns configuration of appearance of legend when using data-defined size for marker symbols.
-     * Will return null if the functionality is disabled.
+     * Will return NULLPTR if the functionality is disabled.
      * \since QGIS 3.0
      */
     QgsDataDefinedSizeLegend *dataDefinedSizeLegend() const;
@@ -97,4 +128,4 @@ class CORE_EXPORT QgsSingleSymbolRenderer : public QgsFeatureRenderer
 };
 
 
-#endif // QGSSINGLESYMBOLRENDERERV2_H
+#endif // QGSSINGLESYMBOLRENDERER_H

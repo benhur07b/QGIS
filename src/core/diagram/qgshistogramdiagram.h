@@ -35,13 +35,14 @@ class QgsRenderContext;
 /**
  * \ingroup core
  * \class QgsHistogramDiagram
+ * \brief A histogram style diagram.
  */
-class CORE_EXPORT QgsHistogramDiagram: public QgsDiagram
+class CORE_EXPORT QgsHistogramDiagram: public QgsDiagram SIP_NODEFAULTCTORS
 {
   public:
     QgsHistogramDiagram();
 
-    virtual QgsHistogramDiagram *clone() const override SIP_FACTORY;
+    QgsHistogramDiagram *clone() const override SIP_FACTORY;
 
     void renderDiagram( const QgsFeature &feature, QgsRenderContext &c, const QgsDiagramSettings &s, QPointF position ) override;
 

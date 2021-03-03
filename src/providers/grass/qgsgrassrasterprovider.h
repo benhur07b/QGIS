@@ -45,9 +45,9 @@ extern "C"
 class QgsCoordinateTransform;
 
 /**
-  \brief Read raster value for given coordinates
-
-  Executes qgis.g.info and keeps it open comunicating through pipe. Restarts the command if raster was updated.
+ * \brief Read raster value for given coordinates
+ *
+ * Executes qgis.g.info and keeps it open comunicating through pipe. Restarts the command if raster was updated.
 */
 
 class GRASS_LIB_EXPORT QgsGrassRasterValue
@@ -76,13 +76,13 @@ class GRASS_LIB_EXPORT QgsGrassRasterValue
 };
 
 /**
-
-  \brief Data provider for GRASS raster layers.
-
-  This provider implements the
-  interface defined in the QgsDataProvider class to provide access to spatial
-  data residing in a OGC Web Map Service.
-
+ *
+ * \brief Data provider for GRASS raster layers.
+ *
+ * This provider implements the
+ * interface defined in the QgsDataProvider class to provide access to spatial
+ * data residing in a OGC Web Map Service.
+ *
 */
 class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
 {
@@ -97,15 +97,15 @@ class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
      *                otherwise we contact the host directly.
      *
      */
-    explicit QgsGrassRasterProvider( QString const &uri = 0 );
+    explicit QgsGrassRasterProvider( QString const &uri = QString() );
 
 
-    ~QgsGrassRasterProvider();
+    ~QgsGrassRasterProvider() override;
 
-    QgsRasterInterface *clone() const override;
+    QgsGrassRasterProvider *clone() const override;
 
     /**
-     * Return a provider name
+     * Returns a provider name
      *
      * Essentially just returns the provider key.  Should be used to build file
      * dialogs so that providers can be shown with their supported types. Thus
@@ -123,9 +123,9 @@ class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
 
 
     /**
-     * Return description
+     * Returns description
      *
-     * Return a terse string describing what the provider is.
+     * Returns a terse string describing what the provider is.
      *
      * \note
      *
@@ -136,12 +136,12 @@ class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
      */
     QString description() const override;
 
-    virtual QgsCoordinateReferenceSystem crs() const override;
+    QgsCoordinateReferenceSystem crs() const override;
 
     /**
-     * Return the extent for this data layer
+     * Returns the extent for this data layer
      */
-    virtual QgsRectangle extent() const override;
+    QgsRectangle extent() const override;
 
     bool isValid() const override;
 
@@ -189,8 +189,8 @@ class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
     int xSize() const override;
     int ySize() const override;
 
-    void readBlock( int bandNo, int xBlock, int yBlock, void *data ) override;
-    void readBlock( int bandNo, QgsRectangle  const &viewExtent, int width, int height, void *data, QgsRasterBlockFeedback *feedback = nullptr ) override;
+    bool readBlock( int bandNo, int xBlock, int yBlock, void *data ) override;
+    bool readBlock( int bandNo, QgsRectangle  const &viewExtent, int width, int height, void *data, QgsRasterBlockFeedback *feedback = nullptr ) override;
 
     QgsRasterBandStats bandStatistics( int bandNo,
                                        int stats = QgsRasterBandStats::All,
@@ -202,12 +202,12 @@ class GRASS_LIB_EXPORT QgsGrassRasterProvider : public QgsRasterDataProvider
     // void buildSupportedRasterFileFilter( QString & fileFiltersString );
 
     /**
-     * Get metadata in a format suitable for feeding directly
+     * Gets metadata in a format suitable for feeding directly
      * into a subset of the GUI raster properties "Metadata" tab.
      */
-    QString metadata() override;
+    QString htmlMetadata() override;
 
-    virtual QDateTime dataTimestamp() const override;
+    QDateTime dataTimestamp() const override;
 
     // used by GRASS tools
     void freeze();

@@ -18,9 +18,12 @@
 #include "qgsapplication.h"
 #include "qgsexpression.h"
 #include "qgsgeometry.h"
+#include "qgsmapcanvas.h"
 #include "qgsmessagebar.h"
 #include "qgsvectorlayer.h"
 #include "qgssettings.h"
+#include "qgsgui.h"
+#include "qgsexpressioncontextutils.h"
 
 
 QgsExpressionSelectionDialog::QgsExpressionSelectionDialog( QgsVectorLayer *layer, const QString &startText, QWidget *parent )
@@ -29,14 +32,18 @@ QgsExpressionSelectionDialog::QgsExpressionSelectionDialog( QgsVectorLayer *laye
 
 {
   setupUi( this );
+
+  QgsGui::enableAutoGeometryRestore( this );
+
   connect( mActionSelect, &QAction::triggered, this, &QgsExpressionSelectionDialog::mActionSelect_triggered );
   connect( mActionAddToSelection, &QAction::triggered, this, &QgsExpressionSelectionDialog::mActionAddToSelection_triggered );
   connect( mActionRemoveFromSelection, &QAction::triggered, this, &QgsExpressionSelectionDialog::mActionRemoveFromSelection_triggered );
   connect( mActionSelectIntersect, &QAction::triggered, this, &QgsExpressionSelectionDialog::mActionSelectIntersect_triggered );
   connect( mButtonZoomToFeatures, &QToolButton::clicked, this, &QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked );
   connect( mPbnClose, &QPushButton::clicked, this, &QgsExpressionSelectionDialog::mPbnClose_clicked );
+  connect( mLayer, &QgsVectorLayer::willBeDeleted, this, &QgsExpressionSelectionDialog::close );
 
-  setWindowTitle( QStringLiteral( "Select by Expression - %1" ).arg( layer->name() ) );
+  setWindowTitle( tr( "%1 — Select by Expression" ).arg( layer->name() ) );
 
   mActionSelect->setIcon( QgsApplication::getThemeIcon( QStringLiteral( "/mIconExpressionSelect.svg" ) ) );
   mActionAddToSelection->setIcon( QgsApplication::getThemeIcon( QStringLiteral( "/mIconSelectAdd.svg" ) ) );
@@ -49,19 +56,12 @@ QgsExpressionSelectionDialog::QgsExpressionSelectionDialog( QgsVectorLayer *laye
   mButtonSelect->addAction( mActionSelectIntersect );
   mButtonSelect->setDefaultAction( mActionSelect );
 
-  mExpressionBuilder->setLayer( layer );
-  mExpressionBuilder->setExpressionText( startText );
-  mExpressionBuilder->loadFieldNames();
-  mExpressionBuilder->loadRecent( QStringLiteral( "Selection" ) );
-
   QgsExpressionContext context( QgsExpressionContextUtils::globalProjectLayerScopes( mLayer ) );
-  mExpressionBuilder->setExpressionContext( context );
+  mExpressionBuilder->initWithLayer( layer, context, QStringLiteral( "selection" ) );
+  mExpressionBuilder->setExpressionText( startText );
 
   // by default, zoom to features is hidden, shown only if canvas is set
   mButtonZoomToFeatures->setVisible( false );
-
-  QgsSettings settings;
-  restoreGeometry( settings.value( QStringLiteral( "Windows/ExpressionSelectionDialog/geometry" ) ).toByteArray() );
 
   connect( buttonBox, &QDialogButtonBox::helpRequested, this, &QgsExpressionSelectionDialog::showHelp );
 }
@@ -102,6 +102,7 @@ void QgsExpressionSelectionDialog::mActionSelect_triggered()
 {
   mLayer->selectByExpression( mExpressionBuilder->expressionText(),
                               QgsVectorLayer::SetSelection );
+  pushSelectedFeaturesMessage();
   saveRecent();
 }
 
@@ -109,6 +110,7 @@ void QgsExpressionSelectionDialog::mActionAddToSelection_triggered()
 {
   mLayer->selectByExpression( mExpressionBuilder->expressionText(),
                               QgsVectorLayer::AddToSelection );
+  pushSelectedFeaturesMessage();
   saveRecent();
 }
 
@@ -116,6 +118,7 @@ void QgsExpressionSelectionDialog::mActionSelectIntersect_triggered()
 {
   mLayer->selectByExpression( mExpressionBuilder->expressionText(),
                               QgsVectorLayer::IntersectSelection );
+  pushSelectedFeaturesMessage();
   saveRecent();
 }
 
@@ -123,7 +126,28 @@ void QgsExpressionSelectionDialog::mActionRemoveFromSelection_triggered()
 {
   mLayer->selectByExpression( mExpressionBuilder->expressionText(),
                               QgsVectorLayer::RemoveFromSelection );
+  pushSelectedFeaturesMessage();
   saveRecent();
+}
+
+void QgsExpressionSelectionDialog::pushSelectedFeaturesMessage()
+{
+  if ( !mMessageBar )
+    return;
+
+  const int count = mLayer->selectedFeatureCount();
+  if ( count > 0 )
+  {
+    mMessageBar->pushMessage( QString(),
+                              tr( "%n matching feature(s) selected", "matching features", count ),
+                              Qgis::Info );
+  }
+  else
+  {
+    mMessageBar->pushMessage( QString(),
+                              tr( "No matching features found" ),
+                              Qgis::Info );
+  }
 }
 
 void QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked()
@@ -135,7 +159,7 @@ void QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked()
 
   QgsFeatureRequest request = QgsFeatureRequest().setFilterExpression( mExpressionBuilder->expressionText() )
                               .setExpressionContext( context )
-                              .setSubsetOfAttributes( QgsAttributeList() );
+                              .setNoAttributes();
 
   QgsFeatureIterator features = mLayer->getFeatures( request );
 
@@ -155,8 +179,6 @@ void QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked()
   }
   features.close();
 
-  QgsSettings settings;
-  int timeout = settings.value( QStringLiteral( "qgis/messageTimeout" ), 5 ).toInt();
   if ( featureCount > 0 )
   {
     mMapCanvas->zoomToFeatureExtent( bbox );
@@ -164,16 +186,14 @@ void QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked()
     {
       mMessageBar->pushMessage( QString(),
                                 tr( "Zoomed to %n matching feature(s)", "number of matching features", featureCount ),
-                                QgsMessageBar::INFO,
-                                timeout );
+                                Qgis::Info );
     }
   }
   else if ( mMessageBar )
   {
     mMessageBar->pushMessage( QString(),
                               tr( "No matching features found" ),
-                              QgsMessageBar::INFO,
-                              timeout );
+                              Qgis::Info );
   }
   saveRecent();
 }
@@ -181,9 +201,6 @@ void QgsExpressionSelectionDialog::mButtonZoomToFeatures_clicked()
 void QgsExpressionSelectionDialog::closeEvent( QCloseEvent *closeEvent )
 {
   QDialog::closeEvent( closeEvent );
-
-  QgsSettings settings;
-  settings.setValue( QStringLiteral( "Windows/ExpressionSelectionDialog/geometry" ), saveGeometry() );
 }
 
 void QgsExpressionSelectionDialog::mPbnClose_clicked()
@@ -199,7 +216,7 @@ void QgsExpressionSelectionDialog::done( int r )
 
 void QgsExpressionSelectionDialog::saveRecent()
 {
-  mExpressionBuilder->saveToRecent( QStringLiteral( "Selection" ) );
+  mExpressionBuilder->expressionTree()->saveToRecent( mExpressionBuilder->expressionText(), QStringLiteral( "selection" ) );
 }
 
 void QgsExpressionSelectionDialog::showHelp()

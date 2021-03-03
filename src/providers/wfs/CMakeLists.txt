@@ -2,7 +2,8 @@
 ########################################################
 # Files
 
-SET(WFS_SRCS
+set(WFS_SRCS
+  ${CMAKE_SOURCE_DIR}/external/nlohmann/json.hpp
   qgswfsprovider.cpp
   qgswfscapabilities.cpp
   qgswfsdataitems.cpp
@@ -15,81 +16,63 @@ SET(WFS_SRCS
   qgswfsshareddata.cpp
   qgswfstransactionrequest.cpp
   qgswfsutils.cpp
+  qgsbackgroundcachedfeatureiterator.cpp
+  qgsbackgroundcachedshareddata.cpp
+  qgscachedirectorymanager.cpp
+  qgsbasenetworkrequest.cpp
+  qgsoapiflandingpagerequest.cpp
+  qgsoapifapirequest.cpp
+  qgsoapifcollection.cpp
+  qgsoapifitemsrequest.cpp
+  qgsoapifprovider.cpp
+  qgsoapifutils.cpp
 )
 
-SET (WFS_MOC_HDRS
-  qgswfscapabilities.h
-  qgswfsconnection.h
-  qgswfsdataitems.h
-  qgswfsprovider.h
-  qgswfsfeatureiterator.h
-  qgswfsrequest.h
-  qgswfsdescribefeaturetype.h
-  qgswfstransactionrequest.h
-  qgswfsshareddata.h
-  qgswfsutils.h
-)
-
-IF (WITH_GUI)
-  SET(WFS_SRCS ${WFS_SRCS}
+if (WITH_GUI)
+  set(WFS_SRCS ${WFS_SRCS}
+    qgswfsprovidergui.cpp
+    qgswfsdataitemguiprovider.cpp
     qgswfssourceselect.cpp
+    qgswfsnewconnection.cpp
+    qgswfsguiutils.cpp
+    qgswfssubsetstringeditor.cpp
   )
-  SET(WFS_MOC_HDRS ${WFS_MOC_HDRS}
-    qgswfssourceselect.h
-  )
-ENDIF ()
+endif()
 
 ########################################################
 # Build
 
-QT5_WRAP_CPP(WFS_MOC_SRCS ${WFS_MOC_HDRS})
+include_directories (
 
-INCLUDE_DIRECTORIES (
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/auth
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/symbology  # needed by qgsvectorfilewriter.h
-  ${CMAKE_SOURCE_DIR}/src/core/geocms/geonode
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/gui
-  ${CMAKE_SOURCE_DIR}/src/gui/auth
-
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/ui
 )
-INCLUDE_DIRECTORIES(SYSTEM
-  ${GEOS_INCLUDE_DIR}
-  ${EXPAT_INCLUDE_DIR}
-  ${QCA_INCLUDE_DIR}
-  ${QTKEYCHAIN_INCLUDE_DIR}
-  ${GDAL_INCLUDE_DIR} # needed by qgsvectorfilewriter.h
-  ${SQLITE3_INCLUDE_DIR}
-)
 
-IF (WITH_GUI)
-  INCLUDE_DIRECTORIES(SYSTEM
+if (WITH_GUI)
+  include_directories(SYSTEM
     ${QSCINTILLA_INCLUDE_DIR}
   )
-ENDIF ()
+endif()
 
-ADD_LIBRARY (wfsprovider MODULE ${WFS_SRCS} ${WFS_MOC_SRCS})
+add_library (wfsprovider MODULE ${WFS_SRCS})
 
-TARGET_LINK_LIBRARIES (wfsprovider
+# require c++17
+target_compile_features(wfsprovider PRIVATE cxx_std_17)
+
+target_link_libraries (wfsprovider
   ${EXPAT_LIBRARY}
   qgis_core
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES (wfsprovider
+if (WITH_GUI)
+  target_link_libraries (wfsprovider
     qgis_gui
   )
-ENDIF ()
+  add_dependencies(wfsprovider ui)
+endif()
 
 ########################################################
 # Install
 
-INSTALL(TARGETS wfsprovider
+install(TARGETS wfsprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})

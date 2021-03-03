@@ -2,69 +2,56 @@
 ########################################################
 # Files
 
-SET (DTEXT_SRCS
+set (DTEXT_SRCS
   qgsdelimitedtextfeatureiterator.cpp
   qgsdelimitedtextprovider.cpp
   qgsdelimitedtextfile.cpp
 )
 
-SET (DTEXT_MOC_HDRS
-  qgsdelimitedtextfile.h
-  qgsdelimitedtextprovider.h
-)
-
-IF (WITH_GUI)
-  SET(DTEXT_SRCS ${DTEXT_SRCS}
+if (WITH_GUI)
+  set(DTEXT_SRCS ${DTEXT_SRCS}
+    qgsdelimitedtextprovidergui.cpp
     qgsdelimitedtextsourceselect.cpp
   )
-  SET(DTEXT_MOC_HDRS ${DTEXT_MOC_HDRS}
-    qgsdelimitedtextsourceselect.h
-  )
-ENDIF ()
+endif()
 
 ########################################################
 # Build
 
-INCLUDE_DIRECTORIES(
-  ${CMAKE_SOURCE_DIR}/src/core
-  ${CMAKE_SOURCE_DIR}/src/core/expression
-  ${CMAKE_SOURCE_DIR}/src/core/geometry
-  ${CMAKE_SOURCE_DIR}/src/core/metadata
-  ${CMAKE_SOURCE_DIR}/src/gui
+include_directories(
 
-  ${CMAKE_BINARY_DIR}/src/core
-  ${CMAKE_BINARY_DIR}/src/gui
   ${CMAKE_BINARY_DIR}/src/ui
 )
-INCLUDE_DIRECTORIES (SYSTEM
-  ${GEOS_INCLUDE_DIR}
-)
 
-QT5_WRAP_CPP(DTEXT_MOC_SRCS ${DTEXT_MOC_HDRS})
+add_library(delimitedtextprovider MODULE ${DTEXT_SRCS})
 
-ADD_LIBRARY(delimitedtextprovider MODULE ${DTEXT_SRCS} ${DTEXT_MOC_SRCS})
+# require c++17
+target_compile_features(delimitedtextprovider PRIVATE cxx_std_17)
 
-TARGET_LINK_LIBRARIES(delimitedtextprovider
+target_link_libraries(delimitedtextprovider
   qgis_core
 )
 
-IF (WITH_GUI)
-  TARGET_LINK_LIBRARIES (delimitedtextprovider
+if (WITH_GUI)
+  target_link_libraries (delimitedtextprovider
     qgis_gui
   )
-ENDIF ()
+  add_dependencies(delimitedtextprovider ui)
+endif()
+
+target_compile_definitions(delimitedtextprovider PRIVATE "-DQT_NO_FOREACH")
 
 # clang-tidy
-IF(CLANG_TIDY_EXE)
-  SET_TARGET_PROPERTIES(
+if(CLANG_TIDY_EXE)
+  set_target_properties(
     delimitedtextprovider PROPERTIES
     CXX_CLANG_TIDY "${DO_CLANG_TIDY}"
   )
-ENDIF(CLANG_TIDY_EXE)
+endif()
 
 ########################################################
 # Install
 
-INSTALL (TARGETS delimitedtextprovider
+install (TARGETS delimitedtextprovider
   RUNTIME DESTINATION ${QGIS_PLUGIN_DIR}
   LIBRARY DESTINATION ${QGIS_PLUGIN_DIR})

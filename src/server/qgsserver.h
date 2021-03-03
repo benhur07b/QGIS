@@ -29,16 +29,11 @@
 
 #include <QFileInfo>
 #include "qgsrequesthandler.h"
-#include "qgsapplication.h"
 #include "qgsconfigcache.h"
-#include "qgsconfigparserutils.h"
 #include "qgscapabilitiescache.h"
-#include "qgsmapsettings.h"
-#include "qgsmessagelog.h"
 #include "qgsserviceregistry.h"
 #include "qgsserversettings.h"
 #include "qgsserverplugins.h"
-#include "qgsserverfilter.h"
 #include "qgsserverinterfaceimpl.h"
 #include "qgis_server.h"
 #include "qgsserverrequest.h"
@@ -48,7 +43,7 @@ class QgsProject;
 
 /**
  * \ingroup server
- * The QgsServer class provides OGC web services.
+ * \brief The QgsServer class provides OGC web services.
  */
 class SERVER_EXPORT QgsServer
 {
@@ -75,7 +70,7 @@ class SERVER_EXPORT QgsServer
      *
      * \param request a QgsServerRequest holding request parameters
      * \param response a QgsServerResponse for handling response I/O)
-     * \param project a QgsProject or nullptr, if it is nullptr the project
+     * \param project a QgsProject or NULLPTR, if it is NULLPTR the project
      *        is created from the MAP param specified in request or from
      *        the QGIS_PROJECT_FILE setting
      */
@@ -89,7 +84,7 @@ class SERVER_EXPORT QgsServer
 
     /**
      * Initialize Python
-     * Note: not in Python bindings
+     * \note not available in Python bindings
      */
     void initPython();
 #endif
@@ -103,10 +98,11 @@ class SERVER_EXPORT QgsServer
     //! Server initialization
     static bool init();
 
-    // All functions that where previously in the main file are now
-    // static methods of this class
+    /**
+     * Returns the configuration file path.
+     */
     static QString configPath( const QString &defaultConfigPath,
-                               const QMap<QString, QString> &parameters );
+                               const QString &configPath );
 
     /**
      * \brief QgsServer::printRequestParameters prints the request parameters
@@ -115,16 +111,18 @@ class SERVER_EXPORT QgsServer
      */
     static void printRequestParameters(
       const QMap< QString, QString> &parameterMap,
-      QgsMessageLog::MessageLevel logLevel );
+      Qgis::MessageLevel logLevel );
 
+    /**
+     * Returns the default project file.
+     */
     static QFileInfo defaultProjectFile();
     static QFileInfo defaultAdminSLD();
-    static void setupNetworkAccessManager();
-    //! Create and return a request handler instance
-    static QgsRequestHandler *createRequestHandler( const QgsServerRequest &request, QgsServerResponse &response );
 
-    // Return the server name
-    static QString &serverName();
+    /**
+     * \brief QgsServer::setupNetworkAccessManager
+     */
+    static void setupNetworkAccessManager();
 
     // Status
     static QString *sConfigFilePath;
@@ -134,12 +132,12 @@ class SERVER_EXPORT QgsServer
     static bool sInitialized;
 
     //! service registry
-    static QgsServiceRegistry sServiceRegistry;
-
-    static QgsServerSettings sSettings;
+    static QgsServiceRegistry *sServiceRegistry;
 
     //! cache
     QgsConfigCache *mConfigCache = nullptr;
+
+    //! Initialize locale
+    static void initLocale();
 };
 #endif // QGSSERVER_H
-
