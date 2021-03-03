@@ -10,16 +10,16 @@
 *Note: This is an in-progress draft. Formatting, especially images, will be improved once feedback on structure and main text is received.*
 
 
-# About QGIS
+## About QGIS
 
 [QGIS](https://qgis.org) is a full-featured, user-friendly, free-and-open-source (FOSS) Geographic 
 Information System (GIS) that runs on Unix platforms (e.g. Linux), Windows, and MacOS.
 
-## Under the hood
+### Under the hood
 
 QGIS is developed using the [Qt toolkit](https://qt.io) and C++, since 2002, and has a pleasing, easy-to-use graphical user interface with multilingual support. It is maintained by an active developer team and supported by a vibrant community of GIS professionals, enthusiasts, geospatial data publishers, and end-users. 
 
-## Versions and release cycle
+### Versions and release cycle
 
 [QGIS development and releases follow a time based schedule/roadmap](https://www.qgis.org/en/site/getinvolved/development/roadmap.html). There are three main branches of QGIS that users can install. These are the **Long Term Release (LTR)** branch, **Latest Release (LR)** branch, and the **Development (Nightly)** branch.
 
@@ -29,17 +29,17 @@ QGIS is developed using the [Qt toolkit](https://qt.io) and C++, since 2002, and
 
 Every month, there is a **Point Release** that provides bug-fixes to the LTR and bug-fixes as well as new features to the LR.
 
-## Free and Open Source
+### Free and Open Source
 
 QGIS is released under the GNU Public License (GPL) Version 2 or above. Developing QGIS under this license means that you can (if you want to) inspect and modify the source code and guarantees that you, our happy user, will always have access to a GIS program that is free of cost and can be freely modified.
 
 QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo.org/)), offering a range of complementary open-source GIS software projects.
 
 
-# Features
+## Features
 
 
-## Flexible and powerful spatial data management
+### Flexible and powerful spatial data management
 
 - Supports raster, vector, mesh, and point cloud data in a range of industry-standard formats
     - *Supported raster formats include:* GeoPackage, GeoTIFF, GRASS, ArcInfo binary and ASCII grids, ERDAS Imagine SDTS, WMS, WCS, PostgreSQL/PostGIS, and [other GDAL supported formats](https://gdal.org/drivers/raster/index.html).
@@ -51,7 +51,7 @@ QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo
 - Visual and numerical and digitizing and editing
 - Temporal support
 
-## Beautiful cartography and map design
+### Beautiful cartography and map design
 
 - Large variety of rendering options in 2D and 3D
 - Style Manager for creating, storing, and managing styles
@@ -64,7 +64,7 @@ QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo
 - Flexible output direct to printer, or as image (raster), PDF, or SVG for further customization
 - [QGIS Style Hub](https://plugins.qgis.org/styles/) for easy sharing of styles
 
-## Advanced and robust geospatial analysis
+### Advanced and robust geospatial analysis
 
 - Powerful Processing Framework
 - 200+ native processing algorithms
@@ -74,14 +74,14 @@ QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo
 - Geospatial database engine (filters, joins, relations, forms, etc.) that is as format-independent and datasource-independent as possible
 - GIS and Remote Sensing capabilities
 
-## Customizability and extensibility
+### Customizability and extensibility
 
 - Fully customizable user-experience from the user-interface to the application settings that cater to power-users and beginners alike
 - Rich [Expression engine](https://docs.qgis.org/testing/en/docs/user_manual/working_with_vector/expression.html) for maximum flexibility in visualization and processing
 - Broad and varied [plugin ecosystem](https://plugins.qgis.org/) that includes data connectors, digitizing aids, advanced analysis and charting tools, in-the-field data capture, etc.
 - Python and C++ API for standalone (headless) applications as well as in-application comprehensive scripting (PyQGIS)
 
-## QGIS Server
+### QGIS Server
 
 - Headless map server -- running on Linux, macOS, Windows, or in a docker container -- that shares the same code base as QGIS
 - Industry-standard protocols (WMS, WFS, WFS3/OGC API for Features and WCS) allow plug-n-play with any software stack
@@ -90,9 +90,9 @@ QGIS is part of the Open-Source Geospatial Foundation ([OSGeo](https://www.osgeo
 * Fully customizable with Python scripting support
 
 
-# Screenshots and captures
+## Screenshots and captures
 
-## Managing Data Sources
+### Managing Data Sources
 
 Data Source Manager
 
@@ -103,7 +103,7 @@ DB Manager
 ![DB Manager](https://docs.qgis.org/latest/en/_images/db_manager.png "DB Manager")
 
 
-## Cartography
+### Cartography
 
 [Map of Bogota, Columbia in the style of Starry Starry Night by Andrés Felipe Lancheros Sánchez](https://flic.kr/p/2jFfGJP)
 
@@ -119,7 +119,7 @@ For more maps created with QGIS, visit the [QGIS Map Showcase Flickr Group](http
 ![QGIS Map Showcase](images/README-md/qgis_map_showcase.png "QGIS Map Showcase")
 
 
-## Layer Styling
+### Layer Styling
 
 Style Manager
 
@@ -138,7 +138,7 @@ With Temporal component
 ![Data-defined overrides and Draw effects](images/README-md/icebergs.gif "Data-defined overrides and Draw effects")
 
 
-## 3D View
+### 3D View
 
 3D Map View
 ![3d Map View](https://docs.qgis.org/latest/en/_images/3dmapview.png "3D Map View")
@@ -148,17 +148,17 @@ DEM + raster overlay
 ![DEM + raster overlay](images/README-md/3d_1.png "DEM + raster overlay")
 
 
-## Point-cloud support
+### Point-cloud support
 
 ![Point-cloud support](images/README-md/pointcloud_1.png "Point-cloud support")
 
 
-## Graphical Modeller
+### Graphical Modeller
 
 ![A complete model](https://docs.qgis.org/latest/en/_images/models_model.png "A complete model")
 
 
-## Network Analysis
+### Network Analysis
 
 Shortest path from 1 orign to multipule destinations
 ![Shortest path from 1 orign to multipule destinations](images/README-md/network_analysis_1.png "Shortest path from 1 orign to multipule destinations")
@@ -167,22 +167,22 @@ Travel isochrones
 ![Travel isochrones](images/README-md/network_analysis_2.png "Travel isochrones")
 
 
-## Interface Customization
+### Interface Customization
 
 ![Interface customization](https://docs.qgis.org/3.16/en/_images/customization.png "Interface customization")
 
 
-## Plugins
+### Plugins
 
 ![Plugins](images/README-md/plugins_1.png "Plugins")
 
 
-## Python console
+### Python console
 
 ![Python console](https://docs.qgis.org/3.16/en/_images/python_console_editor.png "Python console")
 
 
-## QGIS Server
+### QGIS Server
 
 QGIS Server response to a WMS resquest
 
@@ -191,7 +191,7 @@ QGIS Server response to a WMS resquest
 QGIS Server response to a WFS Feature resquest
 ![QGIS Server response to a WFS Feature resquest](https://docs.qgis.org/3.16/en/_images/server_wfs3_feature.png "QGIS Server response to a WFS Feature resquest")
 
-# Manuals and Documentation
+## Manuals and Documentation
 
 - [Training Manual](https://docs.qgis.org/latest/en/docs/training_manual/index.html)
 - [QGIS User Guide](https://docs.qgis.org/latest/en/docs/user_manual/index.html)
@@ -202,7 +202,7 @@ QGIS Server response to a WFS Feature resquest
 - [Visual Changelog](https://qgis.org/en/site/forusers/visualchangelogs.html)
 
 
-# Installation and Downloads
+## Installation and Downloads
 
 Precompiled binaries for QGIS are available at [the QGIS.org download page](https://www.qgis.org/en/site/forusers/download.html). Please follow the installation instructions carefully.
 
@@ -211,7 +211,7 @@ The [building guide](INSTALL.md) can be used to get started with building QGIS f
 For installation of QGIS Server, see its [getting started documentation](https://docs.qgis.org/latest/en/docs/server_manual/getting_started.html).
 
 
-# Help and Support Channels
+## Help and Support Channels
 
 There are several channels where you can find help and support for QGIS:
 
@@ -225,13 +225,13 @@ There are several channels where you can find help and support for QGIS:
 - [Other support channels](https://qgis.org/en/site/forusers/support.html)
 
 
-# Get Involved with the Community
+## Get Involved with the Community
 
-## Bug reporting and bug fixing
+### Bug reporting and bug fixing
 
 You can contribute to the project **by submitting bug reports or fixing bugs** in the [QGIS bug tracker](https://github.com/qgis/QGIS/issues/).
 
-## New features and enhancements
+### New features and enhancements
 
 If you wish to contribute patches you can [fork the project](https://help.github.com/forking/), make your changes, commit to your repository, and then [create a pull request](https://help.github.com/articles/creating-a-pull-request-from-a-fork/). The development team can then review your contribution and commit it upstream as appropriate.
 
@@ -245,12 +245,12 @@ For large-scale changes, you can open a [QEP (QGIS Enhancement Proposal)](https:
 
 Generally smaller features do not require a QEP unless they can have large knock on effect. Bug fixes do not require a QEP.
 
-## Translations
+### Translations
 
 Help translate QGIS to your language. At this moment about forty languages are already available in the Desktop user interface and about eighty languages are available in transifex ready to be translated.
 
 The [translation](https://qgis.org/en/site/getinvolved/translate.html) process is managed by the [Translation Team](https://qgis.org/en/site/getinvolved/governance/governance.html#gui-translation) and all the activities are done under the [Transifex](https://www.transifex.com/) platform.
 
-## Other ways to contribute
+### Other ways to contribute
 
 If you are not a developer, there are many other possibilities which do not require programming skills to help QGIS to evolve. Check our [project homepage for more information](http://qgis.org/en/site/getinvolved/index.html).
